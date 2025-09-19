@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.log
+*.pot
+*.pyc
+*.pyo
+*.pyd
+
+# Virtualenv
+venv/
+.env/
+.venv/
+
+# Node.js
+node_modules/
+
+# Coverage & testing
+.coverage
+htmlcov/
+pytest_cache/
+
+# Django stuff
+*.mo
+*.pot
+*.pyc
+db.sqlite3
+media/
+staticfiles/
+
+# VSCode / IDE
+.vscode/
+.idea/
