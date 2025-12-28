@@ -1,49 +1,58 @@
-# 测试用例管理平台
+# Test Manager Pro
 
-一个基于Django和React的测试用例管理平台，用于集中管理测试用例、执行测试和查看结果。
+一个功能强大的测试管理平台，支持 API 测试、测试用例管理、AI 测试用例生成等功能。
 
-## 功能特性
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![Django](https://img.shields.io/badge/Django-5.2.6-green.svg)](https://www.djangoproject.com/)
+[![React](https://img.shields.io/badge/React-18.2-blue.svg)](https://react.dev/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-### 1. 用例管理
-- 用例编写：支持基本信息（标题、步骤、预期结果）
-- 用例组织：按项目/模块分类
-- 用例导入导出：Excel/CSV 格式
+## ✨ 功能特性
 
-### 2. 测试执行
-- 手工执行：测试人员可以标记执行结果（通过/失败/阻塞）
-- 执行记录：保存测试历史，支持查询
+- 🔧 **API 测试管理** - 支持 RESTful API 测试，包括请求构建、断言配置、批量执行
+- 📝 **测试用例管理** - 完整的测试用例生命周期管理，支持项目、模块组织
+- 🤖 **AI 测试用例生成** - 基于 PRD 文档自动生成测试用例（支持 PDF、Word、TXT）
+- 📊 **测试执行和报告** - 支持多种执行策略（并发、顺序、链式），生成详细测试报告
+- 🔗 **请求集合管理** - 支持 YAML 格式的测试脚本，批量管理 API 请求
+- 👥 **权限管理** - 基于角色的权限控制（RBAC）
+- 📈 **数据统计** - 项目测试数据统计和可视化
 
-### 3. 测试报告
-- 基本统计：执行数、通过率、失败率
-- 可视化报表：柱状图/饼图简单展示
-
-### 4. 自动化测试集成
-- Pytest测试框架集成
-- 测试脚本上传和执行
-- API测试（类似Postman/Apifox）
-- 请求集合管理，支持批量运行
-
-### 5. 用户与权限（简化 MVP）
-- MVP 阶段支持单用户或项目隔离
-
-## 技术栈
+## 🛠️ 技术栈
 
 ### 后端
-- Django 5.2
-- Django REST Framework
-- Pytest (测试框架)
-- Requests (HTTP库)
-- SQLite（默认数据库）
+- **Django 5.2.6** - Web 框架
+- **Django REST Framework** - RESTful API
+- **MySQL** - 数据库
+- **Redis** - 缓存和会话存储
+- **LangChain** - AI 功能支持
+- **pytest** - 测试框架
 
 ### 前端
-- React 18
-- React Router
-- Axios
-- Recharts（数据可视化）
+- **React 18** - UI 框架
+- **Ant Design** - UI 组件库
+- **Axios** - HTTP 客户端
+- **React Router** - 路由管理
 
-## 快速开始
+## 🚀 快速开始
 
-### 后端启动
+### 前置要求
+
+- Python 3.8+
+- Node.js 16+
+- MySQL 5.7+ 或 PostgreSQL 10+
+- Redis 6.0+
+
+### 安装步骤
+
+#### 1. 克隆仓库
+
+```bash
+git clone https://github.com/yourusername/test-hyanjun-pro.git
+cd test-hyanjun-pro
+```
+
+#### 2. 后端设置
+
 ```bash
 # 创建虚拟环境
 python -m venv venv
@@ -51,24 +60,33 @@ python -m venv venv
 # 激活虚拟环境
 # Windows:
 venv\Scripts\activate
-# macOS/Linux:
-# source venv/bin/activate
+# Linux/Mac:
+source venv/bin/activate
 
 # 安装依赖
 pip install -r requirements.txt
 
-# 数据库迁移
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件，填入你的配置（数据库、Redis、SECRET_KEY等）
+
+# 运行数据库迁移
 python manage.py migrate
 
-# 创建管理员用户
+# 创建超级用户
 python manage.py createsuperuser
 
 # 启动开发服务器
 python manage.py runserver
 ```
 
-### 前端启动
+后端服务将在 `http://localhost:8000` 启动
+
+#### 3. 前端设置
+
 ```bash
+cd frontend
+
 # 安装依赖
 npm install
 
@@ -76,117 +94,178 @@ npm install
 npm start
 ```
 
-## API接口
+前端应用将在 `http://localhost:3000` 启动
 
-### 项目管理
-- `GET /api/projects/` - 获取项目列表
-- `POST /api/projects/` - 创建项目
-- `GET /api/projects/{id}/` - 获取项目详情
-- `PUT /api/projects/{id}/` - 更新项目
-- `DELETE /api/projects/{id}/` - 删除项目
-- `GET /api/projects/{id}/statistics/` - 获取项目统计信息
+### 环境变量配置
 
-### 模块管理
-- `GET /api/modules/` - 获取模块列表
-- `POST /api/modules/` - 创建模块
-- `GET /api/modules/{id}/` - 获取模块详情
-- `PUT /api/modules/{id}/` - 更新模块
-- `DELETE /api/modules/{id}/` - 删除模块
+在项目根目录创建 `.env` 文件（参考 `.env.example`）：
 
-### 测试用例管理
-- `GET /api/testcases/` - 获取测试用例列表
-- `POST /api/testcases/` - 创建测试用例
-- `GET /api/testcases/{id}/` - 获取测试用例详情
-- `PUT /api/testcases/{id}/` - 更新测试用例
-- `DELETE /api/testcases/{id}/` - 删除测试用例
+```env
+# Django Settings
+SECRET_KEY=your-secret-key-here
+DEBUG=False
+ALLOWED_HOSTS=localhost,127.0.0.1
 
-### 测试执行记录
-- `GET /api/executions/` - 获取执行记录列表
-- `POST /api/executions/` - 创建执行记录
-- `GET /api/executions/{id}/` - 获取执行记录详情
-- `PUT /api/executions/{id}/` - 更新执行记录
-- `DELETE /api/executions/{id}/` - 删除执行记录
+# Database
+DB_NAME=testmanager
+DB_USER=root
+DB_PASSWORD=your-password
+DB_HOST=localhost
+DB_PORT=3306
 
-### 测试报告
-- `GET /api/reports/` - 获取报告列表
-- `POST /api/reports/` - 创建报告
-- `GET /api/reports/{id}/` - 获取报告详情
-- `PUT /api/reports/{id}/` - 更新报告
-- `DELETE /api/reports/{id}/` - 删除报告
-- `POST /api/reports/generate_report/` - 生成测试报告
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=1
 
-### 测试脚本管理
-- `GET /api/test-scripts/` - 获取测试脚本列表
-- `POST /api/test-scripts/` - 创建测试脚本
-- `GET /api/test-scripts/{id}/` - 获取测试脚本详情
-- `PUT /api/test-scripts/{id}/` - 更新测试脚本
-- `DELETE /api/test-scripts/{id}/` - 删除测试脚本
-- `POST /api/test-scripts/{id}/execute/` - 执行测试脚本
+# OpenAI (Optional, for AI features)
+OPENAI_API_KEY=your-openai-api-key
 
-### 脚本执行记录
-- `GET /api/script-executions/` - 获取脚本执行记录列表
-- `POST /api/script-executions/` - 创建脚本执行记录
-- `GET /api/script-executions/{id}/` - 获取脚本执行记录详情
+# CORS
+CORS_ALLOWED_ORIGINS=http://localhost:3000
+```
 
-### API请求管理
-- `GET /api/api-requests/` - 获取API请求列表
-- `POST /api/api-requests/` - 创建API请求
-- `GET /api/api-requests/{id}/` - 获取API请求详情
-- `PUT /api/api-requests/{id}/` - 更新API请求
-- `DELETE /api/api-requests/{id}/` - 删除API请求
-- `POST /api/api-requests/{id}/execute/` - 执行API请求
+**重要**: 请确保 `SECRET_KEY` 使用强随机字符串，不要使用默认值！
 
-### API断言管理
-- `GET /api/api-assertions/` - 获取API断言列表
-- `POST /api/api-assertions/` - 创建API断言
-- `GET /api/api-assertions/{id}/` - 获取API断言详情
-- `PUT /api/api-assertions/{id}/` - 更新API断言
-- `DELETE /api/api-assertions/{id}/` - 删除API断言
+## 📖 文档
 
-### 请求集合管理
-- `GET /api/request-collections/` - 获取请求集合列表
-- `POST /api/request-collections/` - 创建请求集合
-- `GET /api/request-collections/{id}/` - 获取请求集合详情
-- `PUT /api/request-collections/{id}/` - 更新请求集合
-- `DELETE /api/request-collections/{id}/` - 删除请求集合
-- `POST /api/request-collections/{id}/execute/` - 执行请求集合
+- [架构分析](./ARCHITECTURE_ANALYSIS.md) - 项目架构和数据结构说明
+- [业务逻辑诊断](./BUSINESS_LOGIC_DIAGNOSIS.md) - 业务逻辑分析和优化建议
+- [安全审计报告](./SECURITY_AUDIT_REPORT.md) - 安全审计和修复记录
+- [前端设置指南](./frontend/SETUP_GUIDE.md) - 前端开发配置说明
+- [开源准备度评估](./OPEN_SOURCE_READINESS_REPORT.md) - 项目开源准备情况
 
-### 集合执行记录
-- `GET /api/collection-executions/` - 获取集合执行记录列表
-- `POST /api/collection-executions/` - 创建集合执行记录
-- `GET /api/collection-executions/{id}/` - 获取集合执行记录详情
+## 🎯 主要功能说明
 
-### 导入导出
-- `POST /api/import-testcases/` - 导入测试用例（Excel/CSV）
-- `GET /api/export-testcases/` - 导出测试用例（Excel）
-- `GET /api/import-template/` - 获取导入模板
+### API 测试
 
-## 项目结构
+- 支持 GET、POST、PUT、DELETE 等 HTTP 方法
+- 支持请求头、请求体配置
+- 支持变量替换和模板渲染
+- 支持多种断言类型（状态码、响应体、响应头等）
+- 支持批量执行和并发执行
+
+### AI 测试用例生成
+
+1. 上传 PRD 文档（支持 PDF、Word、TXT 格式）
+2. 配置 OpenAI API Key
+3. AI 自动分析文档并生成测试用例
+4. 选择需要的测试用例保存到功能测试模块
+
+### 测试执行策略
+
+- **并发执行** - 同时执行多个请求，提高效率
+- **顺序执行** - 按顺序执行请求，支持变量传递
+- **链式执行** - 请求之间可以传递变量，形成执行链
+
+### 请求集合
+
+支持 YAML 格式的测试脚本：
+
+```yaml
+name: 用户登录流程
+description: 测试用户登录功能
+
+variables:
+  username: test_user
+  password: "123456"
+
+test_steps:
+  - name: 用户登录
+    request:
+      method: POST
+      url: https://api.example.com/login
+      json:
+        username: "{{username}}"
+        password: "{{password}}"
+    extract:
+      - name: token
+        jsonpath: "$.data.token"
+    assertions:
+      - type: status_code
+        expected: 200
+```
+
+## 🧪 运行测试
+
+```bash
+# 运行所有测试
+pytest
+
+# 运行测试并生成覆盖率报告
+pytest --cov=testmanager_app --cov-report=html
+
+# 查看覆盖率报告
+# 打开 htmlcov/index.html
+```
+
+## 📁 项目结构
 
 ```
-testmanager/
-├── testmanager/          # Django项目配置
-├── tests/                # 测试管理应用
-│   ├── models.py         # 数据模型
-│   ├── views.py          # API视图
-│   ├── serializers.py    # 序列化器
-│   ├── urls.py           # URL路由
-│   ├── import_export.py  # 导入导出功能
-│   └── tests.py          # 单元测试
-├── frontend/             # React前端应用
+Test_Hyanjun_Pro/
+├── frontend/                 # React 前端应用
 │   ├── src/
-│   │   ├── components/   # React组件
-│   │   ├── App.js        # 主应用组件
-│   │   └── index.js      # 入口文件
-│   └── public/           # 静态资源
-├── manage.py             # Django管理脚本
-└── requirements.txt      # Python依赖
+│   │   ├── api/              # API 调用封装
+│   │   ├── components/       # React 组件
+│   │   ├── context/          # React Context
+│   │   └── hooks/            # 自定义 Hooks
+│   └── package.json
+├── testmanager/             # Django 项目配置
+│   ├── settings.py           # 项目设置
+│   └── urls.py               # 根 URL 配置
+├── testmanager_app/         # 核心业务应用
+│   ├── models.py            # 数据模型
+│   ├── views.py             # API 视图
+│   ├── serializers.py       # 序列化器
+│   ├── services/            # 业务逻辑服务
+│   └── utils/               # 工具函数
+├── test_ai_agent/           # AI 测试用例生成模块
+│   ├── ai_processor.py      # AI 处理逻辑
+│   └── document_loader.py  # 文档加载器
+└── requirements.txt         # Python 依赖
 ```
 
-## 开发理念
+## 🔒 安全注意事项
 
-本项目采用TDD（测试驱动开发）理念，MVP（最小可行产品）产品层面，MVT（Model-View-Template）框架层面进行开发。
+1. **SECRET_KEY**: 必须使用环境变量配置，不要使用默认值
+2. **数据库密码**: 使用强密码，不要硬编码
+3. **API Key**: AI 功能的 API Key 建议通过后端代理，不要在前端存储
+4. **DEBUG 模式**: 生产环境必须设置 `DEBUG=False`
 
-## 许可证
+更多安全建议请参考 [安全审计报告](./SECURITY_AUDIT_REPORT.md)
 
-MIT License
+## 🤝 贡献
+
+欢迎贡献！请遵循以下步骤：
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
+
+## 📝 开发计划
+
+- [ ] 完善 AI 测试用例生成功能
+- [ ] 添加更多测试报告模板
+- [ ] 支持更多数据库（PostgreSQL、MongoDB）
+- [ ] 添加 Docker 支持
+- [ ] 完善 API 文档
+- [ ] 添加 CI/CD 支持
+
+## 📄 许可证
+
+本项目采用 [MIT License](LICENSE) 许可证。
+
+## 🙏 致谢
+
+感谢所有贡献者的支持！
+
+## 📧 联系方式
+
+如有问题或建议，请提交 Issue 或 Pull Request。
+
+---
+
+**注意**: 本项目处于 MVP 阶段，部分功能可能仍在开发中。欢迎反馈和建议！
+

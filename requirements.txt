@@ -1,9 +1,17 @@
 Django==5.2.6
 djangorestframework==3.16.1
 django-cors-headers==4.8.0
+django-redis==5.4.0
 openpyxl==3.1.5
 pandas==2.3.2
 pytest==8.3.2
 pytest-django==4.5.2
 pytest-cov==5.0.0
 requests==2.32.3
+pytest-asyncio
+httpx
+langchain==0.3.0
+langchain-openai==0.2.0
+python-dotenv==1.0.1
+pypdf==5.1.0
+python-docx==1.1.0

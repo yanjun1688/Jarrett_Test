@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import apiClient from '../api/axios';
 import TestCaseList from './TestCaseList';
 import TestExecutionList from './TestExecutionList';
 import { Descriptions, Tabs, Typography, Spin, Card, notification } from 'antd';
@@ -16,7 +16,7 @@ function ProjectDetail() {
   const fetchProject = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`http://localhost:8000/api/projects/${id}/`);
+      const response = await apiClient.get(`/projects/${id}/`);
       setProject(response.data);
     } catch (error) {
       notification.error({ message: '获取项目详情失败', description: error.message });

@@ -12,14 +12,28 @@ __pycache__/
 venv/
 .env/
 .venv/
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+.env.test
 
 # Node.js
 node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+*.egg-info/
+*.egg
 
 # Coverage & testing
 .coverage
 htmlcov/
 pytest_cache/
+.coverage.*
 
 # Django stuff
 *.mo
@@ -29,6 +43,41 @@ db.sqlite3
 media/
 staticfiles/
 
+# Operating System
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
 # VSCode / IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+*.txt
+控制台日志.txt
+
+# Temporary files
+tmp*.yaml
+tmp*.py
+*.tmp
+xx.txt
+testmanager/xx.txt
+
+# Backups
+*.bak
+*.backup
+backups/
+
+# Documentation (excluding README.md which should be committed)
+# Note: README.md is intentionally NOT ignored as it's the project's main documentation
+*.md
+!README.md
