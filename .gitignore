@@ -81,3 +81,7 @@ backups/
 # Note: README.md is intentionally NOT ignored as it's the project's main documentation
 *.md
 !README.md
+
+# Test directories - should not be committed
+testmanager_app/tests/
+testmanager_app/test_scripts/

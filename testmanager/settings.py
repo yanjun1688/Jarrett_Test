@@ -94,15 +94,22 @@ WSGI_APPLICATION = "testmanager.wsgi.application"
 #         "NAME": BASE_DIR / "db.sqlite3",
 #     }
 # }
+# Database configuration with proper handling for empty password
+db_config = {
+    'ENGINE': 'django.db.backends.mysql',
+    'NAME': os.getenv('DB_NAME', 'mydjangodb'),
+    'USER': os.getenv('DB_USER', 'root'),
+    'HOST': os.getenv('DB_HOST', 'localhost'),
+    'PORT': os.getenv('DB_PORT', '3306'),
+}
+
+# Only set PASSWORD if it's explicitly provided and not empty
+db_password = os.getenv('DB_PASSWORD', '').strip()
+if db_password:
+    db_config['PASSWORD'] = db_password
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv('DB_NAME', 'mydjangodb'),
-        'USER': os.getenv('DB_USER', 'root'),
-        'PASSWORD': os.getenv('DB_PASSWORD', ''),
-        'HOST': os.getenv('DB_HOST', 'localhost'),
-        'PORT': os.getenv('DB_PORT', '3306'),
-    }
+    'default': db_config
 }
 
 # Password validation
