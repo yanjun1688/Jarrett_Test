@@ -1367,23 +1367,57 @@ class UserRoleViewSet(BaseViewSet, QueryOptimizerMixin, CommonFilterMixin):
 
 
 class UserViewSet(viewsets.ModelViewSet):
-    """用户管理API"""
+    """用户管理API
+    
+    功能：
+    - 创建用户：POST /users/ (支持 role_ids 参数分配角色)
+    - 获取用户列表：GET /users/ (包含 roles 信息)
+    - 更新用户：PUT/PATCH /users/{id}/ (支持 role_ids 参数更新角色)
+    - 删除用户：DELETE /users/{id}/
+    - 分配角色：POST /users/{id}/assign-role/
+    - 移除角色：DELETE /users/{id}/remove-role/{role_id}/
+    - 获取用户角色：GET /users/{id}/roles/
+    
+    注意：
+    - superuser 自动拥有所有权限，不需要分配角色
+    - 但允许为 superuser 分配角色（仅用于记录，不影响权限）
+    """
     queryset = User.objects.prefetch_related('role_links__role').all()
     serializer_class = UserListSerializer
     permission_classes = [RoleBasedPermission, IsAdminUser]
     
+    def get_queryset(self):
+        """优化查询，预加载角色信息"""
+        return User.objects.prefetch_related('role_links__role').all()
+    
     @action(detail=True, methods=['get'], url_path='roles')
     def get_user_roles(self, request, pk=None):
-        """获取用户的角色列表"""
+        """获取用户的角色列表
+        
+        注意：superuser 返回虚拟角色信息
+        """
         user = self.get_object()
-        # 使用UserRole的静态方法获取用户角色
+        
+        # superuser 自动拥有所有权限，返回虚拟角色
+        if user.is_superuser:
+            return Response([{
+                'id': 0,
+                'name': 'superuser',
+                'permission': 'crud',
+                'description': '超级管理员角色，拥有所有权限'
+            }])
+        
+        # 普通用户返回实际分配的角色
         roles = UserRole.get_user_roles(user)
         serializer = RoleSerializer(roles, many=True)
         return Response(serializer.data)
     
     @action(detail=True, methods=['post'], url_path='assign-role')
     def assign_role(self, request, pk=None):
-        """为用户分配角色"""
+        """为用户分配角色
+        
+        注意：superuser 可以分配角色，但不会影响其权限（superuser 自动拥有所有权限）
+        """
         user = self.get_object()
         role_id = request.data.get('role_id')
         
@@ -1404,7 +1438,10 @@ class UserViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['delete'], url_path=r'remove-role/(?P<role_id>\d+)')
     def remove_role(self, request, pk=None, role_id=None):
-        """移除用户的角色"""
+        """移除用户的角色
+        
+        注意：superuser 可以移除角色，但不会影响其权限（superuser 自动拥有所有权限）
+        """
         user = self.get_object()
         
         try:
@@ -1440,17 +1477,8 @@ class LoginView(ObtainAuthToken):
             # 默认7天过期
             auth_token = AuthToken.create_token(user, expires_in_days=7)
 
-            # 获取用户的角色（使用工具函数）
+            # 获取用户的角色（使用工具函数，内部会处理superuser的情况）
             role_data = get_user_roles_data(user)
-            
-            # admin用户自动拥有crud权限，返回虚拟角色
-            if user.username == 'admin':
-                role_data = [{
-                    'id': 0,
-                    'name': 'admin',
-                    'permission': 'crud',
-                    'description': '管理员角色，拥有所有权限'
-                }]
 
             # 构建用户信息，包含角色和权限信息
             user_data = {

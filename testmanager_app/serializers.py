@@ -411,14 +411,33 @@ class UserListSerializer(serializers.ModelSerializer):
         required=False,
         help_text="角色ID列表"
     )
+    password = serializers.CharField(
+        write_only=True,
+        required=False,
+        help_text="用户密码（创建用户时必填）"
+    )
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_staff', 'date_joined', 'roles', 'role_ids']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_staff', 'date_joined', 'roles', 'role_ids', 'password']
         read_only_fields = ['id', 'date_joined']
 
     def get_roles(self, obj):
-        """获取用户的所有角色"""
+        """获取用户的所有角色
+        
+        注意：superuser 自动拥有所有权限，不需要分配角色
+        但为了前端显示一致性，superuser 也会返回一个虚拟角色信息
+        """
+        # superuser 自动拥有所有权限，返回虚拟角色信息
+        if obj.is_superuser:
+            return [{
+                'id': 0,
+                'name': 'superuser',
+                'permission': 'crud',
+                'description': '超级管理员角色，拥有所有权限'
+            }]
+        
+        # 普通用户返回实际分配的角色
         roles = UserRole.get_user_roles(obj)
         return RoleSerializer(roles, many=True).data
 
@@ -426,16 +445,21 @@ class UserListSerializer(serializers.ModelSerializer):
         role_ids = validated_data.pop('role_ids', [])
         password = validated_data.pop('password', None)
 
-        user = User.objects.create(**validated_data)
-        if password:
-            user.set_password(password)
-            user.save()
+        # 密码是创建用户时的必填项
+        if not password:
+            raise serializers.ValidationError({'password': '创建用户时密码是必填项'})
 
-        # 分配角色
+        # 创建用户
+        user = User.objects.create(**validated_data)
+        user.set_password(password)
+        user.save()
+
+        # 分配角色（superuser 不需要分配角色，但允许分配，不影响其权限）
+        # superuser 自动拥有所有权限，角色分配只是用于记录
         for role_id in role_ids:
             try:
                 role = Role.objects.get(id=role_id)
-                UserRole.objects.create(user=user, role=role)
+                UserRole.objects.get_or_create(user=user, role=role)
             except Role.DoesNotExist:
                 continue
 
