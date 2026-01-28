@@ -17,7 +17,6 @@ import {
 import { 
   PlayCircleOutlined, 
   EditOutlined, 
-  EyeOutlined,
   VideoCameraAddOutlined,
 } from '@ant-design/icons';
 import { uiTestsAPI } from '../api';
@@ -25,24 +24,15 @@ import { usePermissions } from '../hooks/usePermissions';
 import RecordingPanel from './RecordingPanel';
 import ElementPickerModal from './ElementPickerModal';
 import ExecutionModal from '../features/ui-tests/components/ExecutionModal';
-import PreviewModal from '../features/ui-tests/components/PreviewModal';
 import { buildStepsPayload, convertStepsToFormFormat } from '../features/ui-tests/utils/scriptUtils';
 import useUiTestScripts from '../features/ui-tests/hooks/useUiTestScripts';
 import useScriptModals from '../features/ui-tests/hooks/useScriptModals';
 import { handleApiError } from '../utils/errorHandler';
-import { ACTION_LABELS, BROWSER_TYPE_LABELS, DEFAULT_CONFIG, ACTION_TYPES } from '../constants';
+import { ACTION_LABELS, BROWSER_TYPE_LABELS, DEFAULT_CONFIG } from '../constants';
 import '../css/UiTestManager.css';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
-
-const DEFAULT_STEPS = [
-  {
-    action_type: ACTION_TYPES.NAVIGATE,
-    description: '打开示例网站',
-    url: 'https://example.com',
-  },
-];
 
 const UiTestManager = () => {
   // 使用提取的hooks
@@ -60,9 +50,6 @@ const UiTestManager = () => {
     createModalVisible,
     editModalVisible,
     editingScript,
-    previewModalVisible,
-    previewResult,
-    previewMode,
     elementPickerVisible,
     elementPickerFieldIndex,
     elementPickerUrl,
@@ -163,17 +150,6 @@ const UiTestManager = () => {
     modalDispatch({ type: 'HIDE_CREATE' });
     form.resetFields();
   };
-
-  // 预览脚本（查看脚本内容，不执行）
-  const handlePreview = useCallback(async (scriptId) => {
-    try {
-      const res = await uiTestsAPI.getScriptById(scriptId);
-      const scriptDetail = res.data;
-      modalDispatch({ type: 'SHOW_PREVIEW', payload: scriptDetail });
-    } catch (err) {
-      handleApiError(err, '获取脚本详情失败');
-    }
-  }, [modalDispatch]);
 
   // 编辑脚本
   const handleEdit = useCallback(async (script) => {
@@ -349,17 +325,10 @@ const UiTestManager = () => {
           >
             修改
           </Button>
-          <Button
-            icon={<EyeOutlined />}
-            onClick={() => handlePreview(record.id)}
-            disabled={!canEdit}
-          >
-            预览
-          </Button>
         </Space>
       ),
     },
-  ], [handleExecute, executingId, canEdit, handleEdit, handlePreview]);
+  ], [handleExecute, executingId, canEdit, handleEdit]);
 
   // 使用 useMemo 稳定 pagination 对象引用
   const paginationConfig = React.useMemo(() => ({ pageSize: 10 }), []);
@@ -405,15 +374,6 @@ const UiTestManager = () => {
           setExecutingId(null);
           modalDispatch({ type: 'HIDE_EXECUTION' });
         }}
-      />
-
-      {/* 预览脚本弹窗 */}
-      <PreviewModal
-        visible={previewModalVisible}
-        previewResult={previewResult}
-        previewMode={previewMode}
-        onClose={() => modalDispatch({ type: 'HIDE_PREVIEW' })}
-        onModeChange={(mode) => modalDispatch({ type: 'SET_PREVIEW_MODE', payload: mode })}
       />
 
       {/* 新建脚本弹窗（可视化步骤配置） */}

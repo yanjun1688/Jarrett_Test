@@ -1,7 +1,7 @@
 /**
  * 脚本Modal状态管理Hook
  */
-import { useReducer, useCallback } from 'react';
+import { useReducer } from 'react';
 
 const initialState = {
   executionModalVisible: false,
@@ -9,9 +9,6 @@ const initialState = {
   createModalVisible: false,
   editModalVisible: false,
   editingScript: null,
-  previewModalVisible: false,
-  previewResult: null,
-  previewMode: 'list', // 'list' | 'visual'
   elementPickerVisible: false,
   elementPickerFieldIndex: null,
   elementPickerContext: null,
@@ -36,12 +33,6 @@ function reducer(state, action) {
       return { ...state, editModalVisible: true, editingScript: action.payload };
     case 'HIDE_EDIT':
       return { ...state, editModalVisible: false, editingScript: null };
-    case 'SHOW_PREVIEW':
-      return { ...state, previewModalVisible: true, previewResult: action.payload, previewMode: 'list' };
-    case 'HIDE_PREVIEW':
-      return { ...state, previewModalVisible: false, previewResult: null, previewMode: 'list' };
-    case 'SET_PREVIEW_MODE':
-      return { ...state, previewMode: action.payload };
     case 'SHOW_ELEMENT_PICKER':
       return {
         ...state,
