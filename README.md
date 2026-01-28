@@ -315,7 +315,6 @@ REACT_APP_API_BASE_URL=http://localhost:8000
 ### Q: 数据库连接失败？
 - SQLite: 确保有写入权限
 - MySQL: 检查 `.env` 中的数据库配置，确保数据库已创建
-
 ## 贡献指南
 
 欢迎贡献代码！请遵循以下步骤：
@@ -341,3 +340,8 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 - GitHub Issues: [提交问题](https://github.com/yanjun1688/Jarrett_Test/issues)
 - 项目主页: [Jarrett_Test](https://github.com/yanjun1688/Jarrett_Test)
+- 邮箱：hyanjun546@gmail.com（欢迎提Bug以及优化需求）
+
+## 说明
+
+- 仍在持续开发中，后续预计接入LLM模型，搭建AI Agent，欢迎各位一起讨论学习。三人行，必有我师焉，择其善者而从之，其不善者而改之。
