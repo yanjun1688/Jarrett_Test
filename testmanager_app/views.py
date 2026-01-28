@@ -1113,6 +1113,132 @@ class RequestCollectionViewSet(CacheMixin, BaseViewSet, QueryOptimizerMixin, Com
         serializer = CollectionExecutionSerializer(collection_exec)
         return Response(serializer.data)
 
+    @api_exception_handler
+    @action(detail=True, methods=['post'])
+    def execute_async(self, request, pk=None):
+        """
+        异步执行请求集合 - 提交到 Celery 后台执行
+        
+        优点：
+        - 立即返回，不阻塞 HTTP 连接
+        - 支持大批量请求执行（不会 HTTP 超时）
+        - 可通过 task_status 端点查询执行进度
+        
+        Returns:
+            dict: 包含 task_id 和 execution_id，用于后续查询
+        """
+        from testmanager_app.tasks import execute_collection_task
+        
+        # 获取集合对象
+        try:
+            collection = RequestCollection.objects.prefetch_related(
+                'collection_requests__api_request'
+            ).get(pk=pk)
+        except RequestCollection.DoesNotExist:
+            raise ResourceNotFoundException("RequestCollection", pk)
+        
+        # 获取请求列表并验证
+        collection_requests = list(
+            collection.collection_requests.select_related('api_request')
+            .order_by('order_index')
+        )
+        
+        if len(collection_requests) > 1000:
+            logger.warning(f"Too many requests in collection: {len(collection_requests)}")
+            raise ValidationError("Cannot execute collection with more than 1000 requests")
+        
+        if len(collection_requests) == 0:
+            raise ValidationError("Collection has no requests to execute")
+        
+        # 创建 CollectionExecution 记录（状态为 pending）
+        collection_exec = CollectionExecution.objects.create(
+            collection=collection,
+            executor=request.user if request.user.is_authenticated else None,
+            status='pending',
+            started_at=timezone.now(),
+            total_requests=len(collection_requests),
+            passed_requests=0,
+            failed_requests=0
+        )
+        
+        # 提交 Celery 任务
+        user_id = request.user.id if request.user.is_authenticated else None
+        task = execute_collection_task.delay(
+            collection_id=pk,
+            execution_id=collection_exec.id,
+            user_id=user_id
+        )
+        
+        logger.info(
+            f"Collection execution task submitted: "
+            f"collection_id={pk}, execution_id={collection_exec.id}, task_id={task.id}"
+        )
+        
+        return Response({
+            'message': '任务已提交，正在后台执行',
+            'task_id': task.id,
+            'execution_id': collection_exec.id,
+            'collection_id': pk,
+            'collection_name': collection.name,
+            'execution_mode': collection.execution_mode,
+            'total_requests': len(collection_requests),
+        }, status=status.HTTP_202_ACCEPTED)
+
+    @api_exception_handler
+    @action(detail=False, methods=['get'], url_path='task-status/(?P<task_id>[^/.]+)')
+    def task_status(self, request, task_id=None):
+        """
+        查询 Celery 任务状态
+        
+        Args:
+            task_id: Celery 任务 ID（从 execute_async 返回）
+        
+        Returns:
+            dict: 任务状态信息
+        """
+        from testmanager_app.tasks import get_task_status
+        
+        if not task_id:
+            raise ValidationError("task_id is required")
+        
+        status_info = get_task_status(task_id)
+        
+        # 如果任务完成且有 execution_id，获取详细执行结果
+        if status_info.get('ready') and status_info.get('successful'):
+            result = status_info.get('result', {})
+            execution_id = result.get('execution_id')
+            if execution_id:
+                try:
+                    collection_exec = CollectionExecution.objects.get(pk=execution_id)
+                    status_info['execution'] = CollectionExecutionSerializer(collection_exec).data
+                except CollectionExecution.DoesNotExist:
+                    pass
+        
+        return Response(status_info)
+
+    @api_exception_handler
+    @action(detail=True, methods=['get'], url_path='execution-status/(?P<execution_id>[0-9]+)')
+    def execution_status(self, request, pk=None, execution_id=None):
+        """
+        查询集合执行状态（通过 execution_id）
+        
+        Args:
+            pk: 集合 ID
+            execution_id: CollectionExecution 记录 ID
+        
+        Returns:
+            dict: 执行状态详情
+        """
+        try:
+            collection_exec = CollectionExecution.objects.get(
+                pk=execution_id,
+                collection_id=pk
+            )
+        except CollectionExecution.DoesNotExist:
+            raise ResourceNotFoundException("CollectionExecution", execution_id)
+        
+        return Response(CollectionExecutionSerializer(collection_exec).data)
+
     async def _execute_concurrent(self, collection_requests):
         """并发执行模式"""
         tasks = []
