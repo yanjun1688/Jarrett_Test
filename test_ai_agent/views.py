@@ -4,9 +4,6 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.views import View
-from .document_loader import DocumentLoader
-from .ai_processor import AIProcessor
-
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +59,10 @@ class ProcessPRDView(View):
     
     def process_document(self, file_path, api_key):
         """处理文档并生成测试用例"""
+        # 延迟导入，避免在模块级别执行任何代码（Celery兼容性）
+        from .document_loader import DocumentLoader
+        from .ai_processor import AIProcessor
+        
         # 初始化处理器，传入API Key
         document_loader = DocumentLoader()
         ai_processor = AIProcessor(api_key=api_key)

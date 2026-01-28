@@ -1,271 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { createUseStyles } from 'react-jss';
 import api from '../api';
+import '../css/YamlConfigUploader.css';
 
 // Monaco Editor 支持YAML语法高亮
 import Editor from '@monaco-editor/react';
 import yaml from 'js-yaml';
-
-const useStyles = createUseStyles({
-  container: {
-    padding: '20px',
-    maxWidth: '1200px',
-    margin: '0 auto',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '20px',
-    paddingBottom: '10px',
-    borderBottom: '2px solid #eee',
-  },
-  title: {
-    fontSize: '24px',
-    fontWeight: 'bold',
-  },
-  card: {
-    background: '#fff',
-    borderRadius: '8px',
-    padding: '20px',
-    marginBottom: '20px',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-  },
-  cardTitle: {
-    fontSize: '18px',
-    fontWeight: 'bold',
-    marginBottom: '15px',
-    color: '#333',
-  },
-  formGroup: {
-    marginBottom: '15px',
-  },
-  label: {
-    display: 'block',
-    marginBottom: '5px',
-    fontWeight: '600',
-    color: '#333',
-  },
-  input: {
-    width: '100%',
-    padding: '10px',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    fontSize: '14px',
-    '&:focus': {
-      outline: 'none',
-      borderColor: '#1890ff',
-    },
-  },
-  textarea: {
-    width: '100%',
-    minHeight: '80px',
-    padding: '10px',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    fontSize: '14px',
-    fontFamily: 'monospace',
-    '&:focus': {
-      outline: 'none',
-      borderColor: '#1890ff',
-    },
-  },
-  select: {
-    width: '100%',
-    padding: '10px',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    fontSize: '14px',
-    background: '#fff',
-    '&:focus': {
-      outline: 'none',
-      borderColor: '#1890ff',
-    },
-  },
-  editorContainer: {
-    height: '500px',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    overflow: 'hidden',
-  },
-  fileUpload: {
-    marginBottom: '15px',
-  },
-  fileInput: {
-    display: 'none',
-  },
-  uploadButton: {
-    padding: '10px 20px',
-    background: '#1890ff',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    '&:hover': {
-      background: '#40a9ff',
-    },
-  },
-  previewSection: {
-    background: '#f5f5f5',
-    borderRadius: '4px',
-    padding: '15px',
-    marginBottom: '15px',
-  },
-  previewSummary: {
-    display: 'flex',
-    gap: '20px',
-    marginBottom: '15px',
-  },
-  previewItem: {
-    flex: 1,
-    textAlign: 'center',
-    padding: '10px',
-    background: '#fff',
-    borderRadius: '4px',
-  },
-  previewLabel: {
-    fontSize: '12px',
-    color: '#666',
-    marginBottom: '5px',
-  },
-  previewValue: {
-    fontSize: '24px',
-    fontWeight: 'bold',
-    color: '#1890ff',
-  },
-  stepPreview: {
-    background: '#fff',
-    borderRadius: '4px',
-    padding: '10px',
-    marginBottom: '10px',
-    borderLeft: '4px solid #1890ff',
-  },
-  stepHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    fontWeight: 'bold',
-    marginBottom: '5px',
-  },
-  stepDetails: {
-    fontSize: '12px',
-    color: '#666',
-  },
-  validationSection: {
-    marginTop: '15px',
-  },
-  errorList: {
-    background: '#fff2f0',
-    border: '1px solid #ffccc7',
-    borderRadius: '4px',
-    padding: '10px',
-    marginTop: '10px',
-  },
-  warningList: {
-    background: '#fffbe6',
-    border: '1px solid #ffe58f',
-    borderRadius: '4px',
-    padding: '10px',
-    marginTop: '10px',
-  },
-  errorItem: {
-    color: '#f5222d',
-    fontSize: '13px',
-    marginBottom: '5px',
-  },
-  warningItem: {
-    color: '#faad14',
-    fontSize: '13px',
-    marginBottom: '5px',
-  },
-  actionButtons: {
-    display: 'flex',
-    gap: '10px',
-    justifyContent: 'center',
-    marginTop: '20px',
-  },
-  primaryButton: {
-    padding: '10px 30px',
-    background: '#1890ff',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '16px',
-    '&:hover': {
-      background: '#40a9ff',
-    },
-    '&:disabled': {
-      background: '#d9d9d9',
-      cursor: 'not-allowed',
-    },
-  },
-  secondaryButton: {
-    padding: '10px 30px',
-    background: '#fff',
-    color: '#1890ff',
-    border: '1px solid #1890ff',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '16px',
-    '&:hover': {
-      background: '#e6f7ff',
-    },
-  },
-  successMessage: {
-    background: '#f6ffed',
-    border: '1px solid #b7eb8f',
-    borderRadius: '4px',
-    padding: '15px',
-    marginBottom: '15px',
-    color: '#52c41a',
-  },
-  dangerMessage: {
-    background: '#fff2f0',
-    border: '1px solid #ffccc7',
-    borderRadius: '4px',
-    padding: '15px',
-    marginBottom: '15px',
-    color: '#f5222d',
-  },
-  yamlTextarea: {
-    width: '100%',
-    minHeight: '500px',
-    padding: '10px',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    fontFamily: 'monospace',
-    fontSize: '14px',
-    '&:focus': {
-      outline: 'none',
-      borderColor: '#1890ff',
-    },
-  },
-  variablesSection: {
-    background: '#e6f7ff',
-    border: '1px solid #91d5ff',
-    borderRadius: '4px',
-    padding: '10px',
-    marginBottom: '10px',
-  },
-  variableTag: {
-    display: 'inline-block',
-    background: '#1890ff',
-    color: '#fff',
-    padding: '4px 8px',
-    borderRadius: '4px',
-    fontSize: '12px',
-    marginRight: '5px',
-    marginBottom: '5px',
-  },
-  variableTagExtracted: {
-    background: '#52c41a',
-  },
-  variableTagUndefined: {
-    background: '#faad14',
-  },
-});
 
 // YAML示例模板
 const YAML_TEMPLATE = `# API配置示例
@@ -341,7 +81,6 @@ execution:
 `;
 
 function YamlConfigUploader() {
-  const classes = useStyles();
   const { projectId } = useParams();
 
   // 表单状态
@@ -498,43 +237,43 @@ function YamlConfigUploader() {
   }, [yamlContent]);
 
   return (
-    <div className={classes.container}>
-      <div className={classes.header}>
-        <h1 className={classes.title}>YAML配置上传工具</h1>
+    <div className="yaml-config-container">
+      <div className="yaml-config-header">
+        <h1 className="yaml-config-title">YAML配置上传工具</h1>
       </div>
 
       {/* 成功/错误消息 */}
-      {success && <div className={classes.successMessage}>{success}</div>}
-      {error && <div className={classes.dangerMessage}>{error}</div>}
+      {success && <div className="yaml-config-success-message">{success}</div>}
+      {error && <div className="yaml-config-danger-message">{error}</div>}
 
-      <div className={classes.card}>
-        <div className={classes.cardTitle}>基础信息</div>
+      <div className="yaml-config-card">
+        <div className="yaml-config-card-title">基础信息</div>
 
-        <div className={classes.formGroup}>
-          <label className={classes.label}>集合名称 *</label>
+        <div className="yaml-config-form-group">
+          <label className="yaml-config-label">集合名称 *</label>
           <input
             type="text"
-            className={classes.input}
+            className="yaml-config-input"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="请输入请求集合名称"
           />
         </div>
 
-        <div className={classes.formGroup}>
-          <label className={classes.label}>描述</label>
+        <div className="yaml-config-form-group">
+          <label className="yaml-config-label">描述</label>
           <textarea
-            className={classes.textarea}
+            className="yaml-config-textarea"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="请输入测试集合的描述信息（可选）"
           />
         </div>
 
-        <div className={classes.formGroup}>
-          <label className={classes.label}>执行模式</label>
+        <div className="yaml-config-form-group">
+          <label className="yaml-config-label">执行模式</label>
           <select
-            className={classes.select}
+            className="yaml-config-select"
             value={executionMode}
             onChange={(e) => setExecutionMode(e.target.value)}
           >
@@ -545,23 +284,23 @@ function YamlConfigUploader() {
         </div>
       </div>
 
-      <div className={classes.card}>
-        <div className={classes.cardTitle}>YAML配置编辑器</div>
+      <div className="yaml-config-card">
+        <div className="yaml-config-card-title">YAML配置编辑器</div>
 
-        <div className={classes.fileUpload}>
+        <div className="yaml-config-file-upload">
           <input
             type="file"
             id="yaml-file"
-            className={classes.fileInput}
+            className="yaml-config-file-input"
             accept=".yaml,.yml"
             onChange={handleFileUpload}
           />
-          <label htmlFor="yaml-file" className={classes.uploadButton}>
+          <label htmlFor="yaml-file" className="yaml-config-upload-button">
             📁 上传YAML文件
           </label>
           <button
             type="button"
-            className={classes.secondaryButton}
+            className="yaml-config-secondary-button"
             onClick={loadExample}
             style={{ marginLeft: '10px' }}
           >
@@ -586,23 +325,23 @@ function YamlConfigUploader() {
 
       {/* 预览区域 */}
       {preview && (
-        <div className={classes.card}>
-          <div className={classes.cardTitle}>转换预览</div>
+        <div className="yaml-config-card">
+          <div className="yaml-config-card-title">转换预览</div>
 
-          <div className={classes.previewSummary}>
-            <div className={classes.previewItem}>
-              <div className={classes.previewLabel}>总步骤数</div>
-              <div className={classes.previewValue}>{preview.total_steps}</div>
+          <div className="yaml-config-preview-summary">
+            <div className="yaml-config-preview-item">
+              <div className="yaml-config-preview-label">总步骤数</div>
+              <div className="yaml-config-preview-value">{preview.total_steps}</div>
             </div>
-            <div className={classes.previewItem}>
-              <div className={classes.previewLabel}>断言总数</div>
-              <div className={classes.previewValue}>
+            <div className="yaml-config-preview-item">
+              <div className="yaml-config-preview-label">断言总数</div>
+              <div className="yaml-config-preview-value">
                 {preview.steps_preview.reduce((sum, s) => sum + s.assertions_count, 0)}
               </div>
             </div>
-            <div className={classes.previewItem}>
-              <div className={classes.previewLabel}>提取变量</div>
-              <div className={classes.previewValue}>
+            <div className="yaml-config-preview-item">
+              <div className="yaml-config-preview-label">提取变量</div>
+              <div className="yaml-config-preview-value">
                 {preview.variables ? preview.variables.extracted.length : 0}
               </div>
             </div>
@@ -610,13 +349,13 @@ function YamlConfigUploader() {
 
           {/* 变量信息 */}
           {preview.variables && (
-            <div className={classes.variablesSection}>
+            <div className="yaml-config-variables-section">
               <strong>变量信息：</strong><br />
               {preview.variables.defined.length > 0 && (
                 <div>
                   定义的环境变量:
                   {preview.variables.defined.map(v =>
-                    <span key={v} className={classes.variableTag}>{v}</span>
+                    <span key={v} className="yaml-config-variable-tag">{v}</span>
                   )}
                 </div>
               )}
@@ -624,7 +363,7 @@ function YamlConfigUploader() {
                 <div style={{ marginTop: '5px' }}>
                   提取的变量:
                   {preview.variables.extracted.map(v =>
-                    <span key={v} className={`${classes.variableTag} ${classes.variableTagExtracted}`}>{v}</span>
+                    <span key={v} className="yaml-config-variable-tag yaml-config-variable-tag-extracted">{v}</span>
                   )}
                 </div>
               )}
@@ -632,7 +371,7 @@ function YamlConfigUploader() {
                 <div style={{ marginTop: '5px' }}>
                   未定义变量:
                   {preview.variables.undefined.map(v =>
-                    <span key={v} className={`${classes.variableTag} ${classes.variableTagUndefined}`}>{v}</span>
+                    <span key={v} className="yaml-config-variable-tag yaml-config-variable-tag-undefined">{v}</span>
                   )}
                 </div>
               )}
@@ -642,12 +381,12 @@ function YamlConfigUploader() {
           {/* 步骤预览 */}
           <div>
             {preview.steps_preview.map((step) => (
-              <div key={step.order} className={classes.stepPreview}>
-                <div className={classes.stepHeader}>
+              <div key={step.order} className="yaml-config-step-preview">
+                <div className="yaml-config-step-header">
                   <span>步骤 {step.order + 1}: {step.name}</span>
                   <span>{step.method} {step.url}</span>
                 </div>
-                <div className={classes.stepDetails}>
+                <div className="yaml-config-step-details">
                   断言数: {step.assertions_count}
                   {step.extract_vars.length > 0 && (
                     <span> | 提取变量: {step.extract_vars.join(', ')}</span>
@@ -660,10 +399,10 @@ function YamlConfigUploader() {
       )}
 
       {/* 验证结果 */}
-      <div className={classes.validationSection}>
+      <div className="yaml-config-validation-section">
         <button
           type="button"
-          className={classes.secondaryButton}
+          className="yaml-config-secondary-button"
           onClick={handleValidate}
           disabled={loading}
         >
@@ -671,10 +410,10 @@ function YamlConfigUploader() {
         </button>
 
         {isValid === false && validationErrors.length > 0 && (
-          <div className={classes.errorList}>
+          <div className="yaml-config-error-list">
             <strong>验证错误:</strong>
             {validationErrors.map((err, idx) => (
-              <div key={idx} className={classes.errorItem}>
+              <div key={idx} className="yaml-config-error-item">
                 • {err.message}
               </div>
             ))}
@@ -682,10 +421,10 @@ function YamlConfigUploader() {
         )}
 
         {validationWarnings.length > 0 && (
-          <div className={classes.warningList}>
+          <div className="yaml-config-warning-list">
             <strong>验证警告:</strong>
             {validationWarnings.map((warn, idx) => (
-              <div key={idx} className={classes.warningItem}>
+              <div key={idx} className="yaml-config-warning-item">
                 • {warn.message}
               </div>
             ))}
@@ -693,24 +432,24 @@ function YamlConfigUploader() {
         )}
 
         {isValid === true && (
-          <div className={classes.successMessage} style={{ marginTop: '10px' }}>
+          <div className="yaml-config-success-message" style={{ marginTop: '10px' }}>
             ✓ YAML配置验证通过，可以保存
           </div>
         )}
       </div>
 
       {/* 操作按钮 */}
-      <div className={classes.actionButtons}>
+      <div className="yaml-config-action-buttons">
         <button
           type="button"
-          className={classes.secondaryButton}
+          className="yaml-config-secondary-button"
           onClick={() => window.history.back()}
         >
           取消
         </button>
         <button
           type="button"
-          className={classes.primaryButton}
+          className="yaml-config-primary-button"
           onClick={handleSave}
           disabled={saving || !name || !yamlContent}
         >

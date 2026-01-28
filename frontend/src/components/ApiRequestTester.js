@@ -78,9 +78,6 @@ function ApiRequestTester() {
 
   // 同时获取请求列表和项目列表
   const fetchData = useCallback(async () => {
-    console.log('[Frontend] fetchData called');
-    console.log('[Frontend] 时间戳:', new Date().toISOString());
-
     dispatch({ type: 'FETCH_START' });
     try {
       const [requestsRes, projectsRes] = await Promise.all([
@@ -187,16 +184,9 @@ function ApiRequestTester() {
   };
 
   const handleTestRequest = async (requestId) => {
-    console.log(`[Frontend] 点击测试按钮，开始执行API请求 ID: ${requestId}`);
-    console.log(`[Frontend] 时间戳: ${new Date().toISOString()}`);
-
     dispatch({ type: 'TEST_START', payload: requestId });
     try {
-      console.log(`[Frontend] 发送 POST 请求到 /api/api-requests/${requestId}/execute/`);
       const response = await apiClient.post(`/api-requests/${requestId}/execute/`);
-      console.log(`[Frontend] 收到响应:`, response.data);
-      console.log(`[Frontend] 响应类型:`, typeof response.data);
-      console.log(`[Frontend] 响应码:`, response.status);
       dispatch({ type: 'TEST_SUCCESS', payload: { requestId, result: response.data } });
       notification.info({ message: '测试完成' });
     } catch (error) {

@@ -62,6 +62,15 @@ def get_user_roles_data(user: User, serializer_context=None, use_cache=True):
     Returns:
         list: 角色数据列表（已序列化）
     """
+    # superuser 自动拥有 crud 权限，直接返回虚拟角色，不需要查询数据库
+    if user.is_superuser:
+        return [{
+            'id': 0,
+            'name': 'superuser',
+            'permission': 'crud',
+            'description': '超级管理员角色，拥有所有权限'
+        }]
+    
     roles = get_user_roles_qs(user, use_cache=use_cache)
     return RoleSerializer(roles, many=True, context=serializer_context).data
 

@@ -3,7 +3,8 @@ import { Form, Input, Button, Card, message, Spin } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import './Login.css';
+import logger from '../utils/logger';
+import '../css/Login.css';
 
 const Login = () => {
   const [loading, setLoading] = useState(false);
@@ -21,7 +22,6 @@ const Login = () => {
 
       // 添加延迟，确保 token 已存储
       setTimeout(() => {
-        console.log('[Login] Token stored:', localStorage.getItem('authToken'));
         navigate('/', { replace: true });
       }, 100);
     } else {
@@ -31,7 +31,6 @@ const Login = () => {
   };
 
   const onFinishFailed = (errorInfo) => {
-    console.log('Failed:', errorInfo);
   };
 
   return (

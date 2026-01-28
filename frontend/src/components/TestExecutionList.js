@@ -4,6 +4,7 @@ import { DownOutlined, PlayCircleOutlined, EyeOutlined, PlusOutlined } from '@an
 import { testExecutionsAPI } from '../api';
 import apiClient from '../api/axios';
 import { usePermissions } from '../hooks/usePermissions';
+import logger from '../utils/logger';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -123,9 +124,7 @@ function TestExecutionList({ projectId }) {
       console.log('[Frontend Debug] 设置 state: apiRequestList (长度:', apiRequests.length, ')');
       setTestcaseList(testcases);
       setApiRequestList(apiRequests);
-      console.log('[Frontend Debug] state 设置完成');
     } catch (error) {
-      console.error('[Frontend Debug] 请求失败:', error);
       notification.error({ message: '加载数据失败', description: error.message });
     }
   };
@@ -156,9 +155,6 @@ function TestExecutionList({ projectId }) {
       createForm.resetFields();
       fetchExecutions();
     } catch (error) {
-      console.error('[Frontend Debug] 保存失败:', error);
-      console.error('[Frontend Debug] 错误详情:', error.response);
-      console.error('[Frontend Debug] 错误消息:', error.message);
       notification.error({ message: '保存失败', description: error.message });
     }
   };
@@ -236,9 +232,7 @@ function TestExecutionList({ projectId }) {
 
       // 刷新列表
       fetchExecutions();
-      console.log('[Frontend Debug] ==================== 执行完成 ====================');
     } catch (error) {
-      console.error('[Frontend Debug] 执行失败:', error);
       notification.error({ message: '执行失败', description: error.message });
     } finally {
       setExecutingId(null); // 重置执行状态
@@ -265,7 +259,6 @@ function TestExecutionList({ projectId }) {
           notification.info({ message: '执行完成', description: 'API测试执行已完成' });
         }
       } catch (error) {
-        console.error('[Frontend Debug] 轮询日志失败:', error);
         clearInterval(newInterval);
         setPollingInterval(null);
       }
@@ -295,7 +288,6 @@ function TestExecutionList({ projectId }) {
         }));
       }
     } catch (error) {
-      console.error('[Frontend Debug] fetchLogs() - 获取日志失败:', error);
     }
   };
 

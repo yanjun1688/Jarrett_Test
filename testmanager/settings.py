@@ -41,6 +41,7 @@ ALLOWED_HOSTS = [
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",  # ASGI服务器，需要放在最前面
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -50,8 +51,10 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "corsheaders",
+    "channels",
     "testmanager_app",
     "test_ai_agent",
+    "test_ui_app",
 ]
 
 MIDDLEWARE = [
@@ -83,6 +86,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "testmanager.wsgi.application"
+ASGI_APPLICATION = "testmanager.asgi.application"
 
 
 # Database
@@ -99,7 +103,7 @@ db_config = {
     'ENGINE': 'django.db.backends.mysql',
     'NAME': os.getenv('DB_NAME', 'mydjangodb'),
     'USER': os.getenv('DB_USER', 'root'),
-    'HOST': os.getenv('DB_HOST', 'localhost'),
+    'HOST': os.getenv('DB_HOST', '172.17.61.120'),
     'PORT': os.getenv('DB_PORT', '3306'),
 }
 
@@ -148,6 +152,10 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
+# Media files (User uploaded files)
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
@@ -189,7 +197,7 @@ REST_FRAMEWORK = {
 }
 
 # Cache configuration - Redis
-REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+REDIS_HOST = os.getenv('REDIS_HOST', '172.17.61.120')
 REDIS_PORT = os.getenv('REDIS_PORT', '6379')
 REDIS_DB = os.getenv('REDIS_DB', '1')
 CACHES = {
@@ -198,12 +206,23 @@ CACHES = {
         "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "SOCKET_CONNECT_TIMEOUT": 5,
-            "SOCKET_TIMEOUT": 5,
+            "SOCKET_CONNECT_TIMEOUT": 5,  # 连接超时5秒
+            "SOCKET_TIMEOUT": 5,  # 操作超时5秒（降低避免长时间阻塞）
             "CONNECTION_POOL_KWARGS": {
                 "max_connections": 50,
-                "retry_on_timeout": True,
+                "socket_connect_timeout": 5,
+                "socket_timeout": 5,
+                "socket_keepalive": True,  # 启用TCP keepalive
+                "socket_keepalive_options": {
+                    1: 1,  # TCP_KEEPIDLE: 1秒后开始发送keepalive探测
+                    2: 1,  # TCP_KEEPINTVL: 探测间隔1秒
+                    3: 3,  # TCP_KEEPCNT: 最多3次探测
+                } if os.name != 'nt' else {},  # Windows不支持这些选项
+                "retry_on_timeout": True,  # 超时时自动重试
+                "health_check_interval": 30,  # 每30秒检查连接健康状态
             },
+            # django-redis会自动管理连接池，不需要手动指定连接池类
+            "IGNORE_EXCEPTIONS": True,  # 改为True，避免Redis问题导致整个请求失败
         }
     }
 }
@@ -211,3 +230,100 @@ CACHES = {
 # 可选：会话也进 Redis
 SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 SESSION_CACHE_ALIAS = "default"
+
+# Celery配置 - 使用单独的Redis数据库(DB 2)避免与cache和channels冲突
+CELERY_REDIS_DB = os.getenv('CELERY_REDIS_DB', '2')
+CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{CELERY_REDIS_DB}"
+CELERY_RESULT_BACKEND = f"redis://{REDIS_HOST}:{REDIS_PORT}/{CELERY_REDIS_DB}"
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30分钟超时
+CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25分钟软超时
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_ACKS_LATE = True
+# Celery broker连接配置
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_BROKER_CONNECTION_RETRY = True
+CELERY_BROKER_CONNECTION_MAX_RETRIES = 10
+
+# Channels配置 - 使用单独的Redis数据库(DB 3)避免与cache和celery冲突
+# 注意：生产环境应该使用Redis，开发环境如果Redis不可用，可以使用内存通道层
+# 内存通道层限制：只能用于单进程部署，不能用于多进程/多服务器场景
+USE_REDIS_CHANNELS = os.getenv('USE_REDIS_CHANNELS', 'true').lower() == 'true'
+CHANNELS_REDIS_DB = os.getenv('CHANNELS_REDIS_DB', '3')
+
+if USE_REDIS_CHANNELS:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                "hosts": [f"redis://{REDIS_HOST}:{REDIS_PORT}/{CHANNELS_REDIS_DB}"],
+                "capacity": 1500,  # 默认通道容量
+                "expiry": 10,  # 消息过期时间（秒）
+                # 注意：channels_redis 的慢任务警告阈值在库内部硬编码（约0.1秒）
+                # 无法通过配置项修改，如果需要调整，请使用日志配置过滤警告
+            },
+        },
+    }
+else:
+    # 使用内存通道层（仅限开发环境，单进程）
+    # 设置环境变量 USE_REDIS_CHANNELS=false 以使用内存通道层
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
+
+# Logging configuration - use console handler with minimal formatting to avoid blocking
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {
+            'format': '{levelname} {name}: {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+            'level': 'INFO',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'test_ui_app': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'testmanager_app': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'test_ai_agent': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Silence channels_redis slow task warnings
+        'channels_redis': {
+            'handlers': ['console'],
+            'level': 'ERROR',  # Only show errors, not warnings
+            'propagate': False,
+        },
+    },
+}

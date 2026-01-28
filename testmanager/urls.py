@@ -17,9 +17,16 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("testmanager_app.urls")),
     path("api/ai-agent/", include("test_ai_agent.urls")),
+    path("api/ui-test/", include("test_ui_app.urls")),
 ]
+
+# 开发环境：提供media文件服务
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

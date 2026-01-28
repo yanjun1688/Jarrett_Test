@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import logger from '../utils/logger';
 import {
   Card,
   Upload,
@@ -54,7 +55,7 @@ function AiTestCaseAnalysis() {
         const config = JSON.parse(savedConfig);
         configForm.setFieldsValue(config);
       } catch (e) {
-        console.error('Failed to load config:', e);
+        logger.error('Failed to load config:', e);
       }
     }
   }, [configForm]);
@@ -79,7 +80,7 @@ function AiTestCaseAnalysis() {
       message.success('配置已保存');
       setConfigModalVisible(false);
     }).catch((error) => {
-      console.error('Config validation failed:', error);
+      logger.error('Config validation failed:', error);
     });
   };
 
@@ -112,7 +113,7 @@ function AiTestCaseAnalysis() {
         message.error('处理失败：未返回测试用例数据');
       }
     } catch (error) {
-      console.error('处理PRD失败:', error);
+      logger.error('处理PRD失败:', error);
       message.error(
         error.response?.data?.error || error.message || '处理PRD文档失败，请检查文件格式和网络连接'
       );
@@ -217,7 +218,7 @@ function AiTestCaseAnalysis() {
       setSaveModalVisible(false);
       setSelectedTestCases(new Set());
     } catch (error) {
-      console.error('保存失败:', error);
+      logger.error('保存失败:', error);
       message.error('保存失败：' + (error.message || '未知错误'));
     }
   };

@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }) => {
         setUser(parsedUser);
         setPermissions(calculatePermissions(parsedUser));
       } catch (error) {
-        console.error('Failed to parse user info:', error);
+        logger.error('Failed to parse user info:', error);
         localStorage.removeItem('authToken');
         localStorage.removeItem('userInfo');
       }

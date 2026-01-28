@@ -9,15 +9,15 @@ from dotenv import load_dotenv
 from .models import TestCase, TestSuite, ProcessedPRDChunk
 import logging
 
-# 加载环境变量
-load_dotenv()
-
 logger = logging.getLogger(__name__)
 
 class AIProcessor:
     """AI处理器，用于生成测试用例"""
     
     def __init__(self, api_key=None, model_name=None, temperature=None):
+        # 延迟加载环境变量（仅在初始化时执行，不在模块级别）
+        load_dotenv()
+        
         # 初始化语言模型，支持动态传入api_key
         if not api_key:
             api_key = os.getenv("OPENAI_API_KEY")

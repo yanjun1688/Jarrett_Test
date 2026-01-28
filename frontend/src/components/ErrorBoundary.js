@@ -1,5 +1,6 @@
 import React from 'react';
 import { Result, Button, Typography } from 'antd';
+import logger from '../utils/logger';
 
 const { Title, Paragraph } = Typography;
 
@@ -15,8 +16,8 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    // 你同样可以将错误日志上报给错误监控服务
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    // 记录错误日志（会自动上报到错误监控服务）
+    logger.error('ErrorBoundary caught an error:', error, errorInfo);
     this.setState({
       error: error,
       errorInfo: errorInfo,

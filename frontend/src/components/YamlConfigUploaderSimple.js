@@ -18,6 +18,7 @@ import {
 } from 'antd';
 import { UploadOutlined, CheckCircleOutlined, ExclamationCircleOutlined, LoadingOutlined } from '@ant-design/icons';
 import { requestCollectionsAPI } from '../api';
+import '../css/YamlConfigUploaderSimple.css';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -236,8 +237,8 @@ function YamlConfigUploaderSimple() {
   }, [yamlContent]);
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
-      <Title level={2} style={{ marginBottom: '20px' }}>YAML配置上传工具</Title>
+    <div className="yaml-simple-container">
+      <Title level={2} className="yaml-simple-title">YAML配置上传工具</Title>
 
       {isValid && (
         <Alert
@@ -260,7 +261,7 @@ function YamlConfigUploaderSimple() {
       <Row gutter={20}>
         {/* 左侧配置区域 */}
         <Col span={12}>
-          <Card title="基础信息" style={{ marginBottom: '20px' }}>
+          <Card title="基础信息" className="yaml-simple-card">
             <Form
               form={form}
               layout="vertical"
@@ -311,7 +312,7 @@ function YamlConfigUploaderSimple() {
                 accept=".yaml,.yml"
                 showUploadList={false}
               >
-                <Button icon={<UploadOutlined />} style={{ marginBottom: '10px' }}>
+                <Button icon={<UploadOutlined />} className="yaml-simple-upload-button">
                   上传YAML文件
                 </Button>
               </Upload>
@@ -338,7 +339,7 @@ function YamlConfigUploaderSimple() {
                 <Col span={8}>
                   <Card size="small" style={{ textAlign: 'center' }}>
                     <Text type="secondary">总步骤数</Text>
-                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1890ff' }}>
+                    <div className="yaml-simple-preview-stat-value yaml-simple-preview-stat-value-blue">
                       {preview.total_steps}
                     </div>
                   </Card>
@@ -346,7 +347,7 @@ function YamlConfigUploaderSimple() {
                 <Col span={8}>
                   <Card size="small" style={{ textAlign: 'center' }}>
                     <Text type="secondary">断言总数</Text>
-                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#52c41a' }}>
+                    <div className="yaml-simple-preview-stat-value yaml-simple-preview-stat-value-success">
                       {preview.steps_preview.reduce((sum, s) => sum + s.assertions_count, 0)}
                     </div>
                   </Card>
@@ -354,7 +355,7 @@ function YamlConfigUploaderSimple() {
                 <Col span={8}>
                   <Card size="small" style={{ textAlign: 'center' }}>
                     <Text type="secondary">提取变量</Text>
-                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#faad14' }}>
+                    <div className="yaml-simple-preview-stat-value yaml-simple-preview-stat-value-warning">
                       {preview.variables ? preview.variables.extracted.length : 0}
                     </div>
                   </Card>
@@ -398,15 +399,15 @@ function YamlConfigUploaderSimple() {
                   <Card
                     key={step.order}
                     size="small"
-                    style={{ marginBottom: '10px', borderLeft: '4px solid #1890ff' }}
+                    className="yaml-simple-step-preview"
                   >
-                    <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>
+                    <div className="yaml-simple-step-header">
                       步骤 {step.order + 1}: {step.name}
                     </div>
-                    <div style={{ fontSize: '12px', color: '#666' }}>
+                    <div className="yaml-simple-step-details">
                       {step.method} {step.url}
                     </div>
-                    <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+                    <div className="yaml-simple-step-details" style={{ marginTop: '5px' }}>
                       断言数: {step.assertions_count}
                       {step.extract_vars.length > 0 && (
                         <span> | 提取变量: {step.extract_vars.join(', ')}</span>

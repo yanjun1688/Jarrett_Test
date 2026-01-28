@@ -36,7 +36,7 @@ const MemberManager = () => {
       setUsers(response.data.results || response.data);
     } catch (error) {
       message.error('获取用户列表失败');
-      console.error('Error fetching users:', error);
+      logger.error('Error fetching users:', error);
     } finally {
       setUserLoading(false);
     }
@@ -50,7 +50,7 @@ const MemberManager = () => {
       setRoles(response.data.results || response.data);
     } catch (error) {
       message.error('获取角色列表失败');
-      console.error('Error fetching roles:', error);
+      logger.error('Error fetching roles:', error);
     } finally {
       setRoleLoading(false);
     }
@@ -79,7 +79,7 @@ const MemberManager = () => {
       fetchUsers();
     } catch (error) {
       message.error('用户创建失败: ' + (error.response?.data?.error || '未知错误'));
-      console.error('Error creating user:', error);
+      logger.error('Error creating user:', error);
     } finally {
       setLoading(false);
     }
@@ -93,7 +93,7 @@ const MemberManager = () => {
       fetchUsers();
     } catch (error) {
       message.error('用户删除失败');
-      console.error('Error deleting user:', error);
+      logger.error('Error deleting user:', error);
     }
   };
 
@@ -105,7 +105,7 @@ const MemberManager = () => {
       fetchUsers();
     } catch (error) {
       message.error('角色分配失败: ' + (error.response?.data?.error || '未知错误'));
-      console.error('Error assigning role:', error);
+      logger.error('Error assigning role:', error);
     }
   };
 
@@ -117,7 +117,7 @@ const MemberManager = () => {
       fetchUsers();
     } catch (error) {
       message.error('角色移除失败');
-      console.error('Error removing role:', error);
+      logger.error('Error removing role:', error);
     }
   };
 

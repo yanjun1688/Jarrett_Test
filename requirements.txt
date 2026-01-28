@@ -19,3 +19,8 @@ pymysql==1.1.1
 jsonpath-ng==1.6.1
 PyPDF2==3.0.1
 PyYAML==6.0.2
+playwright==1.48.0
+celery==5.3.4
+channels==4.0.0
+channels-redis==4.2.0
+daphne==4.1.0

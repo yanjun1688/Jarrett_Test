@@ -1,23 +1,32 @@
+# ============================================
+# JTest Project .gitignore
+# ============================================
+
 # Python
 __pycache__/
 *.py[cod]
-*.sqlite3
-*.log
-*.pot
-*.pyc
 *.pyo
 *.pyd
+*.egg-info/
+*.egg
 
-# Virtualenv
+# Virtual Environment
 venv/
 .env/
 .venv/
+env/
+
+# Environment Variables (SENSITIVE!)
 .env
 .env.local
 .env.*.local
 .env.production
 .env.development
 .env.test
+frontend/.env
+frontend/.env.*
+!.env.example
+!frontend/.env.example
 
 # Node.js
 node_modules/
@@ -26,22 +35,30 @@ node_modules/
 dist/
 build/
 out/
-*.egg-info/
-*.egg
 
-# Coverage & testing
+# Coverage & Testing
 .coverage
-htmlcov/
-pytest_cache/
 .coverage.*
+htmlcov/
+.pytest_cache/
+pytest_cache/
 
-# Django stuff
+# Django
 *.mo
 *.pot
-*.pyc
+*.sqlite3
 db.sqlite3
 media/
 staticfiles/
+
+# IDE / Editor
+.vscode/
+.idea/
+.cursor/
+.claude/
+*.swp
+*.swo
+*~
 
 # Operating System
 .DS_Store
@@ -53,35 +70,34 @@ Thumbs.db
 desktop.ini
 ehthumbs.db
 
-# VSCode / IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
 # Logs
 *.log
-*.txt
-控制台日志.txt
+logs/
 
 # Temporary files
+*.tmp
 tmp*.yaml
 tmp*.py
-*.tmp
-xx.txt
-testmanager/xx.txt
+frontend/download-*/
+
+# Local scripts (not needed in repo)
+verify_recorder.py
+restart_server.ps1
 
 # Backups
 *.bak
 *.backup
 backups/
 
-# Documentation (excluding README.md which should be committed)
-# Note: README.md is intentionally NOT ignored as it's the project's main documentation
+# Documentation (keep README.md only)
 *.md
 !README.md
 
-# Test directories - should not be committed
+# Test directories
 testmanager_app/tests/
 testmanager_app/test_scripts/
+
+# Misc
+xx.txt
+testmanager/xx.txt
+控制台日志.txt

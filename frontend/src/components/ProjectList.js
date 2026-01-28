@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../api/axios';
 import { List, Card, Typography, Spin, Button, Space, Modal, Form, Input, notification, Popconfirm } from 'antd';
 import { Link } from 'react-router-dom';
+import logger from '../utils/logger';
 
 const { Title } = Typography;
 const { Meta } = Card;
@@ -19,7 +20,7 @@ function ProjectList() {
       const response = await apiClient.get('/projects/');
       setProjects(response.data.results || []);
     } catch (error) {
-      console.error('获取项目列表失败:', error);
+      logger.error('获取项目列表失败:', error);
       notification.error({ message: '获取失败', description: error.message });
     } finally {
       setLoading(false);

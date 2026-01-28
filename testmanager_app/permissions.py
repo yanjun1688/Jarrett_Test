@@ -18,12 +18,12 @@ class RoleBasedPermission(permissions.BasePermission):
     基于角色的权限控制
     
     设计理念：
-    - admin用户自动拥有所有crud权限（无需分配角色）
+    - superuser（通过createsuperuser创建）自动拥有所有crud权限（无需分配角色）
     - 其他用户通过角色来控制权限
     - view 权限: 只能读取 (GET, HEAD, OPTIONS)
     - crud 权限: 可以增删改查
     
-    优化：使用缓存的用户角色查询，减少数据库访问
+    优化：使用缓存的用户角色查询，减少数据库查询
     """
 
     def has_permission(self, request, view):
@@ -35,15 +35,15 @@ class RoleBasedPermission(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
 
-        # admin用户自动拥有所有权限
-        if request.user.username == 'admin':
+        # superuser自动拥有所有权限（包括通过createsuperuser创建的用户）
+        if request.user.is_superuser:
             return True
 
         # 使用缓存的用户角色查询（优化：减少数据库查询）
         user_roles_qs = get_user_roles_qs(request.user, use_cache=True)
         user_roles = list(user_roles_qs)
 
-        # 如果用户没有任何角色，拒绝访问（admin除外）
+        # 如果用户没有任何角色，拒绝访问（superuser除外）
         if not user_roles:
             logger.warning(f"User {request.user.username} has no roles assigned")
             return False

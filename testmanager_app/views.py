@@ -409,6 +409,55 @@ class TestReportViewSet(BaseViewSet, QueryOptimizerMixin, CommonFilterMixin):
         
         # 返回分页结果
         return paginator.get_paginated_response(serializer.data)
+    
+    @api_exception_handler
+    @action(detail=False, methods=['get'], url_path='ui-test-logs')
+    def ui_test_logs(self, request):
+        """
+        获取UI测试执行日志列表（分页查询，性能优化）
+        
+        查询参数：
+        - page: 页码（默认1）
+        - page_size: 每页数量（默认20，最大100）
+        - project: 项目ID过滤（可选）
+        - status: 状态过滤（可选：passed, failed, pending, running等）
+        
+        性能优化：
+        - 使用轻量级序列化器，只返回必要字段
+        - 使用select_related避免N+1查询
+        - 不返回execution_log等大字段
+        """
+        from rest_framework.pagination import PageNumberPagination
+        from test_ui_app.models import UITestExecution
+        from test_ui_app.serializers import UITestExecutionListSerializer
+        
+        # 获取查询参数
+        project_id = request.query_params.get('project')
+        status_filter = request.query_params.get('status')
+        page_size = min(int(request.query_params.get('page_size', 20)), 100)  # 最大100
+        
+        # 构建查询集
+        queryset = UITestExecution.objects.all()
+        
+        # 应用过滤器
+        if project_id:
+            queryset = queryset.filter(script__project_id=project_id)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        # 使用select_related优化查询，避免N+1问题
+        queryset = queryset.select_related('script', 'executed_by').order_by('-created_at')
+        
+        # 分页
+        paginator = PageNumberPagination()
+        paginator.page_size = page_size
+        paginated_queryset = paginator.paginate_queryset(queryset, request)
+        
+        # 序列化
+        serializer = UITestExecutionListSerializer(paginated_queryset, many=True)
+        
+        # 返回分页结果
+        return paginator.get_paginated_response(serializer.data)
 
 
 class TestReportDataView(APIView):

@@ -12,6 +12,7 @@ import {
   UserOutlined,
   LogoutOutlined,
   RobotOutlined,
+  PlayCircleOutlined,
 } from '@ant-design/icons';
 import MemberManager from './components/MemberManager';
 import { Link, Outlet, useLocation } from 'react-router-dom';
@@ -77,6 +78,11 @@ const menuItems = [
     key: '/test-scripts',
     icon: <CodeOutlined />,
     label: <Link to="/test-scripts">测试脚本</Link>,
+  },
+  {
+    key: '/ui-tests',
+    icon: <PlayCircleOutlined />,
+    label: <Link to="/ui-tests">UI测试</Link>,
   },
   {
     key: '/ai-test-analysis',

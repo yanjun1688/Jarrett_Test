@@ -31,4 +31,10 @@ export const testExecutionsAPI = {
     const queryString = new URLSearchParams(params).toString();
     return apiClient.get(`/reports/api-test-logs/${queryString ? `?${queryString}` : ''}`);
   },
+  
+  // 获取UI测试日志列表（分页）
+  getUiTestLogs: (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    return apiClient.get(`/reports/ui-test-logs/${queryString ? `?${queryString}` : ''}`);
+  },
 };

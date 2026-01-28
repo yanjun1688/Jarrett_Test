@@ -32,6 +32,7 @@ import {
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { JSONPath } from 'jsonpath-plus';
+import '../css/RequestCollectionManager.css';
 
 const { Title } = Typography;
 
@@ -365,8 +366,8 @@ function RequestCollectionManager() {
 
   const executionMode = Form.useWatch('execution_mode', form);
 
-  // 列定义
-  const columns = [
+  // 列定义 - 使用useMemo优化
+  const columns = React.useMemo(() => [
     { title: '名称', dataIndex: 'name', key: 'name', width: 200 },
     { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
     {
@@ -375,9 +376,9 @@ function RequestCollectionManager() {
       key: 'execution_mode',
       width: 120,
       render: (mode) => ({
-        'concurrent': <span style={{ color: '#1890ff' }}>并发</span>,
-        'sequential': <span style={{ color: '#52c41a' }}>顺序</span>,
-        'chain': <span style={{ color: '#722ed1' }}>链式</span>,
+        'concurrent': <span className="request-collection-mode-concurrent">并发</span>,
+        'sequential': <span className="request-collection-mode-sequential">顺序</span>,
+        'chain': <span className="request-collection-mode-chain">链式</span>,
       }[mode] || mode),
     },
     { title: '请求数', dataIndex: 'request_count', key: 'request_count', align: 'center', width: 80 },
@@ -397,7 +398,7 @@ function RequestCollectionManager() {
           <Tooltip title="执行">
             <Button
               type="text"
-              icon={<PlayCircleOutlined style={{ color: '#52c41a' }} />}
+              icon={<PlayCircleOutlined className="request-collection-execute-icon" />}
               onClick={() => handleExecute(record.id)}
               loading={executing.has(record.id)}
             />
@@ -416,11 +417,11 @@ function RequestCollectionManager() {
         </Space>
       ),
     },
-  ];
+  ], [openModal, handleExecute, executing, handleDelete]);
 
   return (
-    <div style={{ padding: 24 }}>
-      <Space style={{ marginBottom: 16 }}>
+    <div className="request-collection-container">
+      <Space className="request-collection-header">
         <Button
           type="primary"
           icon={<PlusOutlined />}
@@ -446,15 +447,16 @@ function RequestCollectionManager() {
               <span>执行结果</span>
             </Space>
           }
-          style={{ marginTop: 24 }}
+          className="request-collection-execution-card"
           loading={executing.size > 0}
         >
           <Descriptions bordered column={2} size="small">
             <Descriptions.Item label="状态">
-              <span style={{
-                color: executionResult.status === 'success' ? '#52c41a' :
-                       executionResult.status === 'running' ? '#1890ff' : '#ff4d4f'
-              }}>
+              <span className={
+                executionResult.status === 'success' ? 'request-collection-status-text' :
+                executionResult.status === 'running' ? 'request-collection-status-text-running' : 
+                'request-collection-status-text-error'
+              }>
                 {executionResult.status}
               </span>
             </Descriptions.Item>
@@ -465,9 +467,9 @@ function RequestCollectionManager() {
 
           {executionResult.output && (
             <>
-              <Title level={5} style={{ marginTop: 16 }}>详细输出</Title>
-              <Card style={{ background: '#f0f2f5', maxHeight: 400, overflow: 'auto' }}>
-                <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{executionResult.output}</pre>
+              <Title level={5} className="request-collection-output-title">详细输出</Title>
+              <Card className="request-collection-output-card">
+                <pre className="request-collection-output-pre">{executionResult.output}</pre>
               </Card>
             </>
           )}

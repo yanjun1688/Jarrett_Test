@@ -5,3 +5,4 @@ export { apiRequestsAPI } from './apiRequests';
 export { requestCollectionsAPI } from './requestCollections';
 export { testCasesAPI } from './testCases';
 export { featureTestsAPI } from './featureTests';
+export { uiTestsAPI } from './uiTests';

@@ -2,6 +2,12 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
+import asyncio
+
+# Windows上设置事件循环策略以支持Playwright（必须在导入Django之前）
+# Windows上使用默认的ProactorEventLoopPolicy
+# Playwright需要Proactor才能创建子进程
+# 不要设置SelectorEventLoopPolicy！
 
 
 def main():

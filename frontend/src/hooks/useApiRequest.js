@@ -30,7 +30,7 @@ const useApiRequest = (apiFunction) => {
     } catch (err) {
       if (err.name === 'AbortError') {
         // 请求被取消了，不设置错误状态
-        console.log('Request was aborted');
+        logger.log('Request was aborted');
       } else {
         const errorMessage = err.response?.data?.detail || err.message || '请求失败';
         setError(errorMessage);

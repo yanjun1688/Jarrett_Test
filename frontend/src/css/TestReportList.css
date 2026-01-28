@@ -1,0 +1,107 @@
+/* TestReportList组件样式 */
+
+.test-report-container {
+  width: 100%;
+}
+
+.test-report-stat-card {
+  margin-bottom: 16px;
+}
+
+.test-report-stat-row {
+  margin-top: 24px;
+}
+
+.test-report-progress-center {
+  text-align: center;
+}
+
+.test-report-descriptions {
+  margin-bottom: 16px;
+}
+
+.test-report-loading-center {
+  text-align: center;
+  padding: 40px 0;
+}
+
+.test-report-summary-section {
+  margin-bottom: 16px;
+}
+
+.test-report-summary-passed {
+  color: #52c41a;
+  font-weight: bold;
+}
+
+.test-report-summary-failed {
+  color: #ff4d4f;
+  font-weight: bold;
+}
+
+.test-report-log-container {
+  background-color: #f5f5f5;
+  padding: 12px;
+  border-radius: 4px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.test-report-log-success {
+  color: #52c41a;
+}
+
+.test-report-log-error {
+  color: #ff4d4f;
+}
+
+.test-report-log-action {
+  color: #1890ff;
+}
+
+.test-report-log-divider {
+  color: #722ed1;
+}
+
+.test-report-response-section {
+  margin-top: 16px;
+}
+
+.test-report-response-container {
+  background-color: #f5f5f5;
+  padding: 12px;
+  border-radius: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.test-report-response-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.test-report-screenshot-section {
+  margin-top: 16px;
+}
+
+.test-report-screenshot-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.test-report-screenshot-item {
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.test-report-screenshot-img {
+  border-radius: 4px;
+}

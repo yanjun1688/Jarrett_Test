@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { message } from 'antd';
+import logger from '../utils/logger';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api';
 
@@ -90,7 +91,7 @@ apiClient.interceptors.request.use(
         config.headers.Authorization = `Token ${newToken}`;
       } catch (error) {
         // 刷新失败，请求会被401拦截器处理
-        console.error('Token refresh failed:', error);
+        logger.error('Token refresh failed:', error);
       }
     } else {
       // 正常添加token
@@ -176,13 +177,13 @@ apiClient.interceptors.response.use(
       }
       
       // 其他服务器响应错误
-      console.error('API Error:', status, error.response.data);
+      logger.error('API Error:', status, error.response.data);
     } else if (error.request) {
       // 请求已发出但没有收到响应
-      console.error('Network Error:', error.request);
+      logger.error('Network Error:', error.request);
     } else {
       // 发送请求时出错
-      console.error('Request Error:', error.message);
+      logger.error('Request Error:', error.message);
     }
     return Promise.reject(error);
   }

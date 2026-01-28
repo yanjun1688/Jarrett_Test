@@ -157,19 +157,11 @@ function TestCaseList({ projectId }) { // Accept projectId as a prop
       // 刷新列表以显示新创建的API测试用例（使用当前的filter）
       fetchTestCases(filter);
     } catch (error) {
-      console.error('创建API测试用例失败:', error);
-      if (error.response) {
-        notification.error({
-          message: '创建失败',
-          description: error.response.data?.detail || error.response.statusText
-        });
-      } else if (error.message) {
-        notification.error({ message: '创建失败', description: error.message });
-      }
+      handleApiError(error, '创建API测试用例失败');
     }
   };
 
-  const columns = [
+  const columns = React.useMemo(() => [
     {
       title: '类型',
       dataIndex: 'test_type',
@@ -186,7 +178,7 @@ function TestCaseList({ projectId }) { // Accept projectId as a prop
     { title: '项目', dataIndex: 'project_name', key: 'project_name' },
     { title: '模块', dataIndex: 'module_name', key: 'module_name' },
     { title: '创建时间', dataIndex: 'created_at', key: 'created_at', render: (text) => new Date(text).toLocaleString() },
-  ];
+  ], []);
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="large">
