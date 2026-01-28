@@ -34,7 +34,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { JSONPath } from 'jsonpath-plus';
 import '../css/RequestCollectionManager.css';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 // 拖拽行组件
 const DraggableRow = ({ index, moveRow, className, style, ...restProps }) => {
@@ -430,6 +430,18 @@ function RequestCollectionManager() {
           创建请求集合
         </Button>
       </Space>
+
+      <Card style={{ marginBottom: 16 }}>
+        <Title level={4}>使用说明</Title>
+        <Text>
+          请求集合用于批量执行多个 API 请求，支持三种执行模式：
+        </Text>
+        <ul style={{ marginTop: 8, marginBottom: 0 }}>
+          <li><Text strong style={{ color: '#1890ff' }}>并发执行</Text>：所有请求同时发起，适合压力测试和独立请求的批量验证</li>
+          <li><Text strong style={{ color: '#52c41a' }}>顺序执行</Text>：按配置顺序逐个执行，支持"失败即停"，适合有依赖顺序的接口测试</li>
+          <li><Text strong style={{ color: '#722ed1' }}>链式执行</Text>：顺序执行 + 变量传递，可从响应中提取变量供后续请求使用，格式：<code>{'{{变量名}}'}</code>，适合完整业务流程测试</li>
+        </ul>
+      </Card>
 
       <Table
         columns={columns}
