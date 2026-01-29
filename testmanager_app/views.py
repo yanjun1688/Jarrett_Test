@@ -796,22 +796,47 @@ class ApiRequestViewSet(CacheMixin, BaseViewSet, QueryOptimizerMixin, CommonFilt
     @api_exception_handler
     def execute(self, request, pk=None):
         """
-        执行单个API请求（优化版 - 调用服务层）
+        执行单个API请求（异步 Celery 模式）
 
-        优化：
-        - 调用 TestExecutionService.execute_single_api_request 处理核心逻辑
-        - 使用@api_exception_handler统一异常处理
-        - 移除重复的try-except块和装饰性日志
-        - 代码从38行减少到10行
+        架构优化：
+        - 先创建 TestExecution 记录（status=pending）
+        - 提交 Celery 任务异步执行
+        - 立即返回 execution_id，前端可轮询结果
+        - 避免在 Web 请求中阻塞等待外部 HTTP 调用
         """
+        from testmanager_app.tasks import execute_api_request_task
+        from testmanager_app.models import TestExecution
+        
         api_request = self.get_object()
-
-        result = TestExecutionService.execute_single_api_request(
-            api_request,
-            request.user
+        
+        # 1. 创建 TestExecution 记录（status=pending）
+        execution = TestExecution.objects.create(
+            test_type='api',
+            api_request=api_request,
+            executor=request.user if request.user.is_authenticated else None,
+            status='pending',
+            executed_at=timezone.now()
         )
-
-        return Response(result)
+        
+        # 2. 提交 Celery 任务
+        user_id = request.user.id if request.user.is_authenticated else None
+        task = execute_api_request_task.delay(
+            api_request_id=api_request.id,
+            execution_id=execution.id,
+            user_id=user_id
+        )
+        
+        logger.info(f"API request execution submitted: api_request_id={api_request.id}, "
+                    f"execution_id={execution.id}, task_id={task.id}")
+        
+        # 3. 返回 execution_id，前端轮询结果
+        return Response({
+            'success': True,
+            'execution_id': execution.id,
+            'task_id': task.id,
+            'status': 'pending',
+            'message': '任务已提交，正在执行中'
+        })
 
     @action(detail=False, methods=['post'], url_path='execute-batch')
     @async_api_exception_handler
@@ -1011,21 +1036,18 @@ class RequestCollectionViewSet(CacheMixin, BaseViewSet, QueryOptimizerMixin, Com
     @action(detail=True, methods=['post'])
     def execute(self, request, pk=None):
         """
-        执行请求集合 - 统一记录TestExecution
+        执行请求集合 - 统一使用 Celery 异步模式
 
         架构优化：
-        - 使用策略模式统一三种执行模式
-        - 所有请求都通过 TestExecutionService.execute_single_api_request()
-        - 每个请求创建 TestExecution 记录（统一记录中心）
+        - 统一使用 Celery 任务执行，避免事件循环冲突
+        - 立即返回 execution_id，前端轮询获取结果
+        - 支持三种执行模式：并发、顺序、链式
+        - 每个请求创建 TestExecution 记录
         - CollectionExecution 作为聚合根
-        - 每个 TestExecution 关联 collection_execution 外键
         """
-        from asgiref.sync import async_to_sync
-        from testmanager_app.collection_execution_strategies import (
-            CollectionExecutionStrategyFactory
-        )
+        from testmanager_app.tasks import execute_collection_task
 
-        # 获取集合对象（不存在时由装饰器自动处理404）
+        # 获取集合对象
         try:
             collection = RequestCollection.objects.prefetch_related(
                 'collection_requests__api_request'
@@ -1033,85 +1055,53 @@ class RequestCollectionViewSet(CacheMixin, BaseViewSet, QueryOptimizerMixin, Com
         except RequestCollection.DoesNotExist:
             raise ResourceNotFoundException("RequestCollection", pk)
 
-        # 获取请求列表
+        # 获取请求列表并验证
         collection_requests = list(
             collection.collection_requests.select_related('api_request')
             .order_by('order_index')
         )
 
-        # 验证请求数量
         if len(collection_requests) > 1000:
             logger.warning(f"Too many requests in collection: {len(collection_requests)}")
             raise ValidationError("Cannot execute collection with more than 1000 requests")
 
-        started_at = timezone.now()
-        execution_mode = collection.execution_mode
+        if len(collection_requests) == 0:
+            raise ValidationError("Collection has no requests to execute")
 
-        # 先创建 CollectionExecution 记录
+        # 创建 CollectionExecution 记录（状态为 pending）
         collection_exec = CollectionExecution.objects.create(
             collection=collection,
             executor=request.user if request.user.is_authenticated else None,
             status='pending',
-            started_at=started_at,
+            started_at=timezone.now(),
             total_requests=len(collection_requests),
             passed_requests=0,
             failed_requests=0
         )
 
-        # 获取执行策略
-        strategy = CollectionExecutionStrategyFactory.get_strategy(execution_mode)
+        # 提交 Celery 任务
+        user_id = request.user.id if request.user.is_authenticated else None
+        task = execute_collection_task.delay(
+            collection_id=pk,
+            execution_id=collection_exec.id,
+            user_id=user_id
+        )
 
-        try:
-            # 执行请求（每个请求创建TestExecution记录并关联collection_execution）
-            # 链式执行使用同步实现，直接调用同步方法，避免异步导致的数据库保护异常
-            if execution_mode == 'chain':
-                context = {}
-                # 链式执行直接调用同步方法
-                executions = strategy._execute_sync(
-                    collection_requests,
-                    request.user,
-                    collection_exec,
-                    context
-                )
-            else:
-                # 并发和顺序执行使用异步方式
-                context = None
-                executions = async_to_sync(strategy.execute)(
-                    collection_requests,
-                    request.user,
-                    collection_exec,
-                    context
-                )
+        logger.info(
+            f"Collection execution task submitted: "
+            f"collection_id={pk}, execution_id={collection_exec.id}, task_id={task.id}"
+        )
 
-            # 更新统计信息
-            finished_at = timezone.now()
-            duration = finished_at - started_at
-
-            passed_count = sum(1 for e in executions if e.status == 'passed')
-            failed_count = len(executions) - passed_count
-
-            collection_exec.status = 'success' if failed_count == 0 else 'failed'
-            collection_exec.finished_at = finished_at
-            collection_exec.duration = duration
-            collection_exec.passed_requests = passed_count
-            collection_exec.failed_requests = failed_count
-            collection_exec.output = f"Mode: {execution_mode}, Total: {len(executions)}, Passed: {passed_count}, Failed: {failed_count}"
-            collection_exec.save()
-
-            logger.info(
-                f"Collection execution completed: mode={execution_mode}, "
-                f"total={len(executions)}, passed={passed_count}, failed={failed_count}"
-            )
-
-        except Exception as e:
-            # 执行失败，更新状态
-            collection_exec.status = 'error'
-            collection_exec.output = f'执行失败: {str(e)}'
-            collection_exec.save()
-            raise
-
-        serializer = CollectionExecutionSerializer(collection_exec)
-        return Response(serializer.data)
+        return Response({
+            'success': True,
+            'message': '任务已提交，正在执行中',
+            'task_id': task.id,
+            'execution_id': collection_exec.id,
+            'collection_id': int(pk),
+            'collection_name': collection.name,
+            'execution_mode': collection.execution_mode,
+            'total_requests': len(collection_requests),
+        }, status=status.HTTP_202_ACCEPTED)
 
     @api_exception_handler
     @action(detail=True, methods=['post'])

@@ -1,4 +1,4 @@
-import React, { useReducer, useEffect, useCallback, useState } from 'react';
+import React, { useReducer, useEffect, useCallback, useState, useRef } from 'react';
 import apiClient from '../api/axios';
 import {
   Form,
@@ -11,13 +11,14 @@ import {
   Typography,
   Row,
   Col,
-  Descriptions,
   Tag,
   notification,
   Modal,
   Popconfirm,
+  Descriptions,
 } from 'antd';
 import { usePermissions } from '../hooks/usePermissions';
+import ExecutionLogModal from './ExecutionLogModal';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -75,6 +76,12 @@ function ApiRequestTester() {
   const [editingRequest, setEditingRequest] = useState(null);
   const [editingAssertion, setEditingAssertion] = useState(null);
   const { hasCrudPermission } = usePermissions();
+  
+  // 执行结果弹窗状态
+  const [execModalVisible, setExecModalVisible] = useState(false);
+  const [execModalData, setExecModalData] = useState(null);
+  const [execPollingRef] = useState({ current: null });
+  const execRequestNameRef = useRef('');
 
   // 同时获取请求列表和项目列表
   const fetchData = useCallback(async () => {
@@ -184,17 +191,111 @@ function ApiRequestTester() {
   };
 
   const handleTestRequest = async (requestId) => {
+    // 找到请求名称
+    const request = requests.find(r => r.id === requestId);
+    execRequestNameRef.current = request?.name || 'API 请求';
+    
     dispatch({ type: 'TEST_START', payload: requestId });
+    
+    // 打开弹窗，显示执行中状态
+    setExecModalData({
+      status: 'running',
+      totalCount: 1,
+      passedCount: 0,
+      failedCount: 0,
+    });
+    setExecModalVisible(true);
+    
     try {
       const response = await apiClient.post(`/api-requests/${requestId}/execute/`);
-      dispatch({ type: 'TEST_SUCCESS', payload: { requestId, result: response.data } });
-      notification.info({ message: '测试完成' });
+      const data = response.data;
+      
+      // 后端返回 execution_id，需要轮询获取结果
+      if (data.execution_id) {
+        // 开始轮询
+        const pollInterval = setInterval(async () => {
+          try {
+            const statusRes = await apiClient.get(`/executions/${data.execution_id}/logs/`);
+            const execData = statusRes.data;
+            
+            // 更新弹窗数据
+            const passedCount = execData.passed_count || 0;
+            const totalAssertions = execData.total_assertions || 0;
+            const failedCount = totalAssertions - passedCount;
+            
+            setExecModalData({
+              status: execData.status === 'passed' ? 'passed' : execData.status === 'failed' ? 'failed' : 'running',
+              totalCount: 1,
+              passedCount: passedCount,
+              failedCount: failedCount,
+              executionDuration: execData.response_time,
+              responseStatus: execData.response_status,
+              responseTime: execData.response_time,
+              responseBody: execData.response_body,
+              assertions: execData.assertions || [],
+              logs: execData.api_logs,
+              errorMessage: execData.error_message,
+            });
+            
+            // 如果执行完成，停止轮询
+            if (execData.status === 'passed' || execData.status === 'failed') {
+              clearInterval(pollInterval);
+              dispatch({ type: 'TEST_SUCCESS', payload: { requestId, result: execData } });
+            }
+          } catch (pollError) {
+            console.error('轮询执行状态失败:', pollError);
+            clearInterval(pollInterval);
+          }
+        }, 1500);
+        
+        execPollingRef.current = pollInterval;
+      } else {
+        // 直接返回结果（兼容旧逻辑）
+        const passedCount = data.passed_count || 0;
+        const totalAssertions = data.total_assertions || 0;
+        const failedCount = totalAssertions - passedCount;
+        
+        setExecModalData({
+          status: data.error_message ? 'failed' : 'passed',
+          totalCount: 1,
+          passedCount: passedCount,
+          failedCount: failedCount,
+          executionDuration: data.response_time,
+          responseStatus: data.response_status,
+          responseTime: data.response_time,
+          responseBody: data.response_body,
+          assertions: data.assertions || [],
+          logs: data.api_logs,
+          errorMessage: data.error_message,
+        });
+        
+        dispatch({ type: 'TEST_SUCCESS', payload: { requestId, result: data } });
+      }
+      
+      notification.info({ message: '测试已提交' });
     } catch (error) {
       console.error(`[Frontend] 请求失败:`, error);
+      setExecModalData({
+        status: 'failed',
+        totalCount: 1,
+        passedCount: 0,
+        failedCount: 1,
+        errorMessage: error.message,
+      });
       notification.error({ message: '测试API请求失败', description: error.message });
       dispatch({ type: 'TEST_ERROR', payload: requestId });
     }
   };
+  
+  // 关闭执行结果弹窗
+  const closeExecModal = useCallback(() => {
+    if (execPollingRef.current) {
+      clearInterval(execPollingRef.current);
+      execPollingRef.current = null;
+    }
+    setExecModalVisible(false);
+    setExecModalData(null);
+  }, [execPollingRef]);
 
   const handleManageAssertions = async (request) => {
     setSelectedRequest(request);
@@ -489,121 +590,24 @@ function ApiRequestTester() {
           scroll={{ x: 'max-content' }}  // 添加横向滚动，防止内容溢出
         />
 
-        {testResult && (
-          <Card title="测试结果" style={{ marginTop: 24 }} loading={testingIds.size > 0}>
-            {console.log('[Frontend] Rendering testResult:', testResult)}
-            {console.log('[Frontend] testResult keys:', Object.keys(testResult))}
-            <Descriptions bordered column={1} size="small">
-              <Descriptions.Item label="状态码">
-                {testResult.response_status !== null && testResult.response_status !== undefined ? (
-                  <Tag color={testResult.response_status >= 200 && testResult.response_status < 300 ? 'green' : 'red'}>
-                    {testResult.response_status}
-                  </Tag>
-                ) : (
-                  <Tag color="red">-</Tag>
-                )}
-              </Descriptions.Item>
-              <Descriptions.Item label="响应时间">
-                {testResult.response_time !== null && testResult.response_time !== undefined
-                  ? `${testResult.response_time.toFixed(4)} 秒`
-                  : '-'}
-              </Descriptions.Item>
-            </Descriptions>
-            <Title level={5} style={{ marginTop: 16 }}>断言结果</Title>
-            {(testResult.assertions && testResult.assertions.length > 0) ? (
-              <Table
-                size="small"
-                pagination={false}
-                dataSource={testResult.assertions}
-                columns={[
-                  {
-                    title: '断言类型',
-                    dataIndex: 'assertion_type',
-                    key: 'assertion_type',
-                    render: (type) => {
-                      const typeMap = {
-                        status_code: '状态码',
-                        response_time: '响应时间',
-                        response_body_field: '响应体字段',
-                        response_header_field: '响应头字段',
-                        // 向后兼容旧类型
-                        response_body: '响应体',
-                        response_header: '响应头',
-                      };
-                      return typeMap[type] || type || '-';
-                    }
-                  },
-                  {
-                    title: '字段路径',
-                    dataIndex: 'field_path',
-                    key: 'field_path',
-                    render: (path, record) => {
-                      // 兼容旧字段名field
-                      const fieldPath = path || record.field || '-';
-                      return fieldPath;
-                    }
-                  },
-                  {
-                    title: '比较方式',
-                    dataIndex: 'comparison',
-                    key: 'comparison',
-                    render: (comparison) => {
-                      const comparisonMap = {
-                        equals: '等于',
-                        contains: '包含',
-                        not_contains: '不包含',
-                        greater_than: '大于',
-                        less_than: '小于',
-                      };
-                      return comparisonMap[comparison] || comparison || '-';
-                    }
-                  },
-                  {
-                    title: '期望值',
-                    dataIndex: 'expected_value',
-                    key: 'expected_value',
-                    render: (value) => value || '-'
-                  },
-                  {
-                    title: '实际值',
-                    dataIndex: 'actual_value',
-                    key: 'actual_value',
-                    render: (value) => {
-                      if (!value) return '-';
-                      // 如果值太长，截断显示
-                      const maxLength = 50;
-                      if (typeof value === 'string' && value.length > maxLength) {
-                        return <span title={value}>{value.substring(0, maxLength)}...</span>;
-                      }
-                      return value;
-                    }
-                  },
-                  {
-                    title: '结果',
-                    dataIndex: 'passed',
-                    key: 'passed',
-                    render: passed => passed ? <Tag color="success">通过</Tag> : <Tag color="error">失败</Tag>
-                  }
-                ]}
-                rowKey={(record, index) => record.id || index}
-              />
-            ) : <p>无断言</p>}
-            <Title level={5} style={{ marginTop: 16 }}>响应内容</Title>
-            <Card style={{ background: '#f0f2f5'}}>
-              <pre style={{ maxHeight: 200, overflow: 'auto' }}>
-                {(() => {
-                  try {
-                    const formatted = JSON.stringify(JSON.parse(testResult.response_body), null, 2);
-                    return formatted;
-                  } catch (e) {
-                    // 如果不是JSON，直接显示原始文本
-                    return testResult.response_body || '无响应内容';
-                  }
-                })()}
-              </pre>
-            </Card>
-          </Card>
-        )}
+        {/* 执行结果弹窗 */}
+        <ExecutionLogModal
+          visible={execModalVisible}
+          onClose={closeExecModal}
+          title={`API 测试执行结果 - ${execRequestNameRef.current}`}
+          executionType="api"
+          status={execModalData?.status || 'pending'}
+          totalCount={execModalData?.totalCount || 0}
+          passedCount={execModalData?.passedCount || 0}
+          failedCount={execModalData?.failedCount || 0}
+          executionDuration={execModalData?.executionDuration}
+          responseStatus={execModalData?.responseStatus}
+          responseTime={execModalData?.responseTime}
+          responseBody={execModalData?.responseBody}
+          assertions={execModalData?.assertions || []}
+          logs={execModalData?.logs}
+          errorMessage={execModalData?.errorMessage}
+        />
       </Col>
 
       {/* 断言管理模态框 */}

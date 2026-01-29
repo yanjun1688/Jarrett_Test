@@ -7,7 +7,6 @@ import logging
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from testmanager_app.utils.log_formatter import ExecutionLogger
-from testmanager_app.utils.async_helper import get_event_loop
 from testmanager_app.async_utils import execute_single_request_async
 import asyncio
 logger = logging.getLogger(__name__)
@@ -48,15 +47,13 @@ class TestExecutionService:
         # 3. 获取API请求对象
         api_request = execution.api_request
 
-        # 4. 执行请求（使用全局事件循环）
+        # 4. 执行请求（使用同步 httpx）
         try:
             log_formatter.add_request_sent()
 
-            # 使用全局事件循环执行异步请求
-            loop = get_event_loop()
-            result = loop.run_until_complete(
-                execute_single_request_async(api_request)
-            )
+            # 使用同步 httpx 执行请求（避免事件循环冲突）
+            from testmanager_app.async_utils import execute_single_request_sync
+            result = execute_single_request_sync(api_request)
 
             log_formatter.add_request_completed()
         except Exception as e:
@@ -154,7 +151,10 @@ class TestExecutionService:
     @staticmethod
     def execute_single_api_request(api_request, user):
         """
-        执行单个API请求（提取自ApiRequestViewSet.execute的核心逻辑）
+        执行单个API请求（用于请求集合内部调用）
+
+        注意：此方法现在主要被请求集合执行策略调用。
+        单个 API 请求的执行已改为 Celery 异步模式（execute_api_request_task）。
 
         Args:
             api_request: ApiRequest模型实例
@@ -169,7 +169,6 @@ class TestExecutionService:
         import json
         from django.utils import timezone
         from testmanager_app.models import TestExecution
-        from testmanager_app.utils.async_helper import get_event_loop
 
         logs = []
 
@@ -186,32 +185,9 @@ class TestExecutionService:
             logs.append(f"[{start_time.strftime('%Y-%m-%d %H:%M:%S')}] 正在发送请求...")
             logger.info(f"[Backend Info] 正在通过httpx发送请求...")
 
-            # 处理事件循环冲突 - 在测试环境中避免使用已运行的事件循环
-            try:
-                # 尝试获取当前事件循环
-                loop = asyncio.get_running_loop()
-                # 如果已经有运行中的循环，创建新任务
-                if loop.is_running():
-                    # 创建新的事件循环用于执行
-                    new_loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(new_loop)
-                    try:
-                        result = new_loop.run_until_complete(
-                            execute_single_request_async(api_request)
-                        )
-                    finally:
-                        new_loop.close()
-                        asyncio.set_event_loop(loop)
-                else:
-                    result = loop.run_until_complete(
-                        execute_single_request_async(api_request)
-                    )
-            except RuntimeError:
-                # 没有运行中的事件循环，使用全局事件循环
-                loop = get_event_loop()
-                result = loop.run_until_complete(
-                    execute_single_request_async(api_request)
-                )
+            # 使用同步 httpx 执行请求（避免事件循环冲突）
+            from testmanager_app.async_utils import execute_single_request_sync
+            result = execute_single_request_sync(api_request)
 
             logger.info(f"[Backend Info] httpx请求完成, response_status: {result.get('response_status')}")
             logs.append(f"[{timezone.now().strftime('%Y-%m-%d %H:%M:%S')}] 请求发送完成")

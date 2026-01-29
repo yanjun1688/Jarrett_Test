@@ -255,6 +255,21 @@ class CollectionExecutionStrategyInterface(ABC):
             'request_count': 1,
         }
 
+    def execute_in_worker(
+        self,
+        collection_requests: List,
+        user: Any = None,
+        collection_exec: Any = None,
+        context: Optional[Dict[str, Any]] = None
+    ) -> List:
+        """
+        在 Celery worker 中执行（子类需要覆盖此方法）
+        
+        默认实现使用 asyncio.run() 调用异步 execute 方法。
+        链式执行策略会覆盖此方法使用纯同步实现。
+        """
+        return asyncio.run(self.execute(collection_requests, user, collection_exec, context))
+
 
 class ConcurrentExecutionStrategy(CollectionExecutionStrategyInterface):
     """并发执行策略（同时发起所有请求）"""
@@ -385,141 +400,6 @@ class ConcurrentExecutionStrategy(CollectionExecutionStrategyInterface):
         return executions
 
 
-class SequentialExecutionStrategy(CollectionExecutionStrategyInterface):
-    """顺序执行策略（依次执行，可停止）"""
-
-    def can_execute(self, execution_mode: str) -> bool:
-        """支持 sequential 模式"""
-        return execution_mode == 'sequential'
-
-    async def execute(
-        self,
-        collection_requests: List,
-        user: Any = None,
-        collection_exec: Any = None,
-        context: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        顺序执行请求（支持两种模式：简化测试模式和完整业务模式）
-
-        Args:
-            collection_requests: 集合请求列表
-            user: 执行用户（可选，None时使用简化模式）
-            collection_exec: 集合执行记录（可选）
-            context: 不使用（为统一接口保留）
-
-        Returns:
-            List[Dict[str, Any]]: 如果user为None返回字典结果，否则返回TestExecution对象列表
-        """
-        total_requests = sum(getattr(req, 'request_count', 1) for req in collection_requests)
-        logger.info(f"Sequential execution: {len(collection_requests)} collection requests, {total_requests} total individual requests")
-
-        # 简化测试模式（不创建TestExecution记录）
-        if user is None:
-            return await self._execute_simplified(collection_requests)
-
-        # 完整业务模式（创建TestExecution记录）
-        return await self._execute_full(collection_requests, user, collection_exec)
-
-    async def _execute_simplified(self, collection_requests: List) -> List[Dict[str, Any]]:
-        """简化测试模式 - 直接返回结果字典"""
-        from testmanager_app.async_utils import execute_single_request_async
-
-        results = []
-        for coll_req in collection_requests:
-            request_count = getattr(coll_req, 'request_count', 1)
-
-            for i in range(request_count):
-                try:
-                    # 渲染请求
-                    rendered_request = RequestRenderer().render(coll_req.api_request, {})
-                    # 执行请求
-                    result = await execute_single_request_async(rendered_request)
-                    results.append(result)
-
-                    # 检查是否需要停止
-                    if coll_req.stop_on_failure and not result.get('success', False):
-                        logger.info(f"Request {coll_req.id} execution #{i+1} failed, stopping sequential execution")
-                        break
-
-                except Exception as e:
-                    logger.error(f"Failed to execute request {coll_req.id} (execution #{i+1}): {e}")
-                    results.append(self._create_error_result(
-                        getattr(coll_req.api_request, 'id', 0),
-                        str(e)
-                    ))
-
-                    if coll_req.stop_on_failure:
-                        break
-
-            # 检查是否需要停止
-            if coll_req.stop_on_failure and results and not results[-1].get('success', False):
-                break
-
-        return results
-
-    async def _execute_full(self, collection_requests: List, user: Any, collection_exec: Any) -> List[Dict[str, Any]]:
-        """完整业务模式 - 创建TestExecution记录
-        
-        修复：
-        1. 直接使用 execute_single_request_async（纯异步函数），避免 sync_to_async 嵌套导致的 CurrentThreadExecutor 错误
-        2. 保持顺序执行（使用 await 逐个执行，而不是并发）
-        3. 在结果处理时创建 TestExecution 记录
-        """
-        from testmanager_app.async_utils import execute_single_request_async
-
-        executions = []
-        for coll_req in collection_requests:
-            request_count = getattr(coll_req, 'request_count', 1)
-
-            for i in range(request_count):
-                try:
-                    # 渲染请求（处理模板变量）
-                    rendered_request = RequestRenderer().render(coll_req.api_request, {})
-                    # 顺序执行：使用 await 逐个执行，确保顺序
-                    result = await execute_single_request_async(rendered_request)
-
-                    # 使用统一的处理函数，将字典结果转换为 TestExecution 对象
-                    execution = await _process_execution_result(
-                        result,
-                        coll_req.api_request,
-                        user,
-                        collection_exec,
-                        {
-                            'request_id': coll_req.api_request.id,
-                            'coll_req': coll_req,
-                            'execution_index': i
-                        }
-                    )
-                    executions.append(execution)
-
-                    # 检查是否需要停止（基于执行结果）
-                    if coll_req.stop_on_failure and execution.status != 'passed':
-                        logger.info(f"Request {coll_req.id} execution #{i+1} failed, stopping sequential execution")
-                        break
-
-                except Exception as e:
-                    logger.error(f"Failed to execute request {coll_req.id} (execution #{i+1}): {e}")
-                    execution = await _create_test_execution_async(
-                        coll_req.api_request,
-                        user,
-                        collection_exec,
-                        'failed',
-                        f'执行失败: {str(e)}',
-                        timezone.now()
-                    )
-                    executions.append(execution)
-
-                    if coll_req.stop_on_failure:
-                        break
-
-            # 检查是否需要停止（基于最后一个执行结果）
-            if coll_req.stop_on_failure and executions and executions[-1].status != 'passed':
-                break
-
-        return executions
-
-
 class ChainExecutionStrategy(CollectionExecutionStrategyInterface):
     """链式执行策略（顺序执行，支持变量传递）"""
 
@@ -527,6 +407,23 @@ class ChainExecutionStrategy(CollectionExecutionStrategyInterface):
         """支持 chain 模式"""
         return execution_mode == 'chain'
 
+    def execute_in_worker(
+        self,
+        collection_requests: List,
+        user: Any = None,
+        collection_exec: Any = None,
+        context: Optional[Dict[str, Any]] = None
+    ) -> List:
+        """
+        在 Celery worker 中执行（覆盖基类方法）
+        
+        链式执行使用纯同步实现，完全不涉及事件循环：
+        - 使用 httpx.Client 同步发送请求
+        - 支持变量提取和模板渲染
+        - 支持失败即停
+        """
+        return self._execute_sync(collection_requests, user, collection_exec, context)
+
     async def execute(
         self,
         collection_requests: List,
@@ -535,7 +432,7 @@ class ChainExecutionStrategy(CollectionExecutionStrategyInterface):
         context: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """
-        链式执行请求（同步实现，避免异步导致的数据库保护异常）
+        链式执行请求（异步接口，内部使用同步实现）
         
         链式执行本质就是顺序执行，只是支持变量提取和模板渲染。
         使用同步实现可以避免 Django ORM 的异步保护异常。
@@ -550,7 +447,6 @@ class ChainExecutionStrategy(CollectionExecutionStrategyInterface):
             List[Dict[str, Any]]: 如果user为None返回字典结果，否则返回TestExecution对象列表
         """
         # 链式执行使用同步实现，通过 asyncio.to_thread 包装以避免阻塞
-        import asyncio
         return await asyncio.to_thread(
             self._execute_sync,
             collection_requests,
@@ -583,9 +479,8 @@ class ChainExecutionStrategy(CollectionExecutionStrategyInterface):
         return self._execute_full_sync(collection_requests, user, collection_exec, context)
 
     def _execute_simplified_sync(self, collection_requests: List, context: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        """简化测试模式 - 直接返回结果字典（同步实现，支持setup/teardown）"""
-        from testmanager_app.async_utils import execute_single_request_async
-        from testmanager_app.utils.async_helper import get_event_loop
+        """简化测试模式 - 直接返回结果字典（纯同步实现，支持setup/teardown）"""
+        from testmanager_app.async_utils import execute_single_request_sync
 
         if context is None:
             context = {}
@@ -621,9 +516,8 @@ class ChainExecutionStrategy(CollectionExecutionStrategyInterface):
 
             for i in range(request_count):
                 try:
-                    # 同步执行异步函数（链式执行需要顺序执行，所以同步调用即可）
-                    loop = get_event_loop()
-                    result = loop.run_until_complete(execute_single_request_async(rendered_request))
+                    # 使用同步 httpx 执行请求（完全不涉及事件循环）
+                    result = execute_single_request_sync(rendered_request)
                     executions.append(result)
 
                     if result.get('success', False):
@@ -656,6 +550,29 @@ class ChainExecutionStrategy(CollectionExecutionStrategyInterface):
                 break
 
         return executions
+
+    def _execute_single_request_simplified(self, coll_req, context: Dict[str, Any], request_renderer) -> Dict[str, Any]:
+        """执行单个请求（简化模式，使用同步 httpx）"""
+        from testmanager_app.async_utils import execute_single_request_sync
+        
+        try:
+            # 渲染请求（替换模板变量）
+            rendered_request = request_renderer.render(coll_req.api_request, context)
+            # 使用同步 httpx 执行请求
+            result = execute_single_request_sync(rendered_request)
+            
+            # 提取变量并更新上下文
+            if result.get('success', False) and coll_req.extract_rules:
+                new_context = self._extract_variables(result, coll_req.extract_rules, context.copy())
+                context.update(new_context)
+            
+            return result
+        except Exception as e:
+            logger.error(f"Failed to execute request {coll_req.id}: {e}")
+            return self._create_error_result(
+                getattr(coll_req.api_request, 'id', 0),
+                str(e)
+            )
 
     def _execute_full_sync(self, collection_requests: List, user: Any, collection_exec: Any, context: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """完整业务模式 - 创建TestExecution记录（同步实现）
@@ -1232,7 +1149,6 @@ class CollectionExecutionStrategyFactory:
         if cls._strategies is None:
             cls._strategies = [
                 ConcurrentExecutionStrategy(),
-                SequentialExecutionStrategy(),
                 ChainExecutionStrategy(),
             ]
             logger.info(f"初始化集合执行策略工厂，注册 {len(cls._strategies)} 个策略")

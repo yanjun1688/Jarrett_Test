@@ -339,7 +339,6 @@ class RequestCollection(models.Model):
     """请求集合模型"""
     EXECUTION_MODE_CHOICES = [
         ('concurrent', '并发执行'),
-        ('sequential', '顺序执行'),
         ('chain', '链式执行（支持变量传递）'),
     ]
 

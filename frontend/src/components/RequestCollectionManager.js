@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import apiClient from '../api/axios';
 import {
   Form,
@@ -11,14 +11,14 @@ import {
   Typography,
   Row,
   Col,
-  Descriptions,
   Modal,
   Switch,
   Tooltip,
   message,
   Alert,
   Popconfirm,
-  notification
+  notification,
+  Descriptions
 } from 'antd';
 import {
   HolderOutlined,
@@ -27,11 +27,13 @@ import {
   PlusOutlined,
   EditOutlined,
   PlayCircleOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  LoadingOutlined
 } from '@ant-design/icons';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { JSONPath } from 'jsonpath-plus';
+import ExecutionLogModal from './ExecutionLogModal';
 import '../css/RequestCollectionManager.css';
 
 const { Title, Text } = Typography;
@@ -95,6 +97,26 @@ function RequestCollectionManager() {
     sampleData: null,
   });
 
+  // 执行日志弹窗状态
+  const [execLogModal, setExecLogModal] = useState({
+    visible: false,
+    collectionName: '',
+    executionMode: '',
+    isAsync: false,
+    taskId: null,
+    executionId: null,
+    status: 'pending',  // pending, running, success, failed
+    logs: [],
+    progress: 0,
+    totalRequests: 0,
+    passedRequests: 0,
+    failedRequests: 0,
+    output: '',
+    startTime: null,
+    endTime: null,
+  });
+  const execLogPollingRef = useRef(null);
+
   const [form] = Form.useForm();
   const prevModeRef = useRef(null);
 
@@ -121,7 +143,7 @@ function RequestCollectionManager() {
   }, [loadData]);
 
   // 打开创建/编辑 Modal
-  const openModal = async (record = null) => {
+  const openModal = useCallback(async (record = null) => {
     setEditingRecord(record);
 
     if (record) {
@@ -155,7 +177,7 @@ function RequestCollectionManager() {
     }
 
     setModalVisible(true);
-  };
+  }, [form]);
 
   // 关闭 Modal
   const closeModal = () => {
@@ -176,8 +198,8 @@ function RequestCollectionManager() {
       return;
     }
 
-    // 顺序/链式 -> 并发：提示会失去排序信息
-    if ((prevMode === 'sequential' || prevMode === 'chain') && newMode === 'concurrent') {
+    // 链式 -> 并发：提示会失去排序信息
+    if (prevMode === 'chain' && newMode === 'concurrent') {
       Modal.confirm({
         title: '切换执行模式',
         icon: <ExclamationCircleOutlined />,
@@ -190,11 +212,11 @@ function RequestCollectionManager() {
       });
     }
 
-    // 并发 -> 顺序/链式：提示需要配置
-    if (prevMode === 'concurrent' && (newMode === 'sequential' || newMode === 'chain')) {
+    // 并发 -> 链式：提示需要配置
+    if (prevMode === 'concurrent' && newMode === 'chain') {
       Modal.info({
         title: '提示',
-        content: '切换到顺序/链式模式后，请在下方配置请求执行顺序',
+        content: '切换到链式模式后，请在下方配置请求执行顺序',
       });
     }
 
@@ -239,7 +261,7 @@ function RequestCollectionManager() {
   };
 
   // 删除集合
-  const handleDelete = async (id) => {
+  const handleDelete = useCallback(async (id) => {
     try {
       await apiClient.delete(`/request-collections/${id}/`);
       message.success('删除成功');
@@ -247,19 +269,151 @@ function RequestCollectionManager() {
     } catch (error) {
       message.error('删除失败：' + error.message);
     }
-  };
+  }, [loadData]);
 
-  // 执行集合
+  // 添加执行日志
+  const addExecLog = useCallback((log, type = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    setExecLogModal(prev => ({
+      ...prev,
+      logs: [...prev.logs, { timestamp, message: log, type }]
+    }));
+  }, []);
+
+  // 停止轮询
+  const stopPolling = useCallback(() => {
+    if (execLogPollingRef.current) {
+      clearInterval(execLogPollingRef.current);
+      execLogPollingRef.current = null;
+    }
+  }, []);
+
+  // 关闭执行日志弹窗
+  const closeExecLogModal = useCallback(() => {
+    stopPolling();
+    setExecLogModal(prev => ({
+      ...prev,
+      visible: false,
+    }));
+  }, [stopPolling]);
+
+  // 轮询异步任务状态
+  const pollTaskStatus = useCallback(async (taskId, executionId, collectionId) => {
+    try {
+      // 查询任务状态
+      const taskRes = await apiClient.get(`/request-collections/task-status/${taskId}/`);
+      const taskData = taskRes.data;
+
+      if (taskData.ready) {
+        // 任务完成，获取执行详情
+        const execRes = await apiClient.get(`/request-collections/${collectionId}/execution-status/${executionId}/`);
+        const execData = execRes.data;
+
+        setExecLogModal(prev => ({
+          ...prev,
+          status: execData.status,
+          progress: 100,
+          passedRequests: execData.passed_requests,
+          failedRequests: execData.failed_requests,
+          output: execData.output || '',
+          endTime: new Date(),
+        }));
+
+        addExecLog(`执行完成: ${execData.status === 'success' ? '✅ 成功' : '❌ 失败'}`, 
+          execData.status === 'success' ? 'success' : 'error');
+        addExecLog(`通过: ${execData.passed_requests}, 失败: ${execData.failed_requests}`, 'info');
+
+        if (execData.output) {
+          addExecLog('--- 详细输出 ---', 'info');
+          execData.output.split('\n').forEach(line => {
+            if (line.trim()) addExecLog(line, 'detail');
+          });
+        }
+
+        stopPolling();
+        setExecuting(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(collectionId);
+          return newSet;
+        });
+        setExecutionResult(execData);
+
+        if (execData.status === 'success') {
+          message.success('集合执行完成');
+        } else {
+          message.warning('集合执行完成，存在失败的请求');
+        }
+      } else {
+        // 任务仍在执行中
+        addExecLog(`任务状态: ${taskData.status}`, 'info');
+      }
+    } catch (error) {
+      addExecLog(`查询状态失败: ${error.message}`, 'error');
+    }
+  }, [addExecLog, stopPolling]);
+
+  // 同步执行集合
   const handleExecute = async (collectionId) => {
+    const collection = collections.find(c => c.id === collectionId);
+    if (!collection) return;
+
+    // 打开执行日志弹窗
+    setExecLogModal({
+      visible: true,
+      collectionName: collection.name,
+      executionMode: collection.execution_mode,
+      isAsync: false,
+      taskId: null,
+      executionId: null,
+      status: 'running',
+      logs: [],
+      progress: 0,
+      totalRequests: collection.request_count || 0,
+      passedRequests: 0,
+      failedRequests: 0,
+      output: '',
+      startTime: new Date(),
+      endTime: null,
+    });
+
+    addExecLog(`开始执行集合: ${collection.name}`, 'info');
+    addExecLog(`执行模式: ${collection.execution_mode}`, 'info');
+
     setExecuting(prev => new Set(prev).add(collectionId));
     setExecutionResult(null);
+
     try {
+      addExecLog('正在提交执行任务...', 'info');
       const response = await apiClient.post(`/request-collections/${collectionId}/execute/`);
-      setExecutionResult(response.data);
-      message.success('集合执行完成');
+      const data = response.data;
+
+      // 后端现在返回 task_id 和 execution_id，需要轮询获取结果
+      setExecLogModal(prev => ({
+        ...prev,
+        taskId: data.task_id,
+        executionId: data.execution_id,
+        status: 'running',
+        totalRequests: data.total_requests,
+      }));
+
+      addExecLog(`任务已提交: task_id=${data.task_id}`, 'success');
+      addExecLog(`执行记录ID: ${data.execution_id}`, 'info');
+      addExecLog(`总请求数: ${data.total_requests}`, 'info');
+      addExecLog('开始轮询执行状态...', 'info');
+
+      // 开始轮询状态
+      execLogPollingRef.current = setInterval(() => {
+        pollTaskStatus(data.task_id, data.execution_id, collectionId);
+      }, 2000); // 每 2 秒轮询一次
+
     } catch (error) {
+      setExecLogModal(prev => ({
+        ...prev,
+        status: 'failed',
+        endTime: new Date(),
+      }));
+      addExecLog(`执行失败: ${error.message}`, 'error');
       message.error('执行失败：' + error.message);
-    } finally {
       setExecuting(prev => {
         const newSet = new Set(prev);
         newSet.delete(collectionId);
@@ -268,12 +422,91 @@ function RequestCollectionManager() {
     }
   };
 
+  // 异步执行集合
+  const handleExecuteAsync = async (collectionId) => {
+    const collection = collections.find(c => c.id === collectionId);
+    if (!collection) return;
+
+    // 打开执行日志弹窗
+    setExecLogModal({
+      visible: true,
+      collectionName: collection.name,
+      executionMode: collection.execution_mode,
+      isAsync: true,
+      taskId: null,
+      executionId: null,
+      status: 'pending',
+      logs: [],
+      progress: 0,
+      totalRequests: collection.request_count || 0,
+      passedRequests: 0,
+      failedRequests: 0,
+      output: '',
+      startTime: new Date(),
+      endTime: null,
+    });
+
+    addExecLog(`开始异步执行集合: ${collection.name}`, 'info');
+    addExecLog(`执行模式: ${collection.execution_mode}`, 'info');
+
+    setExecuting(prev => new Set(prev).add(collectionId));
+    setExecutionResult(null);
+
+    try {
+      addExecLog('正在提交异步执行任务...', 'info');
+      const response = await apiClient.post(`/request-collections/${collectionId}/execute_async/`);
+      const data = response.data;
+
+      setExecLogModal(prev => ({
+        ...prev,
+        taskId: data.task_id,
+        executionId: data.execution_id,
+        status: 'running',
+        totalRequests: data.total_requests,
+      }));
+
+      addExecLog(`任务已提交: task_id=${data.task_id}`, 'success');
+      addExecLog(`执行记录ID: ${data.execution_id}`, 'info');
+      addExecLog(`总请求数: ${data.total_requests}`, 'info');
+      addExecLog('开始轮询执行状态...', 'info');
+
+      // 开始轮询状态
+      execLogPollingRef.current = setInterval(() => {
+        pollTaskStatus(data.task_id, data.execution_id, collectionId);
+      }, 2000); // 每 2 秒轮询一次
+
+    } catch (error) {
+      setExecLogModal(prev => ({
+        ...prev,
+        status: 'failed',
+        endTime: new Date(),
+      }));
+      addExecLog(`提交任务失败: ${error.message}`, 'error');
+      message.error('提交异步任务失败：' + error.message);
+      setExecuting(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(collectionId);
+        return newSet;
+      });
+    }
+  };
+
+  // 智能执行：根据执行模式自动选择执行链路
+  const handleSmartExecute = (collection) => {
+    if (collection.execution_mode === 'chain') {
+      // 链式执行使用同步链路（顺序执行 + 变量传递）
+      handleExecute(collection.id);
+    } else {
+      // 并发执行使用异步链路（Celery）
+      handleExecuteAsync(collection.id);
+    }
+  };
+
   // 处理选择的请求变化
   const handleRequestsChange = (newSelectedIds) => {
     setSelectedRequestIds(newSelectedIds);
 
-    // 所有模式下都要更新 collectionRequests
-    const mode = form.getFieldValue('execution_mode');
+    // 更新 collectionRequests
     const newCollectionRequests = newSelectedIds.map((id, index) => {
       const existing = collectionRequests.find(cr => cr.api_request === id);
       return {
@@ -321,7 +554,6 @@ function RequestCollectionManager() {
   // 配置提取规则
   const openExtractModal = async (index) => {
     const request = collectionRequests[index];
-    const requestDetail = requests.find(r => r.id === request.api_request);
 
     // 尝试获取最近一次成功的响应作为示例数据
     let sampleData = null;
@@ -377,7 +609,6 @@ function RequestCollectionManager() {
       width: 120,
       render: (mode) => ({
         'concurrent': <span className="request-collection-mode-concurrent">并发</span>,
-        'sequential': <span className="request-collection-mode-sequential">顺序</span>,
         'chain': <span className="request-collection-mode-chain">链式</span>,
       }[mode] || mode),
     },
@@ -398,9 +629,9 @@ function RequestCollectionManager() {
           <Tooltip title="执行">
             <Button
               type="text"
-              icon={<PlayCircleOutlined className="request-collection-execute-icon" />}
-              onClick={() => handleExecute(record.id)}
+              icon={executing.has(record.id) ? <LoadingOutlined /> : <PlayCircleOutlined className="request-collection-execute-icon" />}
               loading={executing.has(record.id)}
+              onClick={() => handleSmartExecute(record)}
             />
           </Tooltip>
           <Tooltip title="删除">
@@ -417,7 +648,7 @@ function RequestCollectionManager() {
         </Space>
       ),
     },
-  ], [openModal, handleExecute, executing, handleDelete]);
+  ], [openModal, handleSmartExecute, executing, handleDelete]);
 
   return (
     <div className="request-collection-container">
@@ -434,12 +665,11 @@ function RequestCollectionManager() {
       <Card style={{ marginBottom: 16 }}>
         <Title level={4}>使用说明</Title>
         <Text>
-          请求集合用于批量执行多个 API 请求，支持三种执行模式：
+          请求集合用于批量执行多个 API 请求，支持两种执行模式：
         </Text>
         <ul style={{ marginTop: 8, marginBottom: 0 }}>
           <li><Text strong style={{ color: '#1890ff' }}>并发执行</Text>：所有请求同时发起，适合压力测试和独立请求的批量验证</li>
-          <li><Text strong style={{ color: '#52c41a' }}>顺序执行</Text>：按配置顺序逐个执行，支持"失败即停"，适合有依赖顺序的接口测试</li>
-          <li><Text strong style={{ color: '#722ed1' }}>链式执行</Text>：顺序执行 + 变量传递，可从响应中提取变量供后续请求使用，格式：<code>{'{{变量名}}'}</code>，适合完整业务流程测试</li>
+          <li><Text strong style={{ color: '#722ed1' }}>链式执行</Text>：按顺序执行 + 变量传递，可从响应中提取变量供后续请求使用，格式：<code>{'{{变量名}}'}</code>，适合完整业务流程测试</li>
         </ul>
       </Card>
 
@@ -528,7 +758,6 @@ function RequestCollectionManager() {
               onChange={handleModeChange}
               options={[
                 { label: '并发执行', value: 'concurrent', title: '所有请求同时执行' },
-                { label: '顺序执行', value: 'sequential', title: '请求按顺序逐个执行' },
                 { label: '链式执行（支持变量传递）', value: 'chain', title: '请求按顺序执行，支持变量提取和传递' },
               ]}
             />
@@ -908,6 +1137,30 @@ function RequestCollectionManager() {
           </Form.List>
         </Form>
       </Modal>
+
+      {/* 执行日志弹窗 */}
+      <ExecutionLogModal
+        visible={execLogModal.visible}
+        onClose={closeExecLogModal}
+        title={`集合执行日志 - ${execLogModal.collectionName}${execLogModal.isAsync ? ' (异步)' : ''}`}
+        executionType="collection"
+        status={execLogModal.status === 'success' ? 'passed' : execLogModal.status === 'failed' ? 'failed' : execLogModal.status}
+        totalCount={execLogModal.totalRequests}
+        passedCount={execLogModal.passedRequests}
+        failedCount={execLogModal.failedRequests}
+        executionDuration={execLogModal.startTime && execLogModal.endTime 
+          ? (execLogModal.endTime - execLogModal.startTime) / 1000 
+          : undefined}
+        progress={execLogModal.progress}
+        logs={execLogModal.output || (execLogModal.logs.length > 0 
+          ? execLogModal.logs.map(log => `[${log.timestamp}] ${log.message}`).join('\n') 
+          : undefined)}
+        errorMessage={execLogModal.status === 'failed' && execLogModal.logs.length > 0 
+          ? execLogModal.logs.filter(log => log.type === 'error').map(log => log.message).join('\n') 
+          : undefined}
+        startTime={execLogModal.startTime ? execLogModal.startTime.toLocaleString() : undefined}
+        endTime={execLogModal.endTime ? execLogModal.endTime.toLocaleString() : undefined}
+      />
     </div>
   );
 }

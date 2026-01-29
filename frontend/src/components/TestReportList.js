@@ -1,11 +1,12 @@
 import React, { useReducer, useEffect, useCallback, useState, useMemo, memo } from 'react';
 import axios from 'axios';
 import apiClient from '../api/axios';
-import { Row, Col, Card, Statistic, Progress, Typography, Space, notification, Tabs, Table, Tag, Button, Modal, Descriptions, Spin, Image } from 'antd';
+import { Row, Col, Card, Statistic, Progress, Typography, Space, notification, Tabs, Table, Tag, Button, Spin } from 'antd';
 import ExecutionPieChart from './ExecutionPieChart';
 import { testExecutionsAPI } from '../api/testExecutions';
 import { uiTestsAPI } from '../api/uiTests';
 import { EXECUTION_STATUS, EXECUTION_STATUS_COLORS } from '../constants';
+import ExecutionLogModal from './ExecutionLogModal';
 import '../css/TestReportList.css';
 
 const { Title, Text } = Typography;
@@ -403,155 +404,52 @@ function TestReportList() {
       </Tabs>
 
       {/* 日志详情Modal */}
-      <Modal
-        title={logType === 'api' ? 'API测试执行日志详情' : 'UI测试执行日志详情'}
-        open={logModalVisible}
-        onCancel={() => {
-          setLogModalVisible(false);
-          setSelectedLog(null);
-          setLogDetail(null);
-          setLogType('api');
-        }}
-        footer={null}
-        width={1000}
-        destroyOnClose
-      >
-        {selectedLog && (
-          <div>
-            <Descriptions bordered column={2} className="test-report-descriptions">
-              {logType === 'api' ? (
-                <>
-                  <Descriptions.Item label="API名称">{selectedLog.api_request_name}</Descriptions.Item>
-                  <Descriptions.Item label="请求方法">
-                    <Tag color="blue">{selectedLog.api_request_method}</Tag>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="请求URL" span={2}>
-                    <Text copyable>{selectedLog.api_request_url}</Text>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="执行状态">
-                    <Tag color={selectedLog.status === 'passed' ? 'success' : 'error'}>
-                      {selectedLog.status === 'passed' ? '通过' : selectedLog.status === 'failed' ? '失败' : selectedLog.status}
-                    </Tag>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="执行人">{selectedLog.executor_name || '-'}</Descriptions.Item>
-                  <Descriptions.Item label="执行时间">
-                    {new Date(selectedLog.executed_at).toLocaleString()}
-                  </Descriptions.Item>
-                </>
-              ) : (
-                <>
-                  <Descriptions.Item label="脚本名称">{selectedLog.script_name}</Descriptions.Item>
-                  <Descriptions.Item label="执行状态">
-                    <Tag color={selectedLog.status === 'passed' ? 'success' : selectedLog.status === 'failed' ? 'error' : 'default'}>
-                      {selectedLog.status === 'passed' ? '通过' : selectedLog.status === 'failed' ? '失败' : selectedLog.status === 'running' ? '执行中' : selectedLog.status === 'pending' ? '待执行' : selectedLog.status}
-                    </Tag>
-                  </Descriptions.Item>
-                  <Descriptions.Item label="执行人">{selectedLog.executed_by_username || '-'}</Descriptions.Item>
-                  <Descriptions.Item label="执行时间">
-                    {new Date(selectedLog.created_at).toLocaleString()}
-                  </Descriptions.Item>
-                </>
-              )}
-            </Descriptions>
-
-            {logDetailLoading ? (
-              <div className="test-report-loading-center">
-                <Spin size="large" />
-              </div>
-            ) : logDetail ? (
-              <div>
-                {/* UI测试日志的统计信息 */}
-                {logType === 'ui' && logDetail.result_summary && (
-                  <div className="test-report-summary-section">
-                    <Descriptions bordered column={4} size="small">
-                      <Descriptions.Item label="总Actions">{logDetail.result_summary.total_actions || 0}</Descriptions.Item>
-                      <Descriptions.Item label="通过">
-                        <span className="test-report-summary-passed">
-                          {logDetail.result_summary.passed_actions || 0}
-                        </span>
-                      </Descriptions.Item>
-                      <Descriptions.Item label="失败">
-                        <span className="test-report-summary-failed">
-                          {logDetail.result_summary.failed_actions || 0}
-                        </span>
-                      </Descriptions.Item>
-                      <Descriptions.Item label="执行耗时">
-                        {logDetail.execution_duration_ms ? `${(logDetail.execution_duration_ms / 1000).toFixed(2)}秒` : '-'}
-                      </Descriptions.Item>
-                    </Descriptions>
-                  </div>
-                )}
-
-                <Title level={5}>执行日志</Title>
-                <div className="test-report-log-container">
-                  {logDetail.logs && logDetail.logs.length > 0 ? (
-                    logDetail.logs.map((log, index) => {
-                      // 根据日志内容设置颜色类
-                      let colorClass = '';
-                      if (log.includes('✅') || log.includes('执行成功') || log.includes('通过')) {
-                        colorClass = 'test-report-log-success';
-                      } else if (log.includes('❌') || log.includes('执行失败') || log.includes('失败')) {
-                        colorClass = 'test-report-log-error';
-                      } else if (log.includes('>>>') || log.includes('Action')) {
-                        colorClass = 'test-report-log-action';
-                      } else if (log.includes('========')) {
-                        colorClass = 'test-report-log-divider';
-                      }
-                      return (
-                        <div key={index} className={colorClass}>
-                          {log}
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <Text type="secondary">暂无日志</Text>
-                  )}
-                </div>
-
-                {/* API测试日志的响应数据 */}
-                {logType === 'api' && logDetail.api_response_data && (
-                  <div className="test-report-response-section">
-                    <Title level={5}>响应数据</Title>
-                    <div className="test-report-response-container">
-                      <pre className="test-report-response-pre">
-                        {JSON.stringify(logDetail.api_response_data, null, 2)}
-                      </pre>
-                    </div>
-                  </div>
-                )}
-
-                {/* UI测试日志的截图 */}
-                {logType === 'ui' && logDetail.screenshots && logDetail.screenshots.length > 0 && (
-                  <div className="test-report-screenshot-section">
-                    <Title level={5}>截图 ({logDetail.screenshots.length}张)</Title>
-                    <div className="test-report-screenshot-grid">
-                      {logDetail.screenshots.map((screenshot, index) => {
-                        // 构建完整的图片URL
-                        const imageUrl = screenshot.startsWith('http') 
-                          ? screenshot 
-                          : `${apiClient.defaults.baseURL}${screenshot.startsWith('/') ? screenshot : `/${screenshot}`}`;
-                        return (
-                          <div key={index} className="test-report-screenshot-item">
-                            <Image
-                              width={200}
-                              src={imageUrl}
-                              alt={`截图 ${index + 1}`}
-                              className="test-report-screenshot-img"
-                              preview={{
-                                mask: '查看大图'
-                              }}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </div>
-        )}
-      </Modal>
+      {logDetailLoading ? (
+        <div className="test-report-loading-center" style={{ position: 'fixed', top: '50%', left: '50%', zIndex: 1000 }}>
+          <Spin size="large" />
+        </div>
+      ) : (
+        <ExecutionLogModal
+          visible={logModalVisible}
+          onClose={() => {
+            setLogModalVisible(false);
+            setSelectedLog(null);
+            setLogDetail(null);
+            setLogType('api');
+          }}
+          title={logType === 'api' 
+            ? `API测试执行日志 - ${selectedLog?.api_request_name || ''}` 
+            : `UI测试执行日志 - ${selectedLog?.script_name || ''}`}
+          executionType={logType}
+          status={selectedLog?.status || 'pending'}
+          totalCount={logType === 'ui' 
+            ? (logDetail?.result_summary?.total_actions || 0) 
+            : 1}
+          passedCount={logType === 'ui' 
+            ? (logDetail?.result_summary?.passed_actions || 0) 
+            : (selectedLog?.status === 'passed' ? 1 : 0)}
+          failedCount={logType === 'ui' 
+            ? (logDetail?.result_summary?.failed_actions || 0) 
+            : (selectedLog?.status === 'failed' ? 1 : 0)}
+          executionDuration={logDetail?.execution_duration_ms 
+            ? logDetail.execution_duration_ms / 1000 
+            : logDetail?.response_time}
+          responseStatus={logType === 'api' ? logDetail?.response_status : undefined}
+          responseTime={logType === 'api' ? logDetail?.response_time : undefined}
+          responseBody={logType === 'api' && logDetail?.api_response_data 
+            ? JSON.stringify(logDetail.api_response_data) 
+            : undefined}
+          assertions={logType === 'api' ? logDetail?.assertions : undefined}
+          screenshots={logType === 'ui' ? logDetail?.screenshots : undefined}
+          logs={logDetail?.logs}
+          errorMessage={logDetail?.error_message}
+          startTime={selectedLog?.executed_at 
+            ? new Date(selectedLog.executed_at).toLocaleString() 
+            : selectedLog?.created_at 
+            ? new Date(selectedLog.created_at).toLocaleString() 
+            : undefined}
+        />
+      )}
     </Space>
   );
 }

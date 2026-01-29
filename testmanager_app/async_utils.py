@@ -197,6 +197,230 @@ async def execute_single_request_async(api_request):
     return result
 
 
+def execute_single_request_sync(api_request):
+    """
+    同步执行单个 API 请求（用于 Celery worker 中的链式执行）
+    
+    使用同步 httpx.Client，完全不涉及事件循环，
+    适用于链式执行中需要顺序执行并传递变量的场景。
+    
+    参数:
+        api_request: ApiRequest 模型实例或字典
+        
+    返回:
+        dict: 包含执行结果的字典
+    """
+    from testmanager_app.models import ApiAssertion
+    
+    # 如果传入的是字典，直接使用
+    if isinstance(api_request, dict):
+        api_request_data = api_request
+    else:
+        # 如果是模型实例，提取数据
+        api_request_data = {
+            'id': api_request.id,
+            'method': api_request.method,
+            'url': api_request.url,
+            'headers': api_request.headers,
+            'body': api_request.body,
+        }
+    
+    headers = {}
+    if api_request_data.get('headers'):
+        try:
+            headers = json.loads(api_request_data['headers'])
+        except json.JSONDecodeError:
+            for line in api_request_data['headers'].split('\n'):
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    headers[key.strip()] = value.strip()
+    
+    response = None
+    error_message = None
+    request_id = api_request_data.get('id', 'unknown')
+    
+    try:
+        # 配置代理（从环境变量读取）
+        import os
+        proxy_url = os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY')
+        client_kwargs = {'proxy': proxy_url} if proxy_url else {}
+        
+        logger.info(f"[{request_id}] Starting sync request: {api_request_data['method']} {api_request_data['url']}")
+        
+        with httpx.Client(timeout=60.0, **client_kwargs) as client:
+            request_body = api_request_data.get('body') or None
+            if request_body:
+                try:
+                    json_body = json.loads(request_body)
+                    response = client.request(
+                        method=api_request_data['method'],
+                        url=api_request_data['url'],
+                        headers=headers,
+                        json=json_body
+                    )
+                except json.JSONDecodeError:
+                    response = client.request(
+                        method=api_request_data['method'],
+                        url=api_request_data['url'],
+                        headers=headers,
+                        content=request_body.encode('utf-8')
+                    )
+            else:
+                response = client.request(
+                    method=api_request_data['method'],
+                    url=api_request_data['url'],
+                    headers=headers
+                )
+        
+        logger.info(f"[{request_id}] Sync request completed: status={response.status_code}, elapsed={response.elapsed.total_seconds():.3f}s")
+        
+    except Exception as e:
+        error_message = str(e)
+        logger.error(f"[{request_id}] Sync request failed: {error_message}")
+    
+    # 构建结果字典
+    result = {
+        'api_request_id': api_request_data.get('id'),
+        'request_method': api_request_data['method'],
+        'request_url': api_request_data['url'],
+        'request_headers': headers,
+        'request_body': api_request_data.get('body'),
+        'response_status': response.status_code if response else None,
+        'response_headers': dict(response.headers) if response else None,
+        'response_body': response.text if response else None,
+        'response_time': response.elapsed.total_seconds() if response else None,
+        'error_message': error_message,
+        'execution_time': datetime.now().isoformat(),
+        'success': response is not None and response.status_code < 400 and error_message is None,
+    }
+    
+    # 同步验证断言
+    if response and api_request_data.get('id'):
+        try:
+            assertions_qs = ApiAssertion.objects.filter(api_request_id=api_request_data['id'])
+            assertions_data = list(assertions_qs.values(
+                'id', 'assertion_type', 'expected_value', 'comparison', 'field_path'
+            ))
+            
+            if len(assertions_data) == 0:
+                result['assertions'] = []
+                result['all_assertions_passed'] = True
+                result['passed_count'] = 0
+                result['total_assertions'] = 0
+            else:
+                assertion_results = []
+                all_passed = True
+                passed_count = 0
+                
+                for assertion_data in assertions_data:
+                    assertion_result = _validate_assertion_sync(assertion_data, response, result)
+                    assertion_results.append(assertion_result)
+                    if assertion_result['passed']:
+                        passed_count += 1
+                    else:
+                        all_passed = False
+                
+                result['assertions'] = assertion_results
+                result['all_assertions_passed'] = all_passed
+                result['passed_count'] = passed_count
+                result['total_assertions'] = len(assertions_data)
+                
+        except Exception as e:
+            logger.error(f"验证断言时发生错误: {str(e)}")
+            result['assertions'] = []
+            result['all_assertions_passed'] = True
+            result['passed_count'] = 0
+            result['total_assertions'] = 0
+    
+    return result
+
+
+def _validate_assertion_sync(assertion_data, response, request_result):
+    """
+    同步验证单个断言（用于链式执行）
+    
+    Args:
+        assertion_data: 断言数据字典
+        response: httpx Response 对象
+        request_result: 请求结果字典
+        
+    Returns:
+        dict: 断言验证结果
+    """
+    assertion_type = assertion_data.get('assertion_type')
+    expected_value = assertion_data.get('expected_value')
+    comparison = assertion_data.get('comparison', 'equals')
+    field_path = assertion_data.get('field_path')
+    
+    actual_value = None
+    passed = False
+    error_message = None
+    
+    try:
+        # 根据断言类型获取实际值
+        if assertion_type == 'status_code':
+            actual_value = response.status_code if response else None
+        elif assertion_type == 'response_time':
+            actual_value = request_result.get('response_time')
+        elif assertion_type == 'response_body_field':
+            if field_path and request_result.get('response_body'):
+                try:
+                    body_data = json.loads(request_result['response_body'])
+                    actual_value = _extract_value_by_path(body_data, field_path)
+                except json.JSONDecodeError:
+                    actual_value = request_result.get('response_body')
+        elif assertion_type == 'response_header_field':
+            if field_path and response:
+                actual_value = response.headers.get(field_path)
+        
+        # 比较值
+        if actual_value is not None:
+            passed = _compare_values(actual_value, expected_value, comparison)
+        
+    except Exception as e:
+        error_message = str(e)
+        logger.error(f"断言验证错误: {e}")
+    
+    return {
+        'assertion_id': assertion_data.get('id'),
+        'assertion_type': assertion_type,
+        'field_path': field_path,
+        'expected_value': expected_value,
+        'actual_value': actual_value,
+        'comparison': comparison,
+        'passed': passed,
+        'error_message': error_message,
+    }
+
+
+def _compare_values(actual, expected, comparison):
+    """比较实际值和期望值"""
+    try:
+        if comparison == 'equals':
+            return str(actual) == str(expected)
+        elif comparison == 'not_equals':
+            return str(actual) != str(expected)
+        elif comparison == 'contains':
+            return str(expected) in str(actual)
+        elif comparison == 'not_contains':
+            return str(expected) not in str(actual)
+        elif comparison == 'greater_than':
+            return float(actual) > float(expected)
+        elif comparison == 'less_than':
+            return float(actual) < float(expected)
+        elif comparison == 'greater_or_equal':
+            return float(actual) >= float(expected)
+        elif comparison == 'less_or_equal':
+            return float(actual) <= float(expected)
+        elif comparison == 'exists':
+            return actual is not None
+        elif comparison == 'not_exists':
+            return actual is None
+        else:
+            return str(actual) == str(expected)
+    except (ValueError, TypeError):
+        return str(actual) == str(expected)
+
 
 def _extract_value_by_path(data, field_path):
     """

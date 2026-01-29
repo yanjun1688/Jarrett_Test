@@ -72,25 +72,18 @@ def execute_collection_task(self, collection_id: int, execution_id: int, user_id
         # 获取执行策略
         strategy = CollectionExecutionStrategyFactory.get_strategy(execution_mode)
         
-        # 执行请求
-        if execution_mode == 'chain':
-            context = {}
-            # 链式执行直接调用同步方法
-            executions = strategy._execute_sync(
-                collection_requests,
-                user,
-                collection_exec,
-                context
-            )
-        else:
-            # 并发和顺序执行使用异步方式
-            context = None
-            executions = async_to_sync(strategy.execute)(
-                collection_requests,
-                user,
-                collection_exec,
-                context
-            )
+        # 在 Celery worker 中执行请求
+        # 三种模式都使用统一的 execute_in_worker 方法
+        # - 并发：asyncio.run() + asyncio.gather() 同时发起
+        # - 顺序：asyncio.run() + 循环顺序执行，支持失败即停
+        # - 链式：纯同步执行（httpx.Client），支持变量传递
+        context = {} if execution_mode == 'chain' else None
+        executions = strategy.execute_in_worker(
+            collection_requests,
+            user,
+            collection_exec,
+            context
+        )
         
         # 更新统计信息
         finished_at = timezone.now()
@@ -99,15 +92,60 @@ def execute_collection_task(self, collection_id: int, execution_id: int, user_id
         passed_count = sum(1 for e in executions if e.status == 'passed')
         failed_count = len(executions) - passed_count
         
+        # 构建详细执行日志
+        detail_logs = []
+        detail_logs.append(f"========== 请求集合执行报告 ==========")
+        detail_logs.append(f"集合名称: {collection.name}")
+        detail_logs.append(f"执行模式: {execution_mode}")
+        detail_logs.append(f"开始时间: {started_at.strftime('%Y-%m-%d %H:%M:%S')}")
+        detail_logs.append(f"结束时间: {finished_at.strftime('%Y-%m-%d %H:%M:%S')}")
+        detail_logs.append(f"执行时长: {duration.total_seconds():.2f} 秒")
+        detail_logs.append(f"")
+        detail_logs.append(f"========== 执行统计 ==========")
+        detail_logs.append(f"总请求数: {len(executions)}")
+        detail_logs.append(f"通过: {passed_count}")
+        detail_logs.append(f"失败: {failed_count}")
+        detail_logs.append(f"")
+        detail_logs.append(f"========== 请求详情 ==========")
+        
+        for idx, execution in enumerate(executions, 1):
+            status_icon = "✅" if execution.status == 'passed' else "❌"
+            api_request = execution.api_request
+            detail_logs.append(f"")
+            detail_logs.append(f"--- 请求 {idx}/{len(executions)} {status_icon} ---")
+            detail_logs.append(f"名称: {api_request.name if api_request else 'N/A'}")
+            detail_logs.append(f"URL: {api_request.url if api_request else 'N/A'}")
+            detail_logs.append(f"方法: {api_request.method if api_request else 'N/A'}")
+            detail_logs.append(f"状态: {execution.status}")
+            detail_logs.append(f"结果: {execution.actual_result or 'N/A'}")
+            
+            # 如果有响应数据，添加响应状态码
+            if execution.api_response_data:
+                response_data = execution.api_response_data
+                if isinstance(response_data, dict):
+                    if response_data.get('response_status'):
+                        detail_logs.append(f"HTTP状态码: {response_data['response_status']}")
+                    if response_data.get('response_time'):
+                        detail_logs.append(f"响应时间: {response_data['response_time']:.3f}s")
+                    if response_data.get('error_message'):
+                        detail_logs.append(f"错误信息: {response_data['error_message']}")
+                    # 添加断言信息
+                    if response_data.get('assertions'):
+                        detail_logs.append(f"断言结果:")
+                        for assertion in response_data['assertions']:
+                            a_status = "✅" if assertion.get('passed') else "❌"
+                            detail_logs.append(f"  {a_status} {assertion.get('assertion_type', 'unknown')}: "
+                                             f"期望={assertion.get('expected_value')}, 实际={assertion.get('actual_value')}")
+        
+        detail_logs.append(f"")
+        detail_logs.append(f"========== 执行结束 ==========")
+        
         collection_exec.status = 'success' if failed_count == 0 else 'failed'
         collection_exec.finished_at = finished_at
         collection_exec.duration = duration
         collection_exec.passed_requests = passed_count
         collection_exec.failed_requests = failed_count
-        collection_exec.output = (
-            f"Mode: {execution_mode}, Total: {len(executions)}, "
-            f"Passed: {passed_count}, Failed: {failed_count}"
-        )
+        collection_exec.output = "\n".join(detail_logs)
         collection_exec.save()
         
         logger.info(
@@ -164,6 +202,165 @@ def _update_execution_error(execution_id: int, error_message: str):
         collection_exec.save()
     except Exception as e:
         logger.error(f"Failed to update execution error status: {e}")
+
+
+@shared_task(bind=True, name='testmanager_app.execute_api_request')
+def execute_api_request_task(self, api_request_id: int, execution_id: int, user_id: int = None):
+    """
+    异步执行单个 API 请求
+    
+    Args:
+        self: Celery 任务实例
+        api_request_id: API 请求 ID
+        execution_id: 预创建的 TestExecution 记录 ID
+        user_id: 执行用户 ID（可选）
+    
+    Returns:
+        dict: 执行结果摘要
+    """
+    from testmanager_app.models import ApiRequest, TestExecution
+    from testmanager_app.async_utils import execute_single_request_sync
+    from django.contrib.auth.models import User
+    import json
+    
+    logger.info(f"[Celery Task] Starting API request execution: "
+                f"api_request_id={api_request_id}, execution_id={execution_id}, task_id={self.request.id}")
+    
+    try:
+        # 获取 API 请求和执行记录
+        api_request = ApiRequest.objects.get(pk=api_request_id)
+        execution = TestExecution.objects.get(pk=execution_id)
+        
+        # 获取用户对象
+        user = None
+        if user_id:
+            try:
+                user = User.objects.get(pk=user_id)
+            except User.DoesNotExist:
+                logger.warning(f"User {user_id} not found, executing as anonymous")
+        
+        # 更新状态为运行中
+        execution.status = 'running'
+        execution.save(update_fields=['status'])
+        
+        started_at = timezone.now()
+        logs = []
+        logs.append(f"[{started_at.strftime('%Y-%m-%d %H:%M:%S')}] ======== 开始执行API测试 ========")
+        logs.append(f"[{started_at.strftime('%Y-%m-%d %H:%M:%S')}] API名称: {api_request.name}")
+        logs.append(f"[{started_at.strftime('%Y-%m-%d %H:%M:%S')}] 请求URL: {api_request.url}")
+        logs.append(f"[{started_at.strftime('%Y-%m-%d %H:%M:%S')}] 请求方法: {api_request.method}")
+        
+        # 使用同步 httpx 执行请求（避免事件循环冲突）
+        from testmanager_app.async_utils import execute_single_request_sync
+        result = execute_single_request_sync(api_request)
+        
+        end_time = timezone.now()
+        duration = end_time - started_at
+        
+        # 更新日志
+        if result.get('error_message'):
+            logs.append(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] ❌ 请求失败")
+            logs.append(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] 错误信息: {result['error_message']}")
+        else:
+            logs.append(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] ✅ 收到响应")
+            logs.append(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] HTTP状态码: {result['response_status']}")
+            if result.get('response_time') is not None:
+                logs.append(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] 响应时间: {result['response_time']:.4f} 秒")
+            
+            # 解析响应体
+            try:
+                response_body = json.loads(result['response_body'])
+                formatted_json = json.dumps(response_body, indent=2, ensure_ascii=False)
+                logs.append(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] 响应体内容:\n{formatted_json}")
+            except:
+                logs.append(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] 响应体内容:\n{result['response_body']}")
+            
+            # 断言结果
+            if result.get('assertions'):
+                logs.append(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] 开始验证断言...")
+                for assertion in result['assertions']:
+                    status_str = "✅ 通过" if assertion['passed'] else "❌ 失败"
+                    logs.append(f"  [{status_str}] 断言类型: {assertion['assertion_type']}")
+        
+        logs.append(f"[{timezone.now().strftime('%Y-%m-%d %H:%M:%S')}] ======== 执行完成 ========")
+        
+        # 确定执行状态
+        execution_status = 'failed'
+        actual_result = f"请求失败: {result.get('error_message', 'Unknown error')}"
+        
+        if not result.get('error_message'):
+            passed = result.get('passed_count', 0)
+            total = result.get('total_assertions', 0)
+            
+            if total == 0:
+                execution_status = 'passed'
+                actual_result = "测试通过: 请求成功（无断言配置）"
+            else:
+                execution_status = 'passed' if passed == total else 'failed'
+                actual_result = f"测试通过: {passed}/{total} 断言通过" if passed == total else f"测试失败: {passed}/{total} 断言通过"
+        
+        # 更新执行记录
+        execution.status = execution_status
+        execution.actual_result = actual_result
+        execution.execution_duration = duration
+        execution.api_response_data = result
+        execution.api_logs = "\n".join(logs)
+        execution.save()
+        
+        # 清除项目统计缓存
+        if api_request.project:
+            from testmanager_app.utils.cache_helper import invalidate_project_statistics
+            invalidate_project_statistics(api_request.project.id)
+        
+        logger.info(f"[Celery Task] API request execution completed: "
+                    f"task_id={self.request.id}, status={execution_status}")
+        
+        return {
+            'success': True,
+            'execution_id': execution_id,
+            'api_request_id': api_request_id,
+            'status': execution_status,
+            'response_status': result.get('response_status'),
+            'passed_count': result.get('passed_count', 0),
+            'total_assertions': result.get('total_assertions', 0),
+        }
+        
+    except ApiRequest.DoesNotExist:
+        logger.error(f"[Celery Task] ApiRequest {api_request_id} not found")
+        _update_api_execution_error(execution_id, f"ApiRequest {api_request_id} not found")
+        return {
+            'success': False,
+            'error': f"ApiRequest {api_request_id} not found",
+            'execution_id': execution_id,
+        }
+        
+    except TestExecution.DoesNotExist:
+        logger.error(f"[Celery Task] TestExecution record {execution_id} not found")
+        return {
+            'success': False,
+            'error': f"TestExecution record {execution_id} not found",
+        }
+        
+    except Exception as e:
+        logger.error(f"[Celery Task] API execution failed: {str(e)}", exc_info=True)
+        _update_api_execution_error(execution_id, str(e))
+        return {
+            'success': False,
+            'error': str(e),
+            'execution_id': execution_id,
+        }
+
+
+def _update_api_execution_error(execution_id: int, error_message: str):
+    """更新 API 执行记录为错误状态"""
+    try:
+        from testmanager_app.models import TestExecution
+        execution = TestExecution.objects.get(pk=execution_id)
+        execution.status = 'failed'
+        execution.actual_result = f"执行失败: {error_message}"
+        execution.save()
+    except Exception as e:
+        logger.error(f"Failed to update API execution error status: {e}")
 
 
 def get_task_status(task_id: str) -> dict:
