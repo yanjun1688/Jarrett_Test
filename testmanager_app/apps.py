@@ -1,10 +1,15 @@
+from __future__ import annotations
+
+import logging
 from django.apps import AppConfig
+
+logger = logging.getLogger(__name__)
 
 
 class TestsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "testmanager_app"
     
-    def ready(self):
-        """应用准备就绪时导入信号处理器"""
-        import testmanager_app.signals  # noqa
+    def ready(self) -> None:
+        """应用准备就绪"""
+        pass

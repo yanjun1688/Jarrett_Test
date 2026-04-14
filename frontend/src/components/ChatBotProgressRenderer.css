@@ -1,0 +1,215 @@
+.progress-container {
+  padding: 8px 0;
+}
+
+.progress-container.empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+}
+
+.progress-container.empty .empty-text {
+  color: #8c8c8c;
+  font-size: 14px;
+}
+
+.progress-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed #e8e8e8;
+}
+
+.progress-header .header-icon {
+  color: #1890ff;
+  font-size: 16px;
+}
+
+.progress-header .header-text {
+  color: #1890ff;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.progress-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.progress-step {
+  display: flex;
+  gap: 12px;
+  padding: 8px 0;
+  position: relative;
+}
+
+.progress-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 32px;
+  bottom: 0;
+  width: 1px;
+  background: #e8e8e8;
+}
+
+.progress-step.active::after {
+  background: linear-gradient(to bottom, #1890ff 50%, #e8e8e8 50%);
+}
+
+.step-indicator {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d9d9d9;
+}
+
+.progress-step.intent .step-dot {
+  background: #722ed1;
+}
+
+.progress-step.knowledge .step-dot {
+  background: #13c2c2;
+}
+
+.progress-step.tool .step-dot {
+  background: #fa8c16;
+}
+
+.progress-step.success .step-dot {
+  background: #52c41a;
+}
+
+.loading-icon {
+  color: #1890ff;
+  font-size: 14px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.success-icon {
+  color: #52c41a;
+  font-size: 14px;
+}
+
+.error-icon {
+  color: #ff4d4f;
+  font-size: 14px;
+}
+
+.step-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.step-tag {
+  margin: 0;
+  font-size: 11px;
+  padding: 0 6px;
+  height: 20px;
+  line-height: 18px;
+}
+
+.step-message {
+  color: #262626;
+  font-size: 13px;
+  flex: 1;
+}
+
+.step-detail {
+  margin-top: 4px;
+  padding-left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.detail-label {
+  color: #8c8c8c;
+}
+
+.count-value {
+  color: #13c2c2;
+  font-weight: 500;
+}
+
+.confidence {
+  color: #722ed1;
+  font-weight: 500;
+  font-size: 11px;
+}
+
+.step-name {
+  color: #fa8c16;
+  font-size: 12px;
+}
+
+.progress-step.active .step-message {
+  color: #1890ff;
+  font-weight: 500;
+}
+
+.progress-header .header-icon.success {
+  color: #52c41a;
+}
+
+.progress-header .header-text {
+  color: inherit;
+}
+
+.waiting-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  margin-top: 8px;
+  background: #fafafa;
+  border-radius: 4px;
+  color: #8c8c8c;
+  font-size: 13px;
+}
+
+.knowledge-summary {
+  margin-top: 6px;
+  padding-left: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.knowledge-summary .summary-item {
+  display: block;
+  font-size: 12px;
+  color: #595959;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+}

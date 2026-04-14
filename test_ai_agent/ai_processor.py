@@ -1,53 +1,55 @@
 import os
 import json
 from typing import List
-from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.pydantic_v1 import BaseModel, Field
 from dotenv import load_dotenv
 from .models import TestCase, TestSuite, ProcessedPRDChunk
+from core.agents.llm import create_llm_service
 import logging
 
 logger = logging.getLogger(__name__)
 
 class AIProcessor:
     """AI处理器，用于生成测试用例"""
-    
+
     def __init__(self, api_key=None, model_name=None, temperature=None):
         # 延迟加载环境变量（仅在初始化时执行，不在模块级别）
         load_dotenv()
-        
-        # 初始化语言模型，支持动态传入api_key
+
+        # 初始化语言模型，默认使用 Qwen 模型
         if not api_key:
-            api_key = os.getenv("OPENAI_API_KEY")
+            api_key = os.getenv("DASHSCOPE_API_KEY")
         if not api_key:
-            logger.warning("OPENAI_API_KEY not found in environment variables or parameters")
-            raise ValueError("API Key is required. Please provide OPENAI_API_KEY in environment or pass it as parameter.")
-        
+            logger.warning("DASHSCOPE_API_KEY not found in environment variables or parameters")
+            raise ValueError("API Key is required. Please provide DASHSCOPE_API_KEY in environment or pass it as parameter.")
+
         # 模型名称配置，支持从环境变量读取
         if not model_name:
-            model_name = os.getenv("OPENAI_MODEL_NAME", "gpt-3.5-turbo")
-        
+            model_name = os.getenv("QWEN_MODEL_NAME", "qwen3-coder-plus")
+
         # Temperature 配置，支持从环境变量读取
         if temperature is None:
-            temperature = float(os.getenv("OPENAI_TEMPERATURE", "0.3"))
-        
-        self.llm = ChatOpenAI(
+            temperature = float(os.getenv("LLM_TEMPERATURE", "0.3"))
+
+        # 使用 Qwen LLM 服务
+        self.llm_service = create_llm_service(
+            provider="qwen",
             model_name=model_name,
-            openai_api_key=api_key,
+            api_key=api_key,
             temperature=temperature
         )
-        
+
         # 定义输出解析器
         self.parser = JsonOutputParser()
-        
+
         # 定义Prompt模板
         self.prompt_template = PromptTemplate(
             input_variables=["prd_content"],
             template="""
             你是一个专业的软件测试工程师，请根据以下产品需求文档内容生成详细的测试用例。
-            
+
             要求：
             1. 分析需求中的功能点和边界条件
             2. 为每个功能点生成多个测试用例，包括正常情况、异常情况和边界值测试
@@ -55,10 +57,10 @@ class AIProcessor:
             4. 指定测试用例的优先级（High/Medium/Low）和类型（Functional/Non-functional）
             5. 包含具体的边界值示例
             6. 考虑异常场景和错误处理
-            
+
             产品需求文档内容：
             {prd_content}
-            
+
             请严格按照以下JSON格式输出结果：
             {{
                 "test_suites": [
@@ -80,7 +82,7 @@ class AIProcessor:
                     }}
                 ]
             }}
-            
+
             注意事项：
             1. 必须返回有效的JSON格式
             2. 不要包含任何额外的文本或解释
@@ -89,25 +91,29 @@ class AIProcessor:
             5. 包含边界值测试用例
             """
         )
-        
-        # 创建处理链
-        self.chain = self.prompt_template | self.llm | self.parser
-    
-    def generate_test_cases(self, prd_content: str) -> dict:
+
+    async def generate_test_cases(self, prd_content: str) -> dict:
         """根据PRD内容生成测试用例"""
         try:
             logger.info("Generating test cases from PRD content")
-            response = self.chain.invoke({"prd_content": prd_content})
-            return response
+            # 使用 Qwen LLM 服务生成测试用例
+            response = await self.llm_service.generate(
+                prompt=self.prompt_template.format(prd_content=prd_content),
+                system_message="你是一个专业的软件测试工程师，擅长分析PRD文档并生成详细的测试用例。"
+            )
+            # 解析 JSON 响应
+            parsed_response = json.loads(response)
+            return parsed_response
         except Exception as e:
             logger.error(f"Error generating test cases: {str(e)}")
             raise
-    
-    def process_prd_chunk(self, chunk_id: str, content: str, api_key: str = None) -> ProcessedPRDChunk:
+
+    async def process_prd_chunk(self, chunk_id: str, content: str, api_key: str = None) -> ProcessedPRDChunk:
         """处理PRD块并生成测试用例"""
         try:
-            raw_output = self.generate_test_cases(content)
-            
+            # 直接调用异步方法
+            raw_output = await self.generate_test_cases(content)
+
             # 解析生成的测试套件
             test_suites = []
             if 'test_suites' in raw_output:
@@ -125,14 +131,14 @@ class AIProcessor:
                             category=case_data.get('category')
                         )
                         test_cases.append(test_case)
-                    
+
                     test_suite = TestSuite(
                         name=suite_data.get('name', ''),
                         description=suite_data.get('description'),
                         test_cases=test_cases
                     )
                     test_suites.append(test_suite)
-            
+
             return ProcessedPRDChunk(
                 chunk_id=chunk_id,
                 content=content,

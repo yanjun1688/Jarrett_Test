@@ -2,7 +2,6 @@
  * UI测试脚本管理Hook
  */
 import { useReducer, useCallback, useEffect } from 'react';
-import { notification } from 'antd';
 import { uiTestsAPI, projectsAPI } from '../../../api';
 import { handleApiError } from '../../../utils/errorHandler';
 

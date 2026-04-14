@@ -13,15 +13,19 @@ import './index.css';
 const ProjectList = lazy(() => import('./components/ProjectList'));
 const ProjectDetail = lazy(() => import('./components/ProjectDetail'));
 const TestCaseList = lazy(() => import('./components/TestCaseList'));
-const TestExecutionList = lazy(() => import('./components/TestExecutionList'));
 const TestReportList = lazy(() => import('./components/TestReportList'));
 const TestScriptList = lazy(() => import('./components/TestScriptList'));
 const UiTestManager = lazy(() => import('./components/UiTestManager'));
 const ApiRequestTester = lazy(() => import('./components/ApiRequestTester'));
-const RequestCollectionManager = lazy(() => import('./components/RequestCollectionManager'));
+const RequestCollectionManager = lazy(() => import('./components/collection/RequestCollectionManager'));
 const FeatureTestCaseManager = lazy(() => import('./components/FeatureTestCaseManager'));
-const YamlConfigUploaderSimple = lazy(() => import('./components/YamlConfigUploaderSimple'));
+// TODO: 移除 YAML 上传功能（依赖请求集合）
+// const YamlConfigUploaderSimple = lazy(() => import('./components/YamlConfigUploaderSimple'));
 const AiTestCaseAnalysis = lazy(() => import('./components/AiTestCaseAnalysis'));
+const TestFlowList = lazy(() => import('./components/TestFlowList'));
+const TestFlowBuilder = lazy(() => import('./components/TestFlowBuilder'));
+const TestFlowMonitor = lazy(() => import('./components/TestFlowMonitor'));
+const KnowledgeBaseManager = lazy(() => import('./components/KnowledgeBaseManager'));
 
 // 懒加载包装组件，添加Suspense和Loading
 const LazyRoute = ({ children }) => (
@@ -32,12 +36,11 @@ const LazyRoute = ({ children }) => (
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
-  <React.StrictMode>
-    <AuthProvider>
-      <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/" element={<App />}>
+  <AuthProvider>
+    <Router>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<App />}>
             <Route index element={
               <ProtectedRoute>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: '400px' }}>
@@ -78,15 +81,7 @@ root.render(
                   <LazyRoute><TestCaseList /></LazyRoute>
                 </ProtectedRoute>
               } 
-            />
-            <Route 
-              path="executions" 
-              element={
-                <ProtectedRoute>
-                  <LazyRoute><TestExecutionList /></LazyRoute>
-                </ProtectedRoute>
-              } 
-            />
+              /> 
             <Route 
               path="reports" 
               element={
@@ -128,14 +123,6 @@ root.render(
               } 
             />
             <Route 
-              path="request-collections/yaml-upload" 
-              element={
-                <ProtectedRoute>
-                  <LazyRoute><YamlConfigUploaderSimple /></LazyRoute>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
               path="feature-tests" 
               element={
                 <ProtectedRoute>
@@ -143,18 +130,49 @@ root.render(
                 </ProtectedRoute>
               } 
             />
-            <Route 
-              path="ai-test-analysis" 
+            <Route
+              path="ai-test-analysis"
               element={
                 <ProtectedRoute>
                   <LazyRoute><AiTestCaseAnalysis /></LazyRoute>
                 </ProtectedRoute>
-              } 
+              }
+            />
+            <Route
+              path="test-flows"
+              element={
+                <ProtectedRoute>
+                  <LazyRoute><TestFlowList /></LazyRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="test-flows/builder"
+              element={
+                <ProtectedRoute>
+                  <LazyRoute><TestFlowBuilder /></LazyRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="test-flows/monitor/:id"
+              element={
+                <ProtectedRoute>
+                  <LazyRoute><TestFlowMonitor /></LazyRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="knowledge-base"
+              element={
+                <ProtectedRoute>
+                  <LazyRoute><KnowledgeBaseManager /></LazyRoute>
+                </ProtectedRoute>
+              }
             />
           </Route>
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
-      </Router>
+</Router>
     </AuthProvider>
-  </React.StrictMode>
-);
+  );

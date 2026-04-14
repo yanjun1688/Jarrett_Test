@@ -7,13 +7,11 @@ import apiClient from './axios';
 /**
  * 处理PRD文档并生成测试用例
  * @param {File} file - 上传的PRD文档文件（PDF/Word/TXT）
- * @param {string} apiKey - OpenAI API Key
  * @returns {Promise} 返回生成的测试用例数据
  */
-export const processPRD = async (file, apiKey) => {
+export const processPRD = async (file) => {
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('api_key', apiKey);
 
   const response = await apiClient.post('/ai-agent/process-prd/', formData, {
     headers: {

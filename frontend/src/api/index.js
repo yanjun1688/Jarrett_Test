@@ -2,7 +2,10 @@
 export { projectsAPI } from './projects';
 export { testExecutionsAPI } from './testExecutions';
 export { apiRequestsAPI } from './apiRequests';
-export { requestCollectionsAPI } from './requestCollections';
+
 export { testCasesAPI } from './testCases';
 export { featureTestsAPI } from './featureTests';
 export { uiTestsAPI } from './uiTests';
+export { agentAPI } from './agent';
+export { chatbotAPI } from './chatbot';
+export { testFlowAPI } from './testFlowAPI';

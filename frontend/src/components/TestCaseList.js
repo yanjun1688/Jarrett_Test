@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import apiClient from '../api/axios';
-import { Table, Input, Button, Space, Typography, Tag, notification, Modal, Form, Select } from 'antd';
+import { Table, Input, Button, Space, Typography, Tag, notification, Modal, Form, Select, Tabs } from 'antd';
+import { handleApiError } from '../utils/errorHandler';
+import FeatureTestCaseManager from './FeatureTestCaseManager';
 
 const { Title } = Typography;
+const { TabPane } = Tabs;
 
 function TestCaseList({ projectId }) { // Accept projectId as a prop
   const [testCases, setTestCases] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('api');
   // Local filter state, only used when projectId is not provided
   const [filter, setFilter] = useState({ project: '', module: '' });
   const [modalOpen, setModalOpen] = useState(false);
@@ -20,78 +24,83 @@ function TestCaseList({ projectId }) { // Accept projectId as a prop
       // 使用传入的searchFilter，如果没有则使用空filter（用于初始加载，显示所有数据）
       const currentFilter = searchFilter !== null ? searchFilter : { project: '', module: '' };
       
-      // 构建测试用例查询参数
-      let testcaseUrl = '/testcases/';
-      const testcaseParams = new URLSearchParams();
-      
-      if (projectId) {
-        testcaseParams.append('project', projectId);
+      // 根据 activeTab 决定获取哪种数据
+      if (activeTab === 'api') {
+        // 构建API请求查询参数
+        let apiRequestUrl = '/api-requests/';
+        const apiRequestParams = new URLSearchParams();
+        
+        if (projectId) {
+          apiRequestParams.append('project', projectId);
+        } else {
+          if (currentFilter.project) apiRequestParams.append('project__name__icontains', currentFilter.project);
+          if (currentFilter.module) apiRequestParams.append('module__name__icontains', currentFilter.module);
+        }
+        
+        const apiRequestQueryString = apiRequestParams.toString();
+        if (apiRequestQueryString) {
+          apiRequestUrl += `?${apiRequestQueryString}`;
+        }
+        
+        const apiRequestsRes = await apiClient.get(apiRequestUrl);
+        
+        const allTestCases = (apiRequestsRes.data.results || []).map(item => ({
+          ...item,
+          test_type: 'api',
+          project_name: item.project_name || item.project?.name,
+          module_name: item.module_name || item.module?.name,
+        }));
+        
+        // 按创建时间倒序
+        allTestCases.sort((a, b) => {
+          return new Date(b.created_at) - new Date(a.created_at);
+        });
+        
+        setTestCases(allTestCases);
       } else {
-        if (currentFilter.project) testcaseParams.append('project__name__icontains', currentFilter.project);
-        if (currentFilter.module) testcaseParams.append('module__name__icontains', currentFilter.module);
+        // 功能测试 - 获取 testcases
+        let testcaseUrl = '/testcases/';
+        const testcaseParams = new URLSearchParams();
+        
+        if (projectId) {
+          testcaseParams.append('project', projectId);
+        } else {
+          if (currentFilter.project) testcaseParams.append('project__name__icontains', currentFilter.project);
+          if (currentFilter.module) testcaseParams.append('module__name__icontains', currentFilter.module);
+        }
+        
+        const testcaseQueryString = testcaseParams.toString();
+        if (testcaseQueryString) {
+          testcaseUrl += `?${testcaseQueryString}`;
+        }
+        
+        const testcasesRes = await apiClient.get(testcaseUrl);
+        
+        const allTestCases = (testcasesRes.data.results || []).map(item => ({
+          ...item,
+          test_type: 'feature',
+          project_name: item.project_name || item.project?.name,
+          module_name: item.module_name || item.module?.name,
+        }));
+        
+        allTestCases.sort((a, b) => {
+          return new Date(b.created_at) - new Date(a.created_at);
+        });
+        
+        setTestCases(allTestCases);
       }
-      
-      const testcaseQueryString = testcaseParams.toString();
-      if (testcaseQueryString) {
-        testcaseUrl += `?${testcaseQueryString}`;
-      }
-
-      // 构建API请求查询参数
-      let apiRequestUrl = '/api-requests/';
-      const apiRequestParams = new URLSearchParams();
-      
-      if (projectId) {
-        apiRequestParams.append('project', projectId);
-      }
-      
-      const apiRequestQueryString = apiRequestParams.toString();
-      if (apiRequestQueryString) {
-        apiRequestUrl += `?${apiRequestQueryString}`;
-      }
-
-      // 同时获取测试用例和API请求数据
-      const [testcasesRes, apiRequestsRes] = await Promise.all([
-        apiClient.get(testcaseUrl),
-        apiClient.get(apiRequestUrl)
-      ]);
-
-      // 获取数据
-      const testcases = testcasesRes.data.results || [];
-      const apiRequests = apiRequestsRes.data.results || [];
-
-      // 将API请求转换为与测试用例类似的格式，并添加类型标识
-      const formattedApiRequests = apiRequests.map(apiReq => ({
-        ...apiReq,
-        title: apiReq.name, // API请求使用name作为title
-        module_name: 'API测试', // API请求没有模块，显示为API测试
-        priority: null, // API请求没有优先级
-        test_type: 'api', // 标识为API测试用例
-      }));
-
-      // 将测试用例添加类型标识
-      const formattedTestCases = testcases.map(tc => ({
-        ...tc,
-        test_type: 'testcase', // 标识为传统测试用例
-      }));
-
-      // 合并数据并按创建时间倒序排列
-      const allTestCases = [...formattedTestCases, ...formattedApiRequests].sort((a, b) => {
-        return new Date(b.created_at) - new Date(a.created_at);
-      });
-
-      setTestCases(allTestCases);
     } catch (error) {
       notification.error({ message: '获取测试用例失败', description: error.message });
     } finally {
       setLoading(false);
     }
-  }, [projectId]); // 只依赖projectId，不依赖filter
+  }, [projectId, activeTab]);
 
-  // 只在初始加载时调用，或者projectId改变时调用
+  // 只在初始加载时调用，或者projectId/activeTab改变时调用
   useEffect(() => {
     fetchTestCases();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]); // 只在projectId改变时重新加载，不依赖fetchTestCases
+  }, [projectId, activeTab]); // 只在projectId改变时重新加载，不依赖fetchTestCases
 
   // 获取项目列表
   useEffect(() => {
@@ -108,11 +117,6 @@ function TestCaseList({ projectId }) { // Accept projectId as a prop
     };
     fetchProjects();
   }, []);
-
-  const handleFilterChange = (e) => {
-    // 只更新filter状态，不触发请求
-    setFilter({ ...filter, [e.target.name]: e.target.value });
-  };
 
   const handleSearch = () => {
     // 点击搜索按钮时才发起请求，使用当前的filter值
@@ -184,38 +188,44 @@ function TestCaseList({ projectId }) { // Accept projectId as a prop
     <Space direction="vertical" style={{ width: '100%' }} size="large">
       {!projectId && <Title level={2}>测试用例列表</Title>} 
       
-      {!projectId && (
-        <Space>
-          <Input
-            placeholder="按项目名称搜索"
-            name="project"
-            value={filter.project}
-            onChange={handleFilterChange}
-            style={{ width: 200 }}
-          />
-          <Input
-            placeholder="按模块名称搜索"
-            name="module"
-            value={filter.module}
-            onChange={handleFilterChange}
-            style={{ width: 200 }}
-          />
-          <Button onClick={handleSearch} type="primary">
-            搜索
-          </Button>
-          <Button onClick={openCreateApiTestModal} type="dashed" style={{ marginLeft: 16 }}>
-            添加API测试用例
-          </Button>
-        </Space>
-      )}
+      <Tabs activeKey={activeTab} onChange={setActiveTab}>
+        <TabPane tab="API测试用例" key="api">
+          {!projectId && (
+            <Space style={{ marginBottom: 16 }}>
+              <Select
+                placeholder="选择项目搜索"
+                style={{ width: 200 }}
+                allowClear
+                value={filter.project || undefined}
+                onChange={(value) => setFilter(prev => ({ ...prev, project: value || '' }))}
+                loading={projectsLoading}
+              >
+                {projects.map(p => (
+                  <Select.Option key={p.id} value={p.id}>{p.name}</Select.Option>
+                ))}
+              </Select>
+              <Button onClick={handleSearch} type="primary">
+                搜索
+              </Button>
+              <Button onClick={openCreateApiTestModal} style={{ marginLeft: 16 }}>
+                新增用例
+              </Button>
+            </Space>
+          )}
 
-      <Table
-        columns={columns}
-        dataSource={testCases}
-        loading={loading}
-        rowKey="id"
-        pagination={{ pageSize: 10, showSizeChanger: true }}
-      />
+          <Table
+            columns={columns}
+            dataSource={testCases}
+            loading={loading}
+            rowKey="id"
+            pagination={{ pageSize: 10, showSizeChanger: true }}
+          />
+        </TabPane>
+        
+        <TabPane tab="功能测试用例" key="feature">
+          <FeatureTestCaseManager />
+        </TabPane>
+      </Tabs>
 
       <Modal
         title="添加API测试用例"

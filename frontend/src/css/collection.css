@@ -1,0 +1,73 @@
+.request-collection-container {
+  padding: 24px;
+}
+
+.request-collection-header {
+  margin-bottom: 16px;
+}
+
+.request-collection-execution-card {
+  margin-top: 24px;
+}
+
+.request-collection-status-text {
+  color: #52c41a;
+}
+
+.request-collection-status-text-running {
+  color: #1890ff;
+}
+
+.request-collection-status-text-error {
+  color: #ff4d4f;
+}
+
+.request-collection-output-card {
+  background: #f0f2f5;
+  max-height: 400px;
+  overflow: auto;
+}
+
+.request-collection-mode-chain {
+  color: #722ed1;
+}
+
+.request-collection-mode-sequential {
+  color: #52c41a;
+}
+
+.request-collection-mode-concurrent {
+  color: #1890ff;
+}
+
+.request-collection-execute-icon {
+  color: #52c41a;
+}
+
+.drop-over-downward {
+  border-bottom: 2px dashed #1890ff;
+}
+
+.drop-over-upward {
+  border-top: 2px dashed #1890ff;
+}
+
+.request-collection-step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  background-color: #52c41a;
+  color: white;
+  border-radius: 50%;
+  font-size: 12px;
+}
+
+.request-collection-request-tag {
+  margin-right: 8px;
+}
+
+.request-collection-collapse-header {
+  font-weight: 500;
+}

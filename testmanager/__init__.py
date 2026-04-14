@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import sys
 import asyncio
+from typing import Any
 
 if sys.platform == 'win32':
     # 显式设置 ProactorEventLoopPolicy，确保 Playwright 在所有 Windows 进程中可用

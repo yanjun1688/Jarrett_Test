@@ -1,11 +1,15 @@
 """
 Celery配置文件
 """
+from __future__ import annotations
+
 import os
 import asyncio
 import sys
+from typing import Any
 
 from celery import Celery
+from celery.signals import worker_init
 
 # 【关键修复】在Windows上强制设置ProactorEventLoopPolicy
 # 这必须在导入任何使用asyncio的模块之前设置
@@ -27,7 +31,7 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 from celery.signals import worker_init
 
 @worker_init.connect
-def on_worker_init_handler(sender=None, **kwargs):
+def on_worker_init_handler(sender: Any | None = None, **kwargs: Any) -> None:
     """Worker进程初始化时的信号处理"""
     import asyncio
     import sys
@@ -43,6 +47,6 @@ def on_worker_init_handler(sender=None, **kwargs):
 app.autodiscover_tasks(lambda: __import__('django.conf', fromlist=['settings']).settings.INSTALLED_APPS)
 
 @app.task(bind=True, ignore_result=True)
-def debug_task(self):
+def debug_task(self: Any) -> None:
     print(f'Request: {self.request!r}')
 

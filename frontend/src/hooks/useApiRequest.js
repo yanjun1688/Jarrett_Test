@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { message } from 'antd';
+import logger from '../utils/logger';
 
 const useApiRequest = (apiFunction) => {
   const [data, setData] = useState(null);

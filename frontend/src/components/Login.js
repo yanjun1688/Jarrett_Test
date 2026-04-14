@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Card, message, Spin } from 'antd';
+import { Form, Input, Button, Card, message } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import logger from '../utils/logger';
 import '../css/Login.css';
 
 const Login = () => {

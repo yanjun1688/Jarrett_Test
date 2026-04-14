@@ -1,7 +1,7 @@
 /**
  * 脚本相关工具函数
  */
-import { ACTION_TYPES, LOCATOR_TYPES, getColorHex } from '../../../constants';
+import { ACTION_TYPES, getColorHex } from '../../../constants';
 
 /**
  * 把表单里的步骤数据转成后端需要的actions格式

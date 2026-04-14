@@ -1,21 +1,6 @@
 from django.contrib import admin
-from testmanager_app.models import Project, Module, TestCase, TestExecution, TestReport, Role, UserRole, AuthToken
-
-
-@admin.register(Role)
-class RoleAdmin(admin.ModelAdmin):
-    list_display = ['name', 'permission', 'description']
-    list_filter = ['permission']
-    search_fields = ['name', 'description']
-    ordering = ['name']
-
-
-@admin.register(UserRole)
-class UserRoleAdmin(admin.ModelAdmin):
-    list_display = ['user', 'role', 'created_at']
-    list_filter = ['role', 'created_at']
-    search_fields = ['user__username', 'role__name']
-    ordering = ['-created_at']
+from core.models import Project, Module, TestCase, TestExecution
+from testmanager_app.models import TestReport, AuthToken, ApiRequest, RequestCollection, FeatureTestCase
 
 
 @admin.register(Project)
@@ -44,9 +29,9 @@ class TestCaseAdmin(admin.ModelAdmin):
 
 @admin.register(TestExecution)
 class TestExecutionAdmin(admin.ModelAdmin):
-    list_display = ['testcase', 'executor', 'status', 'executed_at']
-    list_filter = ['status', 'executor', 'executed_at']
-    search_fields = ['testcase__title', 'actual_result', 'comments']
+    list_display = ['test_case', 'executed_by', 'status', 'executed_at']
+    list_filter = ['status', 'executed_by', 'executed_at']
+    search_fields = ['test_case__title', 'actual_result', 'notes']
     ordering = ['-executed_at']
 
 
@@ -76,3 +61,27 @@ class AuthTokenAdmin(admin.ModelAdmin):
         """显示是否过期"""
         return '是' if obj.is_expired() else '否'
     is_expired_display.short_description = '是否过期'
+
+
+@admin.register(ApiRequest)
+class ApiRequestAdmin(admin.ModelAdmin):
+    list_display = ['name', 'project', 'method', 'url', 'created_at']
+    list_filter = ['project', 'method', 'created_at']
+    search_fields = ['name', 'url', 'description']
+    ordering = ['project', '-created_at']
+
+
+@admin.register(RequestCollection)
+class RequestCollectionAdmin(admin.ModelAdmin):
+    list_display = ['name', 'project', 'execution_mode', 'created_at']
+    list_filter = ['project', 'execution_mode', 'created_at']
+    search_fields = ['name', 'description']
+    ordering = ['-created_at']
+
+
+@admin.register(FeatureTestCase)
+class FeatureTestCaseAdmin(admin.ModelAdmin):
+    list_display = ['title', 'project', 'is_passed', 'version', 'created_at']
+    list_filter = ['project', 'is_passed', 'created_at']
+    search_fields = ['title', 'steps', 'expected_result']
+    ordering = ['-created_at']

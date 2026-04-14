@@ -29,7 +29,7 @@ export const handleApiError = (error, customMessage, options = {}) => {
                    data.detail || 
                    data.message || 
                    (typeof data === 'string' ? data : defaultMessage);
-  } else if (error?.message) {
+  } else if (error?.message && !customMessage) {
     errorMessage = error.message;
   }
 
@@ -62,7 +62,7 @@ export const handleApiError = (error, customMessage, options = {}) => {
  * @param {string} customMessage - 自定义错误消息
  */
 export const handleError = (error, customMessage) => {
-  const errorMessage = error?.message || customMessage || '发生了未知错误';
+  const errorMessage = customMessage || error?.message || '发生了未知错误';
   
   logger.error('Error:', error);
   

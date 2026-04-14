@@ -4,7 +4,7 @@
 """
 
 from django.db.models import Count, Q
-from testmanager_app.models import Project, TestCase, TestExecution
+from core.models import Project, TestCase, TestExecution
 
 
 def get_project_statistics(project_id):
@@ -44,7 +44,7 @@ def get_project_statistics(project_id):
     # 按测试类型细分统计
     testcase_executions = TestExecution.objects.filter(
         test_type='testcase',
-        testcase__project=project
+        test_case__project=project
     )
     testcase_stats = testcase_executions.aggregate(
         total=Count('id'),

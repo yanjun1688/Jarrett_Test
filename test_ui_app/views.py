@@ -1,13 +1,18 @@
 """
 UI测试应用的视图
 """
+from __future__ import annotations
 import sys
 import asyncio
+from typing import Any, Dict, List, Optional, Union, cast
+from rest_framework.request import Request
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 from django.db import transaction
+from django.db.models import QuerySet
 from django.utils import timezone
 from .models import (
     UITestScript,
@@ -37,12 +42,12 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = UITestScript.objects.all()
     
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[UITestScriptSerializer | UITestScriptCreateSerializer]:
         if self.action == 'create':
             return UITestScriptCreateSerializer
         return UITestScriptSerializer
     
-    def create(self, request, *args, **kwargs):
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """
         创建测试脚本
         
@@ -102,7 +107,7 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[UITestScript]:
         queryset = super().get_queryset()
         # 可以根据项目过滤
         project_id = self.request.query_params.get('project_id')
@@ -110,7 +115,7 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(project_id=project_id)
         return queryset.select_related('project', 'created_by')
     
-    def update(self, request, *args, **kwargs):
+    def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """
         更新测试脚本
         
@@ -124,18 +129,26 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
         if 'actions' not in request.data:
             # 处理QueryDict和dict两种情况
             if hasattr(request.data, '_mutable'):
-                request.data._mutable = True  # 允许修改QueryDict
+                request.data._mutable = True
                 request.data['actions'] = script.actions or []
                 request.data._mutable = False
             else:
-                # 如果是普通dict，直接添加
                 request.data['actions'] = script.actions or []
+        
+        # 如果请求数据中没有project字段，保留原有的project
+        if 'project' not in request.data:
+            if hasattr(request.data, '_mutable'):
+                request.data._mutable = True
+                request.data['project'] = script.project_id
+                request.data._mutable = False
+            else:
+                request.data['project'] = script.project_id
         
         # 调用父类的update方法
         return super().update(request, *args, **kwargs)
     
     @action(detail=True, methods=['post'])
-    def execute(self, request, pk=None):
+    def execute(self, request: Request, pk: int | None = None) -> Response:
         """
         执行测试脚本（异步执行）
         
@@ -145,10 +158,15 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
         3. 前端可以用 execution_id 轮询查询执行状态
         """
         from django.utils import timezone
+        from core.services.chatbot_execution_logger import get_chatbot_logger
         
         script = self.get_object()
         
         logger.info(f"[Execute] 开始执行脚本 ID={script.id}, 名称={script.name}")
+        
+        conversation_id = request.data.get('conversation_id', 'manual-ui-test')
+        logger_exec = get_chatbot_logger(conversation_id)
+        logger_exec.start('ui_test', f'执行UI测试: {script.name}', f'正在执行 UI 测试脚本: {script.name}')
         
         try:
             # 检查actions是否存在（快速检查，避免提交无效任务）
@@ -160,11 +178,11 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
                 )
             
             # 1. 先创建执行记录（status=pending），让前端可以立即获取 execution_id
+            # started_at 不在此处设置，而是在实际执行开始时设置（在 Celery 任务中）
             execution = UITestExecution.objects.create(
                 script=script,
                 executed_by=request.user,
-                status='pending',
-                started_at=timezone.now()
+                status='pending'
             )
             logger.info(f"[Execute] 执行记录创建成功 ID={execution.id}")
             
@@ -177,6 +195,11 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
             )
             
             if result.get('success'):
+                logger_exec.finish({
+                    'status': 'pending',
+                    'script_id': script.id,
+                    'execution_id': execution.id
+                })
                 # 返回执行记录ID，前端可以轮询查询状态
                 return Response({
                     'success': True,
@@ -185,7 +208,8 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
                     'message': '任务已提交，正在执行中',
                     'script_id': script.id,
                     'script_name': script.name,
-                    'status': 'pending'
+                    'status': 'pending',
+                    'execution_log_ids': logger_exec.get_log_ids()
                 }, status=status.HTTP_202_ACCEPTED)
             else:
                 # 任务提交失败，更新执行记录状态
@@ -195,23 +219,34 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
                 execution.completed_at = timezone.now()
                 execution.save()
                 
+                logger_exec.finish({
+                    'status': 'error',
+                    'error': error_msg,
+                    'script_id': script.id
+                })
+                
                 logger.error(f"[Execute] 提交任务失败 ID={script.id}, 错误={error_msg}")
                 return Response({
                     'success': False,
                     'execution_id': execution.id,
                     'error': error_msg,
-                    'status': 'failed'
+                    'status': 'failed',
+                    'execution_log_ids': logger_exec.get_log_ids()
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
                 
         except Exception as e:
+            logger_exec.finish({
+                'status': 'error',
+                'error': str(e)
+            })
             logger.error(f"[Execute] 执行脚本异常 ID={script.id}, 错误={str(e)}", exc_info=True)
             return Response(
-                {'error': str(e)},
+                {'error': str(e), 'execution_log_ids': logger_exec.get_log_ids()},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
     @action(detail=False, methods=['get'])
-    def get_execution_status(self, request):
+    def get_execution_status(self, request: Request) -> Response:
         """查询执行状态"""
         execution_id = request.query_params.get('execution_id')
         if not execution_id:
@@ -237,7 +272,7 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
             )
     
     @action(detail=False, methods=['post'])
-    def record(self, request):
+    def record(self, request: Request) -> Response:
         """
         保存录制的脚本
         
@@ -256,9 +291,6 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
                     user_id=request.user.id,
                     description=serializer.validated_data.get('description', ''),
                 )
-                
-                # 创建后校验actions
-                from .validators.script_validator import ScriptValidator, ValidationError
                 
                 validator = ScriptValidator()
                 actions = script.actions or []
@@ -297,10 +329,11 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
                     {'error': str(e)},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
+        else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['post'])
-    def sync_record(self, request):
+    def sync_record(self, request: Request) -> Response:
         """
         开始同步录制，阻塞直到浏览器关闭并直接返回结果。
 
@@ -334,7 +367,7 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
             )
     
     @action(detail=False, methods=['post'])
-    def quality_check(self, request):
+    def quality_check(self, request: Request) -> Response:
         """
         录制完成后的脚本质量检查（非实时）。
 
@@ -390,7 +423,7 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
             )
     
     @action(detail=False, methods=['get'])
-    def get_recording_steps(self, request):
+    def get_recording_steps(self, request: Request) -> Response:
         """获取录制步骤（通过session_id）"""
         session_id = request.query_params.get('session_id')
         if not session_id:
@@ -413,7 +446,7 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
             )
     
     @action(detail=False, methods=['get'])
-    def preview_page(self, request):
+    def preview_page(self, request: Request) -> Response:
         """
         预览页面并返回截图(用于元素选择)
         
@@ -460,7 +493,7 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
             )
     
     @action(detail=False, methods=['post'])
-    def select_element(self, request):
+    def select_element(self, request: Request) -> Response:
         """
         根据坐标或选择器获取元素定位信息
         
@@ -533,7 +566,7 @@ class UITestExecutionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = UITestExecution.objects.all()
     serializer_class = UITestExecutionSerializer
     
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[UITestExecution]:
         queryset = super().get_queryset()
         script_id = self.request.query_params.get('script_id')
         if script_id:
@@ -541,7 +574,7 @@ class UITestExecutionViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset.select_related('script', 'executed_by').order_by('-created_at')
     
     @action(detail=True, methods=['get'])
-    def logs(self, request, pk=None):
+    def logs(self, request: Request, pk: int | None = None) -> Response:
         """
         获取UI测试执行日志详情（支持缓存）
         
@@ -590,3 +623,56 @@ class UITestExecutionViewSet(viewsets.ReadOnlyModelViewSet):
         # Removed verbose debug logging
         
         return Response(data)
+
+
+class ExtractElementsView(APIView):
+    """
+    提取页面元素API
+
+    使用Playwright渲染页面并提取交互元素
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """
+        提取页面元素
+
+        请求参数:
+        - url: 页面URL (必填)
+        - browser_type: 浏览器类型 (可选, 默认chromium)
+        - wait_for_network: 是否等待网络空闲 (可选, 默认True)
+        - wait_selector: 等待特定选择器 (可选)
+        - wait_timeout: 等待超时毫秒 (可选, 默认5000)
+        """
+        url = request.data.get('url')
+        if not url:
+            return Response(
+                {'error': 'url参数缺失'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        browser_type = request.data.get('browser_type', 'chromium')
+        wait_for_network = request.data.get('wait_for_network', True)
+        wait_selector = request.data.get('wait_selector')
+        wait_timeout = request.data.get('wait_timeout', 5000)
+
+        try:
+            from .services import ElementExtractor
+            extractor = ElementExtractor()
+            result = extractor.extract_page_elements(
+                url=url,
+                wait_for_network=wait_for_network,
+                wait_selector=wait_selector,
+                wait_timeout=wait_timeout,
+                headless=True,
+                browser_type=browser_type
+            )
+
+            return Response(result, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"提取页面元素失败: {str(e)}")
+            return Response(
+                {'error': f'提取页面元素失败: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

@@ -28,7 +28,6 @@ const initialState = {
   projects: [],
   loading: true,
   testingIds: new Set(), // 改为存储正在测试的请求ID
-  testResult: null,
 };
 
 function reducer(state, action) {
@@ -36,28 +35,36 @@ function reducer(state, action) {
     case 'FETCH_START':
       return { ...state, loading: true };
     case 'FETCH_SUCCESS':
-      return { ...state, loading: false, requests: action.payload.requests, projects: action.payload.projects };
+      return { 
+        ...state, 
+        loading: false, 
+        requests: action.payload.requests, 
+        projects: action.payload.projects 
+      };
     case 'FETCH_ERROR':
       return { ...state, loading: false };
     case 'TEST_START':
       return {
         ...state,
         testingIds: new Set([...state.testingIds, action.payload]), // 添加请求ID
-        testResult: null
+        execModalData: {
+          status: 'running',
+          totalCount: 1,
+          passedCount: 0,
+          failedCount: 0,
+        }
       };
     case 'TEST_SUCCESS':
       return {
         ...state,
         testingIds: new Set([...state.testingIds].filter(id => id !== action.payload.requestId)), // 移除请求ID
-        testResult: action.payload.result
+        execModalData: action.payload.result
       };
     case 'TEST_ERROR':
       return {
         ...state,
         testingIds: new Set([...state.testingIds].filter(id => id !== action.payload)) // 移除请求ID
       };
-    case 'RESET_TEST_RESULT':
-      return { ...state, testResult: null };
     default:
       throw new Error();
   }
@@ -65,7 +72,7 @@ function reducer(state, action) {
 
 function ApiRequestTester() {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const { requests, projects, loading, testingIds, testResult } = state;
+  const { requests, projects, loading, testingIds, execModalData } = state;
   const [form] = Form.useForm();
   const [assertionForm] = Form.useForm();
   const [selectedRequest, setSelectedRequest] = useState(null);
@@ -79,8 +86,6 @@ function ApiRequestTester() {
   
   // 执行结果弹窗状态
   const [execModalVisible, setExecModalVisible] = useState(false);
-  const [execModalData, setExecModalData] = useState(null);
-  const [execPollingRef] = useState({ current: null });
   const execRequestNameRef = useRef('');
 
   // 同时获取请求列表和项目列表
@@ -198,104 +203,62 @@ function ApiRequestTester() {
     dispatch({ type: 'TEST_START', payload: requestId });
     
     // 打开弹窗，显示执行中状态
-    setExecModalData({
-      status: 'running',
-      totalCount: 1,
-      passedCount: 0,
-      failedCount: 0,
-    });
     setExecModalVisible(true);
     
     try {
+      // 使用后端优化后的同步执行API，直接返回结果
       const response = await apiClient.post(`/api-requests/${requestId}/execute/`);
       const data = response.data;
       
-      // 后端返回 execution_id，需要轮询获取结果
-      if (data.execution_id) {
-        // 开始轮询
-        const pollInterval = setInterval(async () => {
-          try {
-            const statusRes = await apiClient.get(`/executions/${data.execution_id}/logs/`);
-            const execData = statusRes.data;
-            
-            // 更新弹窗数据
-            const passedCount = execData.passed_count || 0;
-            const totalAssertions = execData.total_assertions || 0;
-            const failedCount = totalAssertions - passedCount;
-            
-            setExecModalData({
-              status: execData.status === 'passed' ? 'passed' : execData.status === 'failed' ? 'failed' : 'running',
-              totalCount: 1,
-              passedCount: passedCount,
-              failedCount: failedCount,
-              executionDuration: execData.response_time,
-              responseStatus: execData.response_status,
-              responseTime: execData.response_time,
-              responseBody: execData.response_body,
-              assertions: execData.assertions || [],
-              logs: execData.api_logs,
-              errorMessage: execData.error_message,
-            });
-            
-            // 如果执行完成，停止轮询
-            if (execData.status === 'passed' || execData.status === 'failed') {
-              clearInterval(pollInterval);
-              dispatch({ type: 'TEST_SUCCESS', payload: { requestId, result: execData } });
-            }
-          } catch (pollError) {
-            console.error('轮询执行状态失败:', pollError);
-            clearInterval(pollInterval);
-          }
-        }, 1500);
-        
-        execPollingRef.current = pollInterval;
-      } else {
-        // 直接返回结果（兼容旧逻辑）
-        const passedCount = data.passed_count || 0;
-        const totalAssertions = data.total_assertions || 0;
-        const failedCount = totalAssertions - passedCount;
-        
-        setExecModalData({
-          status: data.error_message ? 'failed' : 'passed',
-          totalCount: 1,
-          passedCount: passedCount,
-          failedCount: failedCount,
-          executionDuration: data.response_time,
-          responseStatus: data.response_status,
-          responseTime: data.response_time,
-          responseBody: data.response_body,
-          assertions: data.assertions || [],
-          logs: data.api_logs,
-          errorMessage: data.error_message,
-        });
-        
-        dispatch({ type: 'TEST_SUCCESS', payload: { requestId, result: data } });
-      }
-      
-      notification.info({ message: '测试已提交' });
-    } catch (error) {
-      console.error(`[Frontend] 请求失败:`, error);
-      setExecModalData({
-        status: 'failed',
-        totalCount: 1,
-        passedCount: 0,
-        failedCount: 1,
-        errorMessage: error.message,
+      // 执行同步执行的优化后，所有结果直接在响应中获得
+      // 执行状态、响应数据、断言结果等都在一个响应包中
+      dispatch({ 
+        type: 'TEST_SUCCESS', 
+        payload: { 
+          requestId, 
+          result: {
+            status: data.error_message ? 'failed' : 'passed', // 执行状态
+            totalCount: 1,
+            passedCount: data.passed_count || 0,
+            failedCount: Math.max((data.total_assertions || 0) - (data.passed_count || 0), 0),
+            responseStatus: data.response_status,
+            responseTime: data.response_time,
+            executionDuration: data.response_time,
+            responseBody: data.response_body,
+            assertions: data.assertions || [],
+            logs: data.api_logs || `======= ${data.status || '开始执行'} =======\n${data.api_logs || data.response_body || JSON.stringify(data)}`,
+            errorMessage: data.error_message,
+            startTime: new Date().toISOString(),
+            endTime: new Date().toISOString()
+          } 
+        } 
       });
+      
+      notification[data.error_message ? 'error' : 'success']({ 
+        message: data.error_message ? '测试失败' : '测试成功',
+        description: data.error_message || `${data.passed_count || 0}/${data.total_assertions || 0}个断言通过`
+      });
+    } catch (error) {
+      console.error('[Frontend] 请求失败:', error);
+      const errorData = {
+        status: 'failed', 
+        totalCount: 1,
+        passedCount: 0, 
+        failedCount: 1,
+        logs: `[${new Date().toISOString()}] 执行测试失败: ${error.message || error}`,
+        errorMessage: error.message || error.toString(),
+        startTime: new Date().toISOString(),
+        endTime: new Date().toISOString()
+      };
+      dispatch({ type: 'TEST_SUCCESS', payload: { requestId, result: errorData } });
       notification.error({ message: '测试API请求失败', description: error.message });
-      dispatch({ type: 'TEST_ERROR', payload: requestId });
     }
   };
-  
+
   // 关闭执行结果弹窗
   const closeExecModal = useCallback(() => {
-    if (execPollingRef.current) {
-      clearInterval(execPollingRef.current);
-      execPollingRef.current = null;
-    }
     setExecModalVisible(false);
-    setExecModalData(null);
-  }, [execPollingRef]);
+  }, []);
 
   const handleManageAssertions = async (request) => {
     setSelectedRequest(request);
@@ -424,10 +387,16 @@ function ApiRequestTester() {
     setEditingAssertion(null);
   };
 
+  // 优化的表格列定义
   const columns = [
     { title: '名称', dataIndex: 'name', key: 'name' },
     { title: 'URL', dataIndex: 'url', key: 'url', ellipsis: true },
-    { title: '方法', dataIndex: 'method', key: 'method', render: method => <Tag color="blue">{method}</Tag> },
+    { 
+      title: '方法', 
+      dataIndex: 'method', 
+      key: 'method', 
+      render: method => <Tag color={method === 'GET' ? 'blue' : method === 'POST' ? 'green' : 'volcano'}>{method}</Tag> 
+    },
     {
       title: '所属项目',
       dataIndex: 'project',
@@ -440,7 +409,7 @@ function ApiRequestTester() {
     {
       title: '操作',
       key: 'action',
-      width: 280,  // 固定宽度，防止按钮溢出
+      width: 300,  // 增加宽度以容纳所有按钮
       fixed: 'right',  // 固定在右侧
       render: (_, record) => (
         <Space size="small" wrap>
@@ -448,6 +417,8 @@ function ApiRequestTester() {
             size="small"
             onClick={() => handleTestRequest(record.id)}
             loading={testingIds.has(record.id)}
+            type="primary"
+            danger={false}
           >
             测试
           </Button>
@@ -500,7 +471,7 @@ function ApiRequestTester() {
           response_body: '响应体',
           response_header: '响应头',
         };
-        return typeMap[type] || type;
+        return <Tag color="blue">{typeMap[type] || type}</Tag>;
       }
     },
     {
@@ -586,11 +557,11 @@ function ApiRequestTester() {
           dataSource={requests} 
           loading={loading} 
           rowKey="id" 
-          pagination={{ pageSize: 5 }}
-          scroll={{ x: 'max-content' }}  // 添加横向滚动，防止内容溢出
+          pagination={{ pageSize: 5, showSizeChanger: true }}
+          scroll={{ x: 'max-content' }}
         />
 
-        {/* 执行结果弹窗 */}
+        {/* 执行结果弹窗 - 适配后端同步执行优化 */}
         <ExecutionLogModal
           visible={execModalVisible}
           onClose={closeExecModal}
@@ -604,16 +575,18 @@ function ApiRequestTester() {
           responseStatus={execModalData?.responseStatus}
           responseTime={execModalData?.responseTime}
           responseBody={execModalData?.responseBody}
-          assertions={execModalData?.assertions || []}
           logs={execModalData?.logs}
+          assertionResults={execModalData?.assertions || []}
           errorMessage={execModalData?.errorMessage}
+          startTime={execModalData?.startTime}
+          endTime={execModalData?.endTime}
         />
       </Col>
 
       {/* 断言管理模态框 */}
       <Modal
         title={`断言管理 - ${requestDetails?.name || ''}`}
-        width={900}
+        width={800}
         visible={showAssertionModal}
         onCancel={() => {
           setShowAssertionModal(false);
@@ -627,6 +600,7 @@ function ApiRequestTester() {
       >
         <Card title="请求详情" size="small" style={{ marginBottom: 16 }}>
           <Descriptions size="small" column={2}>
+            <Descriptions.Item label="名称">{requestDetails?.name}</Descriptions.Item>
             <Descriptions.Item label="URL">{requestDetails?.url}</Descriptions.Item>
             <Descriptions.Item label="方法">
               <Tag color="blue">{requestDetails?.method}</Tag>
@@ -641,7 +615,7 @@ function ApiRequestTester() {
             onFinish={editingAssertion ? handleUpdateAssertion : handleAddAssertion}
           >
             <Row gutter={16}>
-              <Col span={6}>
+              <Col span={8}>
                 <Form.Item name="assertion_type" label="断言类型" rules={[{ required: true }]}>
                   <Select placeholder="选择断言类型">
                     <Option value="status_code">状态码</Option>
@@ -651,7 +625,7 @@ function ApiRequestTester() {
                   </Select>
                 </Form.Item>
               </Col>
-              <Col span={6}>
+              <Col span={8}>
                 <Form.Item name="comparison" label="比较方式" rules={[{ required: true }]}>
                   <Select placeholder="选择比较方式">
                     <Option value="equals">等于</Option>
@@ -662,7 +636,7 @@ function ApiRequestTester() {
                   </Select>
                 </Form.Item>
               </Col>
-              <Col span={6}>
+              <Col span={8}>
                 <Form.Item name="expected_value" label="期望值" rules={[{ required: true }]}>
                   <Input placeholder="输入期望值（如：200）" />
                 </Form.Item>
@@ -723,7 +697,7 @@ function ApiRequestTester() {
             columns={assertionColumns}
             dataSource={assertions}
             rowKey="id"
-            pagination={{ pageSize: 5 }}
+            pagination={{ pageSize: 5, showSizeChanger: true }}
             locale={{ emptyText: '暂无断言配置' }}
           />
         </Card>

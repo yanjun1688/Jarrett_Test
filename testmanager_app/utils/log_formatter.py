@@ -3,6 +3,12 @@
 提供统一的日志格式和时间戳管理
 """
 
+from __future__ import annotations
+
+import os
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Union
+
 from django.utils import timezone
 
 
@@ -19,17 +25,17 @@ class ExecutionLogger:
         logs = logger.get_logs()
     """
 
-    def __init__(self, start_time=None):
+    def __init__(self, start_time: Optional[datetime] = None) -> None:
         """
         初始化日志管理器
 
         Args:
             start_time: 开始时间，如果为None则使用当前时间
         """
-        self.logs = []
-        self.start_time = start_time or timezone.now()
+        self.logs: List[str] = []
+        self.start_time: datetime = start_time or timezone.now()
 
-    def add(self, message, level='INFO', timestamp=None):
+    def add(self, message: str, level: str = 'INFO', timestamp: Optional[datetime] = None) -> None:
         """
         添加日志条目
 
@@ -41,34 +47,38 @@ class ExecutionLogger:
         ts = timestamp or timezone.now()
         self.logs.append(f"[{ts.strftime('%Y-%m-%d %H:%M:%S')}] {message}")
 
-    def add_start(self, execution_id, api_request):
+    def add_start(self, execution_id: Union[int, str], api_request: Any) -> None:
         """
         添加开始执行的日志
 
         Args:
             execution_id: 执行记录ID
-            api_request: API请求对象
+            api_request: API请求对象或字典
         """
         self.add("======== 开始执行API测试 ========")
         self.add(f"执行记录ID: {execution_id}")
-        self.add(f"API名称: {api_request.name}")
-        self.add(f"请求URL: {api_request.url}")
-        self.add(f"请求方法: {api_request.method}")
+        
+        if isinstance(api_request, dict):
+            self.add(f"API名称: {api_request.get('name', 'N/A')}")
+            self.add(f"请求URL: {api_request.get('url', 'N/A')}")
+            self.add(f"请求方法: {api_request.get('method', 'N/A')}")
+        else:
+            self.add(f"API名称: {api_request.name}")
+            self.add(f"请求URL: {api_request.url}")
+            self.add(f"请求方法: {api_request.method}")
 
-        # 获取代理配置
-        import os
         proxy = os.environ.get('HTTP_PROXY') or '无代理'
         self.add(f"代理配置: {proxy}")
 
-    def add_request_sent(self):
+    def add_request_sent(self) -> None:
         """添加请求已发送的日志"""
         self.add("正在发送请求...")
 
-    def add_request_completed(self):
+    def add_request_completed(self) -> None:
         """添加请求已完成的日志"""
         self.add("请求发送完成")
 
-    def add_response(self, result):
+    def add_response(self, result: Dict[str, Any]) -> None:
         """
         添加响应日志
 
@@ -80,23 +90,25 @@ class ExecutionLogger:
             self.add(f"错误信息: {result['error']}")
         else:
             self.add(f"✅ 收到响应")
-            self.add(f"HTTP状态码: {result.get('response_status', 'N/A')}")
-            self.add(f"响应时间: {result['response_time']:.4f} 秒")
+            status_code = result.get('status_code') or result.get('response_status', 'N/A')
+            self.add(f"HTTP状态码: {status_code}")
+            response_time = result.get('response_time')
+            if response_time is not None:
+                self.add(f"响应时间: {response_time:.4f} 秒")
 
-            # 解析响应体
-            import json
-            try:
-                response_body = json.loads(result['response_body'])
-                self.add(f"响应体格式: JSON")
-                # 美化打印JSON格式
-                formatted_json = json.dumps(response_body, indent=2, ensure_ascii=False)
-                self.add(f"响应体内容:\n{formatted_json}")
-            except:
-                response_body = result['response_body']
-                self.add(f"响应体格式: 文本")
-                self.add(f"响应体内容:\n{response_body}")
+            response_body = result.get('response_body')
+            if response_body:
+                import json
+                try:
+                    parsed_body = json.loads(response_body)
+                    self.add(f"响应体格式: JSON")
+                    formatted_json = json.dumps(parsed_body, indent=2, ensure_ascii=False)
+                    self.add(f"响应体内容:\n{formatted_json}")
+                except (json.JSONDecodeError, ValueError):
+                    self.add(f"响应体格式: 文本")
+                    self.add(f"响应体内容:\n{response_body}")
 
-    def add_assertions(self, assertions):
+    def add_assertions(self, assertions: List[Dict[str, Any]]) -> None:
         """
         添加断言验证日志
 
@@ -111,7 +123,7 @@ class ExecutionLogger:
             status_str = "✅ 通过" if assertion['passed'] else "❌ 失败"
             self.add(f"  [{status_str}] 断言类型: {assertion['assertion_type']}")
 
-    def add_assertion_summary(self, passed_count, total_count):
+    def add_assertion_summary(self, passed_count: int, total_count: int) -> None:
         """
         添加断言统计日志
 
@@ -122,7 +134,7 @@ class ExecutionLogger:
         if total_count > 0:
             self.add(f"📊 断言统计: {passed_count}/{total_count} 通过")
 
-    def add_test_result(self, is_passed, passed_count, total_count):
+    def add_test_result(self, is_passed: bool, passed_count: int, total_count: int) -> None:
         """
         添加测试结果日志
 
@@ -136,11 +148,11 @@ class ExecutionLogger:
         else:
             self.add(f"❌ 测试失败")
 
-    def add_completion(self):
+    def add_completion(self) -> None:
         """添加执行完成日志"""
         self.add("======== 执行完成 ========")
 
-    def add_formatted_summary(self, formatted_summary):
+    def add_formatted_summary(self, formatted_summary: str) -> None:
         """
         添加格式化的执行摘要
 
@@ -152,14 +164,14 @@ class ExecutionLogger:
         self.add("="*60)
         self.add(formatted_summary)
 
-    def get_logs_list(self):
+    def get_logs_list(self) -> List[str]:
         """获取日志列表"""
         return self.logs
 
-    def get_logs_string(self):
+    def get_logs_string(self) -> str:
         """获取合并的日志字符串"""
         return "\n".join(self.logs)
 
-    def get_logs_count(self):
+    def get_logs_count(self) -> int:
         """获取日志条目数"""
         return len(self.logs)

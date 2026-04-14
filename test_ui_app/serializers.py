@@ -1,6 +1,8 @@
 """
 UI测试应用的序列化器
 """
+from __future__ import annotations
+from typing import Any, Dict, List, Optional
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
@@ -23,7 +25,7 @@ class UITestScriptSerializer(serializers.ModelSerializer):
                   'viewport_width', 'viewport_height', 'timeout']
         read_only_fields = ['id', 'created_at', 'updated_at', 'created_by']
     
-    def create(self, validated_data):
+    def create(self, validated_data: Dict[str, Any]) -> UITestScript:
         validated_data['created_by'] = self.context['request'].user
         return super().create(validated_data)
 
@@ -50,7 +52,7 @@ class UITestScriptCreateSerializer(serializers.ModelSerializer):
                   'actions', 'browser_type', 'headless', 'viewport_width',
                   'viewport_height', 'timeout', 'steps']
     
-    def create(self, validated_data):
+    def create(self, validated_data: Dict[str, Any]) -> UITestScript:
         actions = validated_data.pop('actions', [])
         steps_data = validated_data.pop('steps', [])  # 向后兼容
         

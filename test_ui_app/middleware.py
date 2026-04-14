@@ -60,54 +60,10 @@ class TokenAuthMiddleware(BaseMiddleware):
     def get_user_from_token(self, token_key):
         """从token获取用户"""
         try:
-            # #region agent log
-            with open(r'd:\Project\JTest\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                import json
-                f.write(json.dumps({
-                    "id": f"log_{int(__import__('time').time())}_{id(self)}",
-                    "timestamp": int(__import__('time').time() * 1000),
-                    "location": "middleware.py:get_user_from_token:token_extracted",
-                    "message": "从query string提取到token",
-                    "data": {"token_prefix": token_key[:8] + "..." if len(token_key) > 8 else token_key},
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "A"
-                }) + "\n")
-            # #endregion
-            
             token = AuthToken.objects.select_related('user').get(key=token_key)
-            
-            # #region agent log
-            with open(r'd:\Project\JTest\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                import json
-                f.write(json.dumps({
-                    "id": f"log_{int(__import__('time').time())}_{id(self)}",
-                    "timestamp": int(__import__('time').time() * 1000),
-                    "location": "middleware.py:get_user_from_token:token_found",
-                    "message": "在数据库中找到token",
-                    "data": {"token_exists": True, "user_id": token.user.id, "username": token.user.username},
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "A"
-                }) + "\n")
-            # #endregion
             
             # 检查token是否过期
             if token.is_expired():
-                # #region agent log
-                with open(r'd:\Project\JTest\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    import json
-                    f.write(json.dumps({
-                        "id": f"log_{int(__import__('time').time())}_{id(self)}",
-                        "timestamp": int(__import__('time').time() * 1000),
-                        "location": "middleware.py:get_user_from_token:token_expired",
-                        "message": "Token已过期",
-                        "data": {"token_key": token_key[:8] + "..."},
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "B"
-                    }) + "\n")
-                # #endregion
                 token.delete()
                 return AnonymousUser()
             
@@ -118,54 +74,11 @@ class TokenAuthMiddleware(BaseMiddleware):
             
             # 检查用户是否激活
             if not token.user.is_active:
-                # #region agent log
-                with open(r'd:\Project\JTest\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    import json
-                    f.write(json.dumps({
-                        "id": f"log_{int(__import__('time').time())}_{id(self)}",
-                        "timestamp": int(__import__('time').time() * 1000),
-                        "location": "middleware.py:get_user_from_token:user_inactive",
-                        "message": "用户未激活",
-                        "data": {"user_id": token.user.id, "username": token.user.username},
-                        "sessionId": "debug-session",
-                        "runId": "run1",
-                        "hypothesisId": "C"
-                    }) + "\n")
-                # #endregion
                 return AnonymousUser()
-            
-            # #region agent log
-            with open(r'd:\Project\JTest\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                import json
-                f.write(json.dumps({
-                    "id": f"log_{int(__import__('time').time())}_{id(self)}",
-                    "timestamp": int(__import__('time').time() * 1000),
-                    "location": "middleware.py:get_user_from_token:auth_success",
-                    "message": "Token认证成功",
-                    "data": {"user_id": token.user.id, "username": token.user.username},
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "A"
-                }) + "\n")
-            # #endregion
             
             return token.user
             
         except AuthToken.DoesNotExist:
-            # #region agent log
-            with open(r'd:\Project\JTest\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                import json
-                f.write(json.dumps({
-                    "id": f"log_{int(__import__('time').time())}_{id(self)}",
-                    "timestamp": int(__import__('time').time() * 1000),
-                    "location": "middleware.py:get_user_from_token:token_not_found",
-                    "message": "Token不存在",
-                    "data": {"token_prefix": token_key[:8] + "..." if len(token_key) > 8 else token_key},
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "A"
-                }) + "\n")
-            # #endregion
             return AnonymousUser()
         except Exception as e:
             logger.error(f"Token认证失败: {str(e)}", exc_info=True)

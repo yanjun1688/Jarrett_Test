@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import { Form, Select } from 'antd';
-import { EXECUTION_MODES, EXECUTION_MODE_LABELS } from '../../constants';
+import { EXECUTION_MODES } from '../../constants';
 
 const ExecutionModeSelect = ({ 
   name = 'execution_mode',

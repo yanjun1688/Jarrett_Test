@@ -96,8 +96,37 @@ backups/
 # Test directories
 testmanager_app/tests/
 testmanager_app/test_scripts/
+tests/
 
-# Misc
-xx.txt
-testmanager/xx.txt
-控制台日志.txt
+# Coverage files
+.coveragerc
+coverage.json
+*.cover
+
+# LSP config
+pyrightconfig.json
+
+# Temporary data directories
+context_data/
+data/
+ocsd/
+
+# Documentation (except README)
+docs/
+
+# Scripts directory (temporary)
+scripts/
+
+# Coverage reports
+coverage.json
+
+# Temporary output
+test_output.txt
+test_results.txt
+nul
+
+# Debug files
+debug_*.py
+
+# MCP builder temp
+=mcp-builder/

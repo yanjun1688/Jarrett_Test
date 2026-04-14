@@ -16,7 +16,7 @@ import {
   Typography,
   Alert
 } from 'antd';
-import { UploadOutlined, CheckCircleOutlined, ExclamationCircleOutlined, LoadingOutlined } from '@ant-design/icons';
+import { UploadOutlined, CheckCircleOutlined, LoadingOutlined } from '@ant-design/icons';
 import { requestCollectionsAPI } from '../api';
 import '../css/YamlConfigUploaderSimple.css';
 

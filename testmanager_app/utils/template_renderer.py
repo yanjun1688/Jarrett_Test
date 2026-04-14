@@ -3,6 +3,8 @@
 支持变量替换、嵌套路径、默认值
 """
 
+from __future__ import annotations
+
 import re
 import logging
 from typing import Any, Dict
@@ -73,15 +75,20 @@ class TemplateRenderer:
                 if var_default is not None:
                     # 有指定的默认值，使用它
                     value = var_default
+                elif default_value:
+                    # 没有指定默认值，使用全局默认值
+                    value = default_value
                 else:
-                    # 没有指定默认值，保留原始模板不变
-                    # 修复：不替换，保留原始模板
+                    # 没有任何默认值，保留原始模板不变
                     continue
             elif value == "" and var_default is not None:
                 # 变量存在但为空字符串，且有默认值，使用默认值
                 value = var_default
-            elif not var_exists and var_default is None:
-                # 修复：变量不存在且没有默认值，保留模板不变
+            elif value == "" and default_value:
+                # 变量存在但为空字符串，且有全局默认值，使用全局默认值
+                value = default_value
+            elif not var_exists and var_default is None and not default_value:
+                # 变量不存在且没有默认值，保留模板不变
                 continue
 
             # 替换模板中的变量

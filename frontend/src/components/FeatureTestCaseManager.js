@@ -1,14 +1,15 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import apiClient from '../api/axios';
-import { Table, Button, Space, Input, Modal, Form, Typography, Popconfirm, notification, Descriptions, Select } from 'antd';
+import { Table, Button, Space, Input, Modal, Form, Popconfirm, notification, Descriptions, Select } from 'antd';
+import { useProjects } from '../hooks/useProjects';
 
-const { Title } = Typography;
 const { Option } = Select;
 
 function FeatureTestCaseManager() {
+  const { projects, loading: projectsLoading } = useProjects();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form] = Form.useForm();
@@ -17,18 +18,27 @@ function FeatureTestCaseManager() {
   const fetchList = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiClient.get('/feature-tests/');
+      const params = {};
+      if (selectedProjectId) {
+        params.project = selectedProjectId;
+      }
+      const res = await apiClient.get('/feature-tests/', { params });
       setData(res.data.results || []);
     } catch (e) {
       notification.error({ message: '获取功能测试用例失败', description: e.message });
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     fetchList();
   }, [fetchList]);
+
+  const handleSearch = () => {
+    fetchList();
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -65,7 +75,6 @@ function FeatureTestCaseManager() {
       setModalOpen(false);
       fetchList();
     } catch (e) {
-      // antd form validation errors are not network errors
       if (e?.message) {
         notification.error({ message: '保存失败', description: e.message });
       }
@@ -76,6 +85,7 @@ function FeatureTestCaseManager() {
 
   const columns = [
     { title: '标题', dataIndex: 'title', key: 'title', render: wrap },
+    { title: '所属项目', dataIndex: 'project_name', key: 'project_name', render: (name) => name || '-' },
     { title: '版本号', dataIndex: 'version', key: 'version', render: wrap },
     { title: '是否通过', dataIndex: 'is_passed', key: 'is_passed', render: (val) => {
       if (val === true) return <span style={{ color: '#52c41a' }}>✅ 通过</span>;
@@ -100,20 +110,28 @@ function FeatureTestCaseManager() {
     }
   ];
 
-  const filtered = data.filter(item => !search || (item.title || '').toLowerCase().includes(search.toLowerCase()));
-
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="large">
-      <Title level={2}>功能测试用例</Title>
       <Space>
-        <Input placeholder="按标题搜索" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 240 }} />
-        <Button type="primary" onClick={openCreate}>新增用例</Button>
-        <Button onClick={fetchList}>刷新</Button>
+        <Select
+          placeholder="选择项目搜索"
+          style={{ width: 200 }}
+          allowClear
+          value={selectedProjectId || undefined}
+          onChange={(value) => setSelectedProjectId(value || '')}
+          loading={projectsLoading}
+        >
+          {projects.map(p => (
+            <Option key={p.id} value={String(p.id)}>{p.name}</Option>
+          ))}
+        </Select>
+        <Button onClick={handleSearch} type="primary">搜索</Button>
+        <Button onClick={openCreate} style={{ marginLeft: 16 }}>新增用例</Button>
       </Space>
 
       <Table
         columns={columns}
-        dataSource={filtered}
+        dataSource={data}
         loading={loading}
         rowKey="id"
         pagination={{ pageSize: 10 }}
@@ -138,6 +156,17 @@ function FeatureTestCaseManager() {
           >
             <Input maxLength={200} showCount />
           </Form.Item>
+          <Form.Item
+            name="project"
+            label="所属项目"
+            rules={[{ required: true, message: '请选择项目' }]}
+          >
+            <Select placeholder="请选择项目" loading={projectsLoading}>
+              {projects.map(p => (
+                <Option key={p.id} value={p.id}>{p.name}</Option>
+              ))}
+            </Select>
+          </Form.Item>
           <Form.Item name="pre_steps" label="前置步骤">
             <Input.TextArea rows={2} />
           </Form.Item>
@@ -160,15 +189,6 @@ function FeatureTestCaseManager() {
               <Option value={null}>⏸️ 未测试</Option>
             </Select>
           </Form.Item>
-          <Form.Item
-            name="version"
-            label="版本号"
-            rules={[
-              { max: 50, message: '版本号不能超过50字符' }
-            ]}
-          >
-            <Input maxLength={50} showCount />
-          </Form.Item>
         </Form>
       </Modal>
 
@@ -185,13 +205,14 @@ function FeatureTestCaseManager() {
         {viewing && (
           <Descriptions bordered column={1} size="middle">
             <Descriptions.Item label="测试标题">{viewing.title}</Descriptions.Item>
+            <Descriptions.Item label="所属项目">{viewing.project_name || '-'}</Descriptions.Item>
             <Descriptions.Item label="前置步骤"><pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{viewing.pre_steps}</pre></Descriptions.Item>
             <Descriptions.Item label="操作步骤"><pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{viewing.steps}</pre></Descriptions.Item>
             <Descriptions.Item label="预期结果"><pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{viewing.expected_result}</pre></Descriptions.Item>
             <Descriptions.Item label="实际结果"><pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{viewing.actual_result}</pre></Descriptions.Item>
             <Descriptions.Item label="待确定">{viewing.to_confirm}</Descriptions.Item>
             <Descriptions.Item label="是否通过">{viewing.is_passed}</Descriptions.Item>
-            <Descriptions.Item label="版本号">{viewing.version}</Descriptions.Item>
+            <Descriptions.Item label="创建人">{viewing.created_by_name || '-'}</Descriptions.Item>
             <Descriptions.Item label="创建时间">{viewing.created_at ? new Date(viewing.created_at).toLocaleString() : ''}</Descriptions.Item>
             <Descriptions.Item label="更新时间">{viewing.updated_at ? new Date(viewing.updated_at).toLocaleString() : ''}</Descriptions.Item>
           </Descriptions>
@@ -202,5 +223,3 @@ function FeatureTestCaseManager() {
 }
 
 export default FeatureTestCaseManager;
-
-

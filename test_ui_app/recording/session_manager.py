@@ -1,10 +1,11 @@
 """
 录制会话管理器
 """
+from __future__ import annotations
 import uuid
 import json
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Any
 from datetime import datetime, timedelta
 from django.core.cache import cache
 
@@ -18,8 +19,12 @@ class RecordingSessionManager:
     SESSION_TIMEOUT = 3600  # 1小时超时
     
     @classmethod
-    def create_session(cls, user_id: Optional[int] = None, start_url: str = 'about:blank',
-                       browser_type: str = 'chromium') -> str:
+    def create_session(
+        cls,
+        user_id: int | None = None,
+        start_url: str = 'about:blank',
+        browser_type: str = 'chromium',
+    ) -> str:
         """
         创建新的录制会话
         
@@ -63,7 +68,7 @@ class RecordingSessionManager:
         return session_id
     
     @classmethod
-    def get_session(cls, session_id: str) -> Optional[Dict[str, Any]]:
+    def get_session(cls, session_id: str) -> dict[str, Any] | None:
         """获取会话数据"""
         cache_key = cls.SESSION_PREFIX + session_id
         try:
@@ -73,7 +78,7 @@ class RecordingSessionManager:
             return None
     
     @classmethod
-    def update_session(cls, session_id: str, **kwargs) -> bool:
+    def update_session(cls, session_id: str, **kwargs: Any) -> bool:
         """更新会话数据"""
         session = cls.get_session(session_id)
         if not session:
@@ -89,7 +94,7 @@ class RecordingSessionManager:
             return False
     
     @classmethod
-    def add_step(cls, session_id: str, step: Dict[str, Any]) -> bool:
+    def add_step(cls, session_id: str, step: dict[str, Any]) -> bool:
         """添加步骤到会话"""
         session = cls.get_session(session_id)
         if not session:
@@ -108,7 +113,7 @@ class RecordingSessionManager:
             return False
     
     @classmethod
-    def get_steps(cls, session_id: str) -> List[Dict[str, Any]]:
+    def get_steps(cls, session_id: str) -> list[dict[str, Any]]:
         """获取会话的所有步骤"""
         session = cls.get_session(session_id)
         if not session:

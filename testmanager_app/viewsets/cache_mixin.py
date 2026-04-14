@@ -16,6 +16,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+try:
+    from django.conf import settings
+    DEFAULT_CACHE_TIMEOUT = getattr(settings, 'CACHE_TIMEOUT_LIST', 300)
+except ImportError:
+    DEFAULT_CACHE_TIMEOUT = 300
+
 
 class CacheMixin:
     """
@@ -35,7 +41,7 @@ class CacheMixin:
     """
     
     # 缓存配置
-    cache_timeout = 300  # 默认5分钟
+    cache_timeout = DEFAULT_CACHE_TIMEOUT  # 默认5分钟（从settings读取）
     cache_list = True
     cache_retrieve = True
     cache_key_prefix = None

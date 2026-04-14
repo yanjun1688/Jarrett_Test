@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import apiClient from '../api/axios';
 import TestCaseList from './TestCaseList';
-import TestExecutionList from './TestExecutionList';
 import { Descriptions, Tabs, Typography, Spin, Card, notification } from 'antd';
 
 const { Title } = Typography;
@@ -47,9 +46,6 @@ function ProjectDetail() {
       <Tabs defaultActiveKey="1" style={{ marginTop: 24 }}>
         <TabPane tab="测试用例" key="1">
           <TestCaseList projectId={id} />
-        </TabPane>
-        <TabPane tab="测试执行记录" key="2">
-          <TestExecutionList projectId={id} />
         </TabPane>
       </Tabs>
     </Card>

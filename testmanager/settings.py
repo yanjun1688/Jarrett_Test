@@ -10,7 +10,10 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Any
 import os
 from dotenv import load_dotenv
 
@@ -25,8 +28,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# SECRET_KEY should be set in environment variables or .env file
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-(2h+i*15-q6(w=k-6+jv!4+n#49(!vay3-82qba=a0^h)pw=hb')
+# SECRET_KEY must be set in environment variables or .env file
+_secret_key = os.getenv('SECRET_KEY')
+if not _secret_key:
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured("SECRET_KEY environment variable is not set. Please set it in .env or environment variables.")
+SECRET_KEY = _secret_key
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
@@ -55,6 +62,7 @@ INSTALLED_APPS = [
     "testmanager_app",
     "test_ai_agent",
     "test_ui_app",
+    "core",  # 核心模块
 ]
 
 MIDDLEWARE = [
@@ -85,6 +93,9 @@ TEMPLATES = [
     },
 ]
 
+# 部署配置
+# 已统一使用 ASGI 模式部署，通过 Daphne 服务器运行
+# WSGI 配置仅作为备用（用于某些特殊情况如 django-admin 命令）
 WSGI_APPLICATION = "testmanager.wsgi.application"
 ASGI_APPLICATION = "testmanager.asgi.application"
 
@@ -111,6 +122,8 @@ db_config = {
 db_password = os.getenv('DB_PASSWORD', '').strip()
 if db_password:
     db_config['PASSWORD'] = db_password
+
+db_config['CONN_MAX_AGE'] = 60
 
 DATABASES = {
     'default': db_config
@@ -193,7 +206,17 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20
+    'PAGE_SIZE': 20,
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',
+        'user': '1000/hour',
+        'login': '20/minute',
+    },
 }
 
 # Cache configuration - Redis
@@ -283,7 +306,7 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'simple': {
-            'format': '{levelname} {name}: {message}',
+            'format': '[{levelname}] {name}: {message}',
             'style': '{',
         },
     },
@@ -291,7 +314,13 @@ LOGGING = {
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'simple',
-            'level': 'INFO',
+            'level': 'DEBUG',
+            'stream': 'ext://sys.stdout',
+        },
+        'console_stderr': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+            'level': 'WARNING',
         },
     },
     'root': {
@@ -319,11 +348,46 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
-        # Silence channels_redis slow task warnings
         'channels_redis': {
             'handlers': ['console'],
-            'level': 'ERROR',  # Only show errors, not warnings
+            'level': 'ERROR',
             'propagate': False,
         },
     },
 }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 意图分类配置
+# ═══════════════════════════════════════════════════════════════════
+
+INTENT_CONFIG = {
+    # LLM fallback 触发阈值：消息长度超过此值且规则返回 CHAT 时触发 LLM
+    "LLM_FALLBACK_MESSAGE_LEN": int(os.getenv("INTENT_LLM_FALLBACK_LEN", "10")),
+    
+    # 置信度阈值：score 低于此值时触发 LLM fallback
+    "CONFIDENCE_THRESHOLD": float(os.getenv("INTENT_CONFIDENCE_THRESHOLD", "0.6")),
+    
+    # 缓存配置
+    "CACHE_ENABLED": os.getenv("INTENT_CACHE_ENABLED", "true").lower() == "true",
+    "CACHE_TTL": int(os.getenv("INTENT_CACHE_TTL", "300")),
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# 上下文存储配置
+# ═══════════════════════════════════════════════════════════════════
+
+CONTEXT_ROOT_DIR = Path(os.getenv("CONTEXT_ROOT_DIR", str(BASE_DIR / "context_data")))
+
+# ═══════════════════════════════════════════════════════════════════
+# HTTPS 安全头配置（仅生产环境）
+# ═══════════════════════════════════════════════════════════════════
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

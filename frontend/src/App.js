@@ -1,23 +1,25 @@
 import React from 'react';
-import { Layout, Menu, Dropdown, Avatar, Space, Button, message } from 'antd';
+import { Layout, Menu, Dropdown, Avatar, Space, message } from 'antd';
 import {
   HomeOutlined,
   ProjectOutlined,
   FileTextOutlined,
-  PlaySquareOutlined,
   BarChartOutlined,
   CodeOutlined,
   ApiOutlined,
-  GroupOutlined,
   UserOutlined,
   LogoutOutlined,
   RobotOutlined,
   PlayCircleOutlined,
+  BranchesOutlined,
+  AppstoreOutlined,
+  BookOutlined,
 } from '@ant-design/icons';
 import MemberManager from './components/MemberManager';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import ChatBotFloatButton from './components/ChatBotFloatButton';
 import './App.css';
 
 const { Header, Content, Sider } = Layout;
@@ -39,11 +41,6 @@ const menuItems = [
     label: <Link to="/testcases">用例管理</Link>,
   },
   {
-    key: '/executions',
-    icon: <PlaySquareOutlined />,
-    label: <Link to="/executions">测试执行</Link>,
-  },
-  {
     key: '/reports',
     icon: <BarChartOutlined />,
     label: <Link to="/reports">测试报告</Link>,
@@ -54,31 +51,19 @@ const menuItems = [
     icon: <ApiOutlined />,
     label: <Link to="/api-tester">API测试</Link>,
   },
+
   {
     key: '/request-collections',
-    icon: <GroupOutlined />,
+    icon: <AppstoreOutlined />,
     label: <Link to="/request-collections">请求集合</Link>,
-    children: [
-      {
-        key: '/request-collections',
-        label: <Link to="/request-collections">集合列表</Link>,
-      },
-      {
-        key: '/request-collections/yaml-upload',
-        label: <Link to="/request-collections/yaml-upload">YAML上传</Link>,
-      },
-    ],
   },
-  {
-    key: '/feature-tests',
-    icon: <FileTextOutlined />,
-    label: <Link to="/feature-tests">功能测试</Link>,
-  },
+
   {
     key: '/test-scripts',
     icon: <CodeOutlined />,
     label: <Link to="/test-scripts">测试脚本</Link>,
   },
+
   {
     key: '/ui-tests',
     icon: <PlayCircleOutlined />,
@@ -88,6 +73,16 @@ const menuItems = [
     key: '/ai-test-analysis',
     icon: <RobotOutlined />,
     label: <Link to="/ai-test-analysis">AI分析用例</Link>,
+  },
+  {
+    key: '/test-flows',
+    icon: <BranchesOutlined />,
+    label: <Link to="/test-flows">测试流程</Link>,
+  },
+  {
+    key: '/knowledge-base',
+    icon: <BookOutlined />,
+    label: <Link to="/knowledge-base">知识库</Link>,
   },
 ];
 
@@ -165,6 +160,28 @@ function App() {
           </div>
         </Content>
       </Layout>
+      
+      {/* ChatBot 智能助手 - 全局悬浮按钮 */}
+      <ChatBotFloatButton
+        title="JTest AI 助手"
+        drawerWidth={500}
+        defaultSystemMessage={`你是一个专业的测试工程师和 AI 助手，专精于帮助用户解决测试相关问题。
+
+你的专业领域包括：
+- UI 自动化测试（Playwright、Selenium）
+- API 测试设计和执行
+- 测试用例设计和管理
+- 测试框架搭建和优化
+- 测试最佳实践和模式
+- 代码审查和优化建议
+
+请用以下特点回答：
+1. 清晰、专业、友好
+2. 提供具体的代码示例
+3. 解释原因和原理
+4. 给出最佳实践建议
+5. 在不确定时坦诚告知用户`}
+      />
     </Layout>
   );
 }

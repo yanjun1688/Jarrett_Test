@@ -229,7 +229,7 @@ const UiTestManager = () => {
       const payload = {
         name: values.name,
         description: values.description || '',
-        project_id: values.project || null,
+        project: values.project || null,
         browser_type: values.browser_type,
         headless: values.headless,
         steps: stepsPayload,  // steps字段保存的是actions格式

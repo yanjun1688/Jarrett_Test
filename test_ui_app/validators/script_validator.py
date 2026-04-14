@@ -1,8 +1,9 @@
 """
 脚本校验器 - 校验actions数组和脚本配置
 """
+from __future__ import annotations
 import logging
-from typing import List, Dict, Any, Tuple, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,8 @@ class ScriptValidator:
     # 支持的action类型
     SUPPORTED_ACTION_TYPES = [
         'navigate', 'click', 'fill', 'select', 'hover',
-        'wait', 'screenshot', 'assert', 'extract', 'custom'
+        'wait', 'screenshot', 'assert', 'extract', 'custom',
+        'press', 'select_option', 'canvas_click', 'canvas_drag'
     ]
     
     # 需要selector的action类型
@@ -35,11 +37,14 @@ class ScriptValidator:
     # 支持的浏览器类型
     SUPPORTED_BROWSER_TYPES = ['chromium', 'firefox', 'webkit']
     
-    def validate(self, actions: List[Dict[str, Any]], 
-                 browser_type: str = 'chromium',
-                 viewport_width: int = 1280,
-                 viewport_height: int = 720,
-                 timeout: int = 30000) -> Tuple[bool, Optional[str]]:
+    def validate(
+        self,
+        actions: list[dict[str, Any]],
+        browser_type: str = 'chromium',
+        viewport_width: int = 1280,
+        viewport_height: int = 720,
+        timeout: int = 30000,
+    ) -> tuple[bool, str | None]:
         """
         校验脚本
         
@@ -51,7 +56,7 @@ class ScriptValidator:
             timeout: 超时时间
             
         Returns:
-            Tuple[bool, Optional[str]]: (是否通过, 错误信息)
+            tuple[bool, str | None]: (是否通过, 错误信息)
         """
         try:
             # 1. 校验actions数组
@@ -75,7 +80,7 @@ class ScriptValidator:
             logger.error(f"校验过程中发生错误: {str(e)}", exc_info=True)
             return False, f"校验失败: {str(e)}"
     
-    def _validate_actions_list(self, actions: List[Dict[str, Any]]):
+    def _validate_actions_list(self, actions: list[dict[str, Any]]) -> None:
         """校验actions列表"""
         if not isinstance(actions, list):
             raise ValidationError("actions必须是列表类型")
@@ -101,7 +106,7 @@ class ScriptValidator:
             if order:
                 orders.add(order)
     
-    def _validate_action(self, action: Dict[str, Any]):
+    def _validate_action(self, action: dict[str, Any]) -> None:
         """校验单个action"""
         if not isinstance(action, dict):
             raise ValidationError(f"action必须是字典类型，实际类型: {type(action)}")
@@ -160,7 +165,7 @@ class ScriptValidator:
         except ValidationError as e:
             logger.warning(f"Action特定校验未通过(不阻塞): {str(e)}")
     
-    def _validate_selector(self, selector: Dict[str, str]):
+    def _validate_selector(self, selector: dict[str, str]) -> None:
         """校验selector"""
         if not isinstance(selector, dict):
             raise ValidationError("selector必须是字典类型")
@@ -183,7 +188,7 @@ class ScriptValidator:
         if not isinstance(selector_value, str):
             raise ValidationError("selector的value必须是字符串类型")
     
-    def _validate_action_specific(self, action_type: str, action: Dict[str, Any]):
+    def _validate_action_specific(self, action_type: str, action: dict[str, Any]) -> None:
         """类型特定的校验"""
         params = action.get('params', {})
         
@@ -206,8 +211,13 @@ class ScriptValidator:
         # 这些类型在ActionRunner中会返回"不支持的操作类型"错误
         # 如果要支持这些类型，需要在校验器和ActionRunner中添加相应实现
     
-    def _validate_browser_config(self, browser_type: str, viewport_width: int,
-                                 viewport_height: int, timeout: int):
+    def _validate_browser_config(
+        self,
+        browser_type: str,
+        viewport_width: int,
+        viewport_height: int,
+        timeout: int,
+    ) -> None:
         """校验浏览器配置"""
         if browser_type not in self.SUPPORTED_BROWSER_TYPES:
             raise ValidationError(
@@ -224,7 +234,7 @@ class ScriptValidator:
         if not isinstance(timeout, int) or timeout < 1:
             raise ValidationError(f"timeout必须是大于0的整数，当前值: {timeout}")
     
-    def _validate_action_order(self, actions: List[Dict[str, Any]]):
+    def _validate_action_order(self, actions: list[dict[str, Any]]) -> None:
         """校验action顺序"""
         orders = [action.get('order') for action in actions if action.get('order')]
         if orders:
@@ -240,12 +250,12 @@ class ScriptValidator:
     # ===============================
     def check_script_quality(
         self,
-        actions: List[Dict[str, Any]],
+        actions: list[dict[str, Any]],
         browser_type: str = "chromium",
         viewport_width: int = 1280,
         viewport_height: int = 720,
         timeout: int = 30000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         录制脚本质量检查 API。
 
@@ -274,7 +284,7 @@ class ScriptValidator:
                 }
             }
         """
-        issues: List[Dict[str, Any]] = []
+        issues: list[dict[str, Any]] = []
 
         # -------- 1. 全局配置校验（浏览器配置等）--------
         try:
@@ -367,10 +377,10 @@ class ScriptValidator:
         self,
         level: str,
         code: str,
-        action: Optional[Dict[str, Any]],
+        action: dict[str, Any] | None,
         message: str,
         suggestion: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """构造统一的质量问题结构，便于前端直接展示"""
         action_id = action.get("id") if isinstance(action, dict) else None
         order = action.get("order") if isinstance(action, dict) else None
@@ -387,10 +397,10 @@ class ScriptValidator:
         }
 
     def _check_action_quality(
-        self, action: Dict[str, Any], issues: List[Dict[str, Any]]
-    ):
+        self, action: dict[str, Any], issues: list[dict[str, Any]]
+    ) -> None:
         """
-        针对单个 action 的“友好建议”级别质量检查。
+        针对单个 action 的"友好建议"级别质量检查。
 
         这些检查不会改变原有 validate() 的通过/失败逻辑，只提供更细粒度的提示。
         """
@@ -507,8 +517,8 @@ class ScriptValidator:
             )
 
     def _check_global_script_quality(
-        self, actions: List[Dict[str, Any]], issues: List[Dict[str, Any]]
-    ):
+        self, actions: list[dict[str, Any]], issues: list[dict[str, Any]]
+    ) -> None:
         """
         脚本级别的整体质量检查（不针对某一步骤，而是整体流程）。
         """

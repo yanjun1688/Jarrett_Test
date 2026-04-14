@@ -18,22 +18,22 @@ logger = logging.getLogger(__name__)
 class LogCollector:
     """日志采集器"""
 
-    def __init__(self, execution: UITestExecution, console_output: bool = True):
+    def __init__(self, execution: UITestExecution, console_output: bool = True) -> None:
         self.execution = execution
-        self.logs = []  # 存储结构化日志条目
-        self.detailed_logs = []  # 存储详细日志文本（按行）
-        self.screenshots = []
-        self.failed_actions = []
-        self.start_time = None
+        self.logs: list[dict[str, Any]] = []  # 存储结构化日志条目
+        self.detailed_logs: list[str] = []  # 存储详细日志文本（按行）
+        self.screenshots: list[str] = []
+        self.failed_actions: list[dict[str, Any]] = []
+        self.start_time: datetime | None = None
         self.console_output = console_output  # 是否输出到控制台
     
-    def _format_timestamp(self, dt=None) -> str:
+    def _format_timestamp(self, dt: datetime | None = None) -> str:
         """格式化时间戳为 [YYYY-MM-DD HH:MM:SS] 格式"""
         if dt is None:
             dt = timezone.now()
         return dt.strftime('[%Y-%m-%d %H:%M:%S]')
     
-    def _add_log_line(self, message: str, timestamp=None):
+    def _add_log_line(self, message: str, timestamp: datetime | None = None) -> None:
         """添加一行日志"""
         ts = self._format_timestamp(timestamp)
         log_line = f"{ts} {message}"
@@ -44,7 +44,7 @@ class LogCollector:
             # 使用 flush=True 确保实时输出
             print(f"[UITest] {log_line}", flush=True)
     
-    async def log_execution_start(self, script, total_actions: int):
+    async def log_execution_start(self, script: Any, total_actions: int) -> None:
         """
         记录执行开始信息
 
@@ -196,14 +196,14 @@ class LogCollector:
             
             # Removed verbose warning logging - failure is already recorded in execution log
     
-    async def update_execution(self, all_results: List[Dict[str, Any]]):
+    async def update_execution(self, all_results: List[Dict[str, Any]]) -> None:
         """
         更新执行记录
 
         Args:
             all_results: 所有action的执行结果列表
         """
-        def _update():
+        def _update() -> None:
             # 统计执行结果
             total_actions = len(all_results)
             passed_actions = len([r for r in all_results if r.get('status') == 'passed'])

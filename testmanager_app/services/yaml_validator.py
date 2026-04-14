@@ -17,7 +17,8 @@ class YamlValidator:
     def __init__(self):
         self.validation_errors = []
         self.validation_warnings = []
-        self.variable_pattern = re.compile(r'{{\s*([a-zA-Z_][a-zA-Z0-9_\.]*(\s*\|\s*default\s*:\s*"[^"]*")?\s*)}}')
+        self.variable_pattern = re.compile(r'{{\s*(.*?)\s*}}')
+        self.valid_var_pattern = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_\.]*(\s*\|\s*default\s*:\s*"[^"]*")?$')
 
     def validate(self, yaml_content: str, check_variables: bool = True, check_jsonpath: bool = True) -> Tuple[bool, List[Dict], List[Dict]]:
         """
@@ -100,11 +101,36 @@ class YamlValidator:
 
         # 检查每个步骤的结构
         if config.get('steps'):
-            for idx, step in enumerate(config['steps']):
-                self._validate_step_structure(step, idx)
+            if not isinstance(config['steps'], list):
+                self.validation_errors.append({
+                    'level': 'error',
+                    'type': 'invalid_type',
+                    'message': 'steps必须是列表类型',
+                    'location': 'root'
+                })
+            else:
+                for idx, step in enumerate(config['steps']):
+                    if isinstance(step, dict):
+                        self._validate_step_structure(step, idx)
+                    else:
+                        self.validation_errors.append({
+                            'level': 'error',
+                            'type': 'invalid_type',
+                            'message': f'steps[{idx}]必须是字典类型',
+                            'location': f'steps[{idx}]'
+                        })
 
     def _validate_step_structure(self, step: Dict, step_index: int) -> None:
         """验证单个步骤的结构"""
+        if not isinstance(step, dict):
+            self.validation_errors.append({
+                'level': 'error',
+                'type': 'invalid_type',
+                'message': f'steps[{step_index}]必须是字典类型',
+                'location': f'steps[{step_index}]'
+            })
+            return
+        
         # 检查必填字段
         required_fields = ['name', 'request']
         for field in required_fields:
@@ -170,6 +196,8 @@ class YamlValidator:
 
     def _check_variables_in_step(self, step: Dict, step_idx: int, defined_vars: set) -> None:
         """检查步骤中的变量"""
+        if not isinstance(step, dict):
+            return
         request = step.get('request', {})
 
         # 检查URL
@@ -219,20 +247,22 @@ class YamlValidator:
                 # 验证每个变量
                 variables = self._extract_variables_from_string(text)
                 for var in variables:
-                    var_name = var.strip()
-
-                    # 过滤默认值语法
-                    if '|' in var_name:
-                        var_name = var_name.split('|')[0].strip()
-
-                    # 验证变量名格式
-                    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_\.]*$', var_name):
+                    var_content = var.strip()
+                    
+                    # 检查整体格式是否有效（包括默认值语法）
+                    if not self.valid_var_pattern.match(var_content):
                         self.validation_errors.append({
                             'level': 'error',
                             'type': 'invalid_variable_name',
-                            'message': f'无效的变量名: {var_name}',
+                            'message': f'无效的变量名: {var_content}',
                             'location': location
                         })
+                        continue
+                    
+                    # 过滤默认值语法后验证变量名格式
+                    var_name = var_content
+                    if '|' in var_name:
+                        var_name = var_name.split('|')[0].strip()
 
                     # 检查嵌套路径
                     if '.' in var_name:
@@ -265,7 +295,7 @@ class YamlValidator:
     def _extract_variables_from_string(self, text: str) -> List[str]:
         """从字符串中提取所有变量"""
         matches = self.variable_pattern.findall(text)
-        return [match[0] for match in matches] if matches else []
+        return matches if matches else []
 
     def _extract_undefined_variables(self, config: Dict) -> Dict[str, List[str]]:
         """提取未定义的变量"""
@@ -324,7 +354,12 @@ class YamlValidator:
 
     def _validate_jsonpath_expressions(self, config: Dict) -> None:
         """验证JSONPath表达式"""
-        for step_idx, step in enumerate(config['steps']):
+        steps = config.get('steps', [])
+        if not isinstance(steps, list):
+            return
+        for step_idx, step in enumerate(steps):
+            if not isinstance(step, dict):
+                continue
             # 验证extract规则
             for extract_idx, extract in enumerate(step.get('extract', [])):
                 if 'path' in extract:
@@ -363,7 +398,12 @@ class YamlValidator:
         """验证断言配置"""
         valid_comparison_types = ['equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte']
 
-        for step_idx, step in enumerate(config.get('steps', [])):
+        steps = config.get('steps', [])
+        if not isinstance(steps, list):
+            return
+        for step_idx, step in enumerate(steps):
+            if not isinstance(step, dict):
+                continue
             for assertion_idx, assertion in enumerate(step.get('assertions', [])):
                 # 验证必填字段
                 required_fields = ['type', 'expected', 'comparison']

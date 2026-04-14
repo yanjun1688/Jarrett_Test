@@ -1,8 +1,10 @@
 import React, { useReducer, useEffect, useCallback, useState } from 'react';
 import apiClient from '../api/axios';
-import { Table, Button, Upload, Card, Space, Typography, Tag, notification, Descriptions, Modal, Input, Form, Select, Collapse } from 'antd';
-import { UploadOutlined, EyeOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { Table, Button, Upload, Card, Space, Typography, Tag, notification, Descriptions, Modal, Input, Form, Select, Collapse, Tabs, Divider } from 'antd';
+import { UploadOutlined, EditOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { usePermissions } from '../hooks/usePermissions';
+import VariablesConfigurator from './VariablesConfigurator';
+import StepConfigurator from './StepConfigurator';
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -56,11 +58,33 @@ function TestScriptList() {
   const { scripts, loading, executingId, executionResult } = state;
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewScript, setPreviewScript] = useState(null);
+  const [editForm] = Form.useForm();
+  const [editVisualFormData, setEditVisualFormData] = useState({
+    variables: {},
+    setup: [],
+    test_steps: [],
+    teardown: []
+  });
+  const [editComposeContent, setEditComposeContent] = useState('');
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [createForm] = Form.useForm();
   const [projectList, setProjectList] = useState([]);
   const [composeContent, setComposeContent] = useState('');
+  const [visualFormData, setVisualFormData] = useState({
+    name: '',
+    description: '',
+    script_type: 'yaml',
+    project: '',
+    variables: {},
+    setup: [],
+    test_steps: [],
+    teardown: []
+  });
   const { hasCrudPermission } = usePermissions();
+  const [uploadProjectModalVisible, setUploadProjectModalVisible] = useState(false);
+  const [uploadProjectForm] = Form.useForm();
+  const [pendingUploadFile, setPendingUploadFile] = useState(null);
+  const [pendingScriptType, setPendingScriptType] = useState('yaml');
 
   const fetchScripts = useCallback(async () => {
     dispatch({ type: 'FETCH_START' });
@@ -106,59 +130,207 @@ function TestScriptList() {
 
   const handlePreview = (script) => {
     setPreviewScript(script);
+    editForm.setFieldsValue({
+      name: script.name,
+      description: script.description,
+      project: script.project,
+    });
+    
+    try {
+      const content = script.content;
+      let parsed = {};
+      if (script.script_type === 'yaml') {
+        const yamlLines = content.split('\n');
+        const jsonContent = yamlLines.map(line => {
+          if (line.includes(':') && !line.startsWith(' ') && !line.startsWith('#')) {
+            const [key, value] = line.split(':');
+            return `"${key.trim()}": ${value.trim() || 'null'}`;
+          }
+          return line;
+        }).join('\n');
+        parsed = JSON.parse(`{${jsonContent}}`);
+      } else {
+        parsed = JSON.parse(content);
+      }
+      
+      setEditVisualFormData({
+        variables: parsed.variables || {},
+        setup: parsed.setup || [],
+        test_steps: parsed.test_steps || [],
+        teardown: parsed.teardown || [],
+      });
+      setEditComposeContent(content);
+    } catch (e) {
+      setEditComposeContent(script.content || '');
+      setEditVisualFormData({
+        variables: {},
+        setup: [],
+        test_steps: [],
+        teardown: [],
+      });
+    }
+    
     setPreviewVisible(true);
   };
 
-  const handleFileUpload = async ({ file, onSuccess, onError }, scriptType) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('name', file.name);
-    formData.append('description', `Uploaded on ${new Date().toLocaleDateString()}`);
-    formData.append('script_type', scriptType || 'yaml');
-
+  const handleSaveEdit = async () => {
     try {
-      await apiClient.post('/test-scripts/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+      const values = await editForm.validateFields();
+      let scriptContent;
+      
+      if (!editComposeContent) {
+        const scriptObj = {
+          name: values.name,
+          description: values.description,
+          variables: editVisualFormData.variables,
+        };
+        if (editVisualFormData.setup?.length) scriptObj.setup = editVisualFormData.setup;
+        if (editVisualFormData.test_steps?.length) scriptObj.test_steps = editVisualFormData.test_steps;
+        if (editVisualFormData.teardown?.length) scriptObj.teardown = editVisualFormData.teardown;
+        scriptContent = JSON.stringify(scriptObj, null, 2);
+      } else {
+        scriptContent = editComposeContent;
+      }
+      
+      await apiClient.patch(`/test-scripts/${previewScript.id}/`, {
+        name: values.name,
+        description: values.description || '',
+        content: scriptContent,
+        project: values.project,
       });
-      onSuccess();
-      notification.success({ message: `${file.name} 上传成功` });
+      
+      notification.success({ message: '保存成功' });
+      setPreviewVisible(false);
       fetchScripts();
     } catch (error) {
-      onError(error);
-      notification.error({ message: `${file.name} 上传失败`, description: error.message });
+      notification.error({ message: '保存失败', description: error.response?.data?.detail || error.message });
+    }
+  };
+
+  const updateEditVisualFormField = (field, value) => {
+    setEditVisualFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleFileUpload = async ({ file, onSuccess }, scriptType) => {
+    const fileName = file.name.replace(/\.[^.]+$/, '');
+    uploadProjectForm.setFieldsValue({ name: fileName });
+    setPendingUploadFile(file);
+    setPendingScriptType(scriptType || 'yaml');
+    setUploadProjectModalVisible(true);
+    onSuccess();
+  };
+
+  const confirmUpload = async () => {
+    try {
+      const values = await uploadProjectForm.validateFields();
+      const content = await pendingUploadFile.text();
+      
+      await apiClient.post('/test-scripts/', {
+        name: values.name,
+        description: `Uploaded on ${new Date().toLocaleDateString()}`,
+        script_type: pendingScriptType,
+        content: content,
+        project: values.project,
+      });
+      
+      setUploadProjectModalVisible(false);
+      setPendingUploadFile(null);
+      uploadProjectForm.resetFields();
+      notification.success({ message: `${pendingUploadFile.name} 上传成功` });
+      fetchScripts();
+    } catch (error) {
+      notification.error({ message: '上传失败', description: error.response?.data?.detail || error.message });
     }
   };
 
   const handleCreateFromCompose = async () => {
     try {
+      // 从表单项或可视化编辑器获取数据
+      let scriptContent;
+      if (!composeContent) {
+        // 如果没有直接在代码编辑器中输入内容，从可视化表单生成YAML
+        const scriptObj = {
+          name: visualFormData.name,
+          description: visualFormData.description,
+          variables: visualFormData.variables,
+        };
+
+        if (visualFormData.setup && visualFormData.setup.length > 0) {
+          scriptObj.setup = visualFormData.setup;
+        }
+
+        if (visualFormData.test_steps && visualFormData.test_steps.length > 0) {
+          scriptObj.test_steps = visualFormData.test_steps;
+        }
+
+        if (visualFormData.teardown && visualFormData.teardown.length > 0) {
+          scriptObj.teardown = visualFormData.teardown;
+        }
+
+        scriptContent = JSON.stringify(scriptObj, null, 2);
+      } else {
+        scriptContent = composeContent;
+      }
+
       const values = await createForm.validateFields();
 
-      const formData = new FormData();
-      const blob = new Blob([composeContent], { type: 'text/plain' });
-      const file = new File([blob], values.name + (values.format === 'yaml' ? '.yaml' : '.json'));
-
-      formData.append('file', file);
-      formData.append('name', values.name);
-      formData.append('description', values.description || '');
-      formData.append('script_type', values.format);
-      formData.append('project', values.project);
-
-      await apiClient.post('/test-scripts/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+      await apiClient.post('/test-scripts/', {
+        name: values.name,
+        description: values.description || '',
+        script_type: 'yaml',
+        content: scriptContent,
+        project: values.project,
       });
 
       notification.success({ message: '创建成功' });
       setCreateModalVisible(false);
       createForm.resetFields();
       setComposeContent('');
+      setVisualFormData({
+        name: '',
+        description: '',
+        script_type: 'yaml',
+        project: '',
+        variables: {},
+        setup: [],
+        test_steps: [],
+        teardown: []
+      });
       fetchScripts();
     } catch (error) {
       notification.error({ message: '创建失败', description: error.message });
     }
+  };
+
+  // 更新可视化表单数据的函数
+  const updateVisualFormField = (field, value) => {
+    setVisualFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  // 将当前可视化表单数据转换为YAML并显示在代码编辑器中
+  const convertToYaml = () => {
+    const scriptObj = {
+      name: visualFormData.name,
+      description: visualFormData.description,
+      variables: visualFormData.variables,
+    };
+
+    if (visualFormData.setup && visualFormData.setup.length > 0) {
+      scriptObj.setup = visualFormData.setup;
+    }
+
+    if (visualFormData.test_steps && visualFormData.test_steps.length > 0) {
+      scriptObj.test_steps = visualFormData.test_steps;
+    }
+
+    if (visualFormData.teardown && visualFormData.teardown.length > 0) {
+      scriptObj.teardown = visualFormData.teardown;
+    }
+
+    setComposeContent(JSON.stringify(scriptObj, null, 2));
   };
 
   const columns = [
@@ -174,8 +346,8 @@ function TestScriptList() {
           <Button onClick={() => handleExecuteScript(record.id)} loading={executingId === record.id}>
             执行
           </Button>
-          <Button icon={<EyeOutlined />} onClick={() => handlePreview(record)}>
-            预览
+          <Button icon={<EditOutlined />} onClick={() => handlePreview(record)}>
+            编辑
           </Button>
         </Space>
       ),
@@ -354,55 +526,105 @@ teardown:
         <Card title="最近一次执行结果">
           <Descriptions bordered column={1} size="small">
             <Descriptions.Item label="状态">
-              <Tag color={executionResult.status === 'success' ? 'green' : 'red'}>
-                {executionResult.status}
+              <Tag color={executionResult.success ? 'green' : 'red'}>
+                {executionResult.success ? '通过' : '失败'}
               </Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="错误信息">{executionResult.error_message || '无'}</Descriptions.Item>
+            <Descriptions.Item label="错误信息">{executionResult.error || '无'}</Descriptions.Item>
           </Descriptions>
           <Title level={5} style={{ marginTop: 16 }}>输出日志</Title>
           <Card style={{ background: '#f5f5f5', maxHeight: 400, overflow: 'auto' }}>
             <pre style={{ fontFamily: 'monospace', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>
-              {executionResult.output}
+              {executionResult.logs ? (Array.isArray(executionResult.logs) ? executionResult.logs.join('\n') : executionResult.logs) : executionResult.output || '无日志'}
             </pre>
           </Card>
         </Card>
       )}
 
-      {/* 脚本预览模态框 */}
+      {/* 脚本编辑模态框 */}
       <Modal
-        title={`脚本预览 - ${previewScript?.name || ''}`}
+        title={`编辑脚本 - ${previewScript?.name || ''}`}
         open={previewVisible}
         onCancel={() => setPreviewVisible(false)}
         footer={[
-          <Button key="close" onClick={() => setPreviewVisible(false)}>
-            关闭
+          <Button key="cancel" onClick={() => setPreviewVisible(false)}>
+            取消
+          </Button>,
+          <Button key="save" type="primary" onClick={handleSaveEdit} disabled={!hasCrudPermission()}>
+            保存
           </Button>
         ]}
-        width={800}
+        width={900}
       >
         {previewScript && (
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Descriptions bordered size="small" column={2}>
-              <Descriptions.Item label="名称">{previewScript.name}</Descriptions.Item>
-              <Descriptions.Item label="类型">{getScriptTypeTag(previewScript.script_type)}</Descriptions.Item>
-              <Descriptions.Item label="项目">{previewScript.project_name || '-'}</Descriptions.Item>
-              <Descriptions.Item label="创建时间">{new Date(previewScript.created_at).toLocaleString()}</Descriptions.Item>
-              <Descriptions.Item label="描述" span={2}>
-                {previewScript.description || '无描述'}
-              </Descriptions.Item>
-            </Descriptions>
+          <Form form={editForm} layout="vertical">
+            <Form.Item
+              name="name"
+              label="脚本名称"
+              rules={[{ required: true, message: '请输入脚本名称' }]}
+            >
+              <Input />
+            </Form.Item>
 
-            <Title level={5} style={{ marginTop: 16, marginBottom: 8 }}>
-              脚本内容（预览）
-            </Title>
-            <Card style={{ background: '#f5f5f5', maxHeight: 400, overflow: 'auto' }}>
-              <pre style={{ fontFamily: 'monospace', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>
-                {/* 这里可以显示文件内容，需要后端提供接口 */}
-                暂不支持内容预览
-              </pre>
-            </Card>
-          </Space>
+            <Form.Item name="description" label="脚本描述">
+              <TextArea rows={2} />
+            </Form.Item>
+
+            <Form.Item
+              name="project"
+              label="所属项目"
+              rules={[{ required: true, message: '请选择项目' }]}
+            >
+              <Select placeholder="选择项目">
+                {projectList.map(p => (
+                  <Option key={p.id} value={p.id}>{p.name}</Option>
+                ))}
+              </Select>
+            </Form.Item>
+
+            <Form.Item label="脚本内容">
+              <Tabs defaultActiveKey="visual">
+                <Tabs.TabPane tab="可视化编辑器" key="visual">
+                  <Card>
+                    <Divider style={{ background: '#e6f7ff', fontWeight: 600 }}>变量配置</Divider>
+                    <VariablesConfigurator 
+                      variables={editVisualFormData.variables} 
+                      onChange={(val) => updateEditVisualFormField('variables', val)} 
+                    />
+                    
+                    <Divider style={{ background: '#e6f7ff', fontWeight: 600 }}>Setup 阶段</Divider>
+                    <StepConfigurator 
+                      steps={editVisualFormData.setup || []}
+                      onChange={(steps) => updateEditVisualFormField('setup', steps)}
+                      title="前置准备步骤 (Setup)"
+                    />
+                    
+                    <Divider style={{ background: '#e6f7ff', fontWeight: 600 }}>测试执行步骤</Divider>
+                    <StepConfigurator 
+                      steps={editVisualFormData.test_steps || []}
+                      onChange={(steps) => updateEditVisualFormField('test_steps', steps)}
+                      title="主测试步骤"
+                    />
+                    
+                    <Divider style={{ background: '#e6f7ff', fontWeight: 600 }}>Teardown 阶段</Divider>
+                    <StepConfigurator 
+                      steps={editVisualFormData.teardown || []}
+                      onChange={(steps) => updateEditVisualFormField('teardown', steps)}
+                      title="清理步骤 (Teardown)"
+                    />
+                  </Card>
+                </Tabs.TabPane>
+                <Tabs.TabPane tab="代码编辑器" key="code">
+                  <TextArea
+                    rows={20}
+                    style={{ fontFamily: 'monospace', fontSize: 13 }}
+                    value={editComposeContent}
+                    onChange={(e) => setEditComposeContent(e.target.value)}
+                  />
+                </Tabs.TabPane>
+              </Tabs>
+            </Form.Item>
+          </Form>
         )}
       </Modal>
 
@@ -443,18 +665,6 @@ teardown:
           </Form.Item>
 
           <Form.Item
-            name="format"
-            label="脚本格式"
-            rules={[{ required: true }]}
-            initialValue="yaml"
-          >
-            <Select>
-              <Option value="yaml">YAML</Option>
-              <Option value="json">JSON</Option>
-            </Select>
-          </Form.Item>
-
-          <Form.Item
             name="project"
             label="所属项目"
             rules={[{ required: true, message: '请选择项目' }]}
@@ -467,13 +677,166 @@ teardown:
           </Form.Item>
 
           <Form.Item label="脚本内容">
-            <TextArea
-              rows={20}
-              placeholder={`输入YAML或JSON格式的测试脚本，例如:\n\nname: 用户下单流程测试\ndescription: 完整用户注册-登录-下单流程\n\nvariables:\n  username: test_user_001\n  password: \"123456\"\n\ntest_steps:\n  - name: 用户注册\n    request:\n      method: POST\n      url: https://api.example.com/register\n      json:\n        username: "{{username}}"\n        password: "{{password}}"\n    extract:\n      - name: user_id\n        jsonpath: "$.data.user_id"`}
-              style={{ fontFamily: 'monospace', fontSize: 13 }}
-              value={composeContent}
-              onChange={(e) => setComposeContent(e.target.value)}
-            />
+            <Tabs defaultActiveKey="visual">
+              <Tabs.TabPane tab="可视化编辑器" key="visual">
+                <Card>
+                  <Divider style={{ background: '#e6f7ff', fontWeight: 600 }}>变量配置</Divider>
+                    <VariablesConfigurator 
+                      variables={visualFormData.variables} 
+                      onChange={(val) => updateVisualFormField('variables', val)} 
+                    />
+                    
+                    <Divider style={{ background: '#e6f7ff', fontWeight: 600 }}>Setup 阶段</Divider>
+                    <StepConfigurator 
+                      steps={visualFormData.setup || []}
+                      onChange={(steps) => updateVisualFormField('setup', steps)}
+                      title="前置准备步骤 (Setup)"
+                    />
+                    
+                    <Divider style={{ background: '#e6f7ff', fontWeight: 600 }}>测试执行步骤</Divider>
+                    <StepConfigurator 
+                      steps={visualFormData.test_steps || []}
+                      onChange={(steps) => updateVisualFormField('test_steps', steps)}
+                      title="主测试步骤"
+                    />
+                    
+                    <Divider style={{ background: '#e6f7ff', fontWeight: 600 }}>Teardown 阶段</Divider>
+                    <StepConfigurator 
+                      steps={visualFormData.teardown || []}
+                      onChange={(steps) => updateVisualFormField('teardown', steps)}
+                      title="清理步骤 (Teardown)"
+                    />
+                    
+                    <div style={{ marginTop: 16, textAlign: 'center' }}>
+                      <Button 
+                        type="primary" 
+                        onClick={convertToYaml}
+                        style={{ marginRight: 8 }}
+                      >
+                        生成代码预览
+                      </Button>
+                      <Button 
+                        onClick={() => {
+                          const sampleData = {
+                            name: "OneSimpleWay API测试",
+                            description: "登录并查询项目列表",
+                            variables: {
+                              initial_token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3NzQ4MzQ1MTUsInN1YiI6IjU5NiIsImV4cCI6MTc4MTMxNDUxNSwidXNlcklkIjoiNTk2IiwidHlwZSI6Imluc3RhbGxlciIsImpvaW5GcmVlTGVhZHNGbGFnIjoxLCJlbWFpbCI6Impvd2V3ODU2NDBAaW51cHVwLmNvbSIsImxvZ2luSWRlbnRpZnkiOiJvdXRlcl9zZWxmIiwiY291bnRyeUNvZGUiOiJBVSJ9.TIlIJizbw2mQ0ud4JAC1ExNKZb77ZbdvLRcYq6cO-J4",
+                              accept_language: "en-AU",
+                              country_code: "AU"
+                            },
+                            setup: [
+                              {
+                                id: "setup-login",
+                                name: "用户登录",
+                                request: {
+                                  method: "POST",
+                                  url: "https://au-api.onesimpleway.com/auth/user/login",
+                                  headers: {
+                                    Authorization: "{{initial_token}}",
+                                    "Accept-Language": "{{accept_language}}",
+                                    "current-country-code": "{{country_code}}",
+                                    "Content-Type": "application/json"
+                                  },
+                                  json: {
+                                    email: "bovime7960@kwifa.com",
+                                    password: "hyanjun546",
+                                    currentCountryCode: "AU",
+                                    currentCountryName: "Australia"
+                                  }
+                                },
+                                extract: [
+                                  {
+                                    name: "auth_token",
+                                    jsonpath: "$.data.token"
+                                  }
+                                ],
+                                assertions: [
+                                  {
+                                    type: "jsonpath",
+                                    expression: "$.code",
+                                    expected: 200
+                                  }
+                                ]
+                              }
+                            ],
+                            test_steps: [
+                              {
+                                id: "test-qry",
+                                name: "查询项目列表",
+                                request: {
+                                  method: "GET",
+                                  url: "https://au-api.onesimpleway.com/sketch/projects/qryList?pageNum=1&pageSize=20&total&companyId&type&status&time&sortFiled=signed_date&sortBy=desc&keyword",
+                                  headers: {
+                                    Authorization: "{{auth_token}}",
+                                    "Accept-Language": "{{accept_language}}",
+                                    "current-country-code": "{{country_code}}"
+                                  }
+                                },
+                                assertions: [
+                                  {
+                                    type: "jsonpath",
+                                    expression: "$.code",
+                                    expected: 200
+                                  }
+                                ]
+                              }
+                            ]
+                          };
+                          setVisualFormData(sampleData);
+                        }}
+                      >
+                        填充示例数据
+                      </Button>
+                    </div>
+                  </Card>
+                </Tabs.TabPane>
+              <Tabs.TabPane tab="代码编辑器" key="code">
+                <TextArea
+                  rows={20}
+                  placeholder={'在此处输入YAML或JSON格式的测试脚本，例如:\n\nname: 用户下单流程测试\ndescription: 完整用户注册-登录-下单流程\n\nvariables:\n  username: test_user_001\n  password: 123456\n\ntest_steps:\n  - name: 用户注册\n    request:\n      method: POST\n      url: https://api.example.com/register\n      json:\n        username: {{username}}\n        password: {{password}}\n    extract:\n      - name: user_id\n        jsonpath: $.data.user_id\n    assertions:\n      - type: status_code\n        expected: 200'}
+                  style={{ fontFamily: 'monospace', fontSize: 13 }}
+                  value={composeContent}
+                  onChange={(e) => setComposeContent(e.target.value)}
+                />
+              </Tabs.TabPane>
+            </Tabs>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 上传项目选择弹窗 */}
+      <Modal
+        title="上传脚本"
+        open={uploadProjectModalVisible}
+        onOk={confirmUpload}
+        onCancel={() => {
+          setUploadProjectModalVisible(false);
+          setPendingUploadFile(null);
+          uploadProjectForm.resetFields();
+        }}
+        okText="确认上传"
+        cancelText="取消"
+        width={400}
+      >
+        <Form form={uploadProjectForm} layout="vertical">
+          <Form.Item
+            name="name"
+            label="脚本名称"
+            rules={[{ required: true, message: '请输入脚本名称' }]}
+          >
+            <Input placeholder="脚本名称" />
+          </Form.Item>
+          <Form.Item
+            name="project"
+            label="所属项目"
+            rules={[{ required: true, message: '请选择项目' }]}
+          >
+            <Select placeholder="请选择项目">
+              {projectList.map(p => (
+                <Option key={p.id} value={p.id}>{p.name}</Option>
+              ))}
+            </Select>
           </Form.Item>
         </Form>
       </Modal>

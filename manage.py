@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
+from __future__ import annotations
+
 import os
 import sys
 import asyncio
+from typing import List
 
 # Windows上设置事件循环策略以支持Playwright（必须在导入Django之前）
 # Windows上使用默认的ProactorEventLoopPolicy
@@ -10,7 +13,7 @@ import asyncio
 # 不要设置SelectorEventLoopPolicy！
 
 
-def main():
+def main() -> None:
     """Run administrative tasks."""
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "testmanager.settings")
     try:

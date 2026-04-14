@@ -1,0 +1,546 @@
+- generic [active] [ref=e1]:
+  - link "Skip to main content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - navigation [ref=e3]:
+    - generic [ref=e4]:
+      - link "Home Postman" [ref=e7] [cursor=pointer]:
+        - /url: https://www.postman.com/
+        - generic [ref=e8]: Home
+        - img "Postman" [ref=e9]
+      - generic [ref=e10]:
+        - button "Toggle navigation menu" [ref=e11] [cursor=pointer]
+        - generic:
+          - generic:
+            - generic:
+              - button:
+                - generic: Product
+                - generic:
+                  - img
+              - generic:
+                - generic:
+                  - generic:
+                    - paragraph: Postman Platform
+                    - generic:
+                      - link:
+                        - /url: /new-postman/
+                        - generic:
+                          - paragraph: What's New
+                    - generic:
+                      - link:
+                        - /url: /security/
+                        - generic:
+                          - paragraph: Security
+                    - generic:
+                      - link:
+                        - /url: /product/integrations/
+                        - generic:
+                          - paragraph: Integrations
+                    - generic:
+                      - paragraph: Explore
+                    - generic:
+                      - link:
+                        - /url: https://www.postman.com/explore
+                        - generic:
+                          - paragraph: Postman API Network
+                    - generic:
+                      - link:
+                        - /url: https://www.postman.com/explore/mcp-servers
+                        - generic:
+                          - paragraph: MCP Catalog
+                  - generic:
+                    - generic:
+                      - generic:
+                        - paragraph: Design
+                        - generic:
+                          - generic:
+                            - link:
+                              - /url: /product/spec-hub/
+                              - generic:
+                                - paragraph: Spec Hub
+                                - paragraph: Manage specifications
+                          - generic:
+                            - link:
+                              - /url: /product/mock-servers/
+                              - generic:
+                                - paragraph: Mock Servers
+                                - paragraph: Validate API behavior
+                      - generic:
+                        - paragraph: Build
+                        - generic:
+                          - generic:
+                            - link:
+                              - /url: /product/workspaces/
+                              - generic:
+                                - paragraph: Workspaces
+                                - paragraph: Collaborate with teams
+                          - generic:
+                            - link:
+                              - /url: /product/flows/
+                              - generic:
+                                - paragraph: Flows
+                                - paragraph: Create visual workflows
+                          - generic:
+                            - link:
+                              - /url: /product/sdk-generator/
+                              - generic:
+                                - paragraph: SDK Generator
+                                - paragraph: Create production-ready SDKs
+                      - generic:
+                        - paragraph: Test
+                        - generic:
+                          - generic:
+                            - link:
+                              - /url: /product/api-client/
+                              - generic:
+                                - paragraph: API Client
+                                - paragraph: Send API requests
+                          - generic:
+                            - link:
+                              - /url: /product/collection-runner/
+                              - generic:
+                                - paragraph: Collection Runner
+                                - paragraph: Automate API workflows
+                          - generic:
+                            - link:
+                              - /url: /product/postman-cli/
+                              - generic:
+                                - paragraph: Postman CLI
+                                - paragraph: Run from command line
+                      - generic:
+                        - paragraph: Observe
+                        - generic:
+                          - generic:
+                            - link:
+                              - /url: /product/monitors/
+                              - generic:
+                                - paragraph: Monitors
+                                - paragraph: Validate performance
+                          - generic:
+                            - link:
+                              - /url: /product/postman-insights/
+                              - generic:
+                                - paragraph: Insights
+                                - paragraph: Track every endpoint
+                      - generic:
+                        - paragraph: Manage
+                        - generic:
+                          - generic:
+                            - link:
+                              - /url: /product/api-catalog/
+                              - generic:
+                                - paragraph: API Catalog
+                                - paragraph: Know every API and service
+                    - generic:
+                      - paragraph: AI
+                      - generic:
+                        - generic:
+                          - generic:
+                            - link:
+                              - /url: /product/agent-mode/
+                              - generic:
+                                - paragraph: Agent Mode
+                                - paragraph: Automate API tasks
+                          - generic:
+                            - link:
+                              - /url: /product/ai-agent-builder/
+                              - generic:
+                                - paragraph: AI Agent Builder
+                                - paragraph: Build AI agents
+                          - generic:
+                            - link:
+                              - /url: /product/mcp-server/
+                              - generic:
+                                - paragraph: Postman MCP Server
+                                - paragraph: Connect AI agents to your APIs
+            - generic:
+              - button:
+                - generic: Solutions
+                - generic:
+                  - img
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - link:
+                              - /url: /solutions/test-automation/
+                              - generic:
+                                - paragraph: Test Automation
+                                - paragraph: Create, run, and manage API tests at scale
+                          - generic:
+                            - link:
+                              - /url: /solutions/api-security/
+                              - generic:
+                                - paragraph: API Security
+                                - paragraph: Control access and manage secrets
+                      - generic:
+                        - generic:
+                          - generic:
+                            - link:
+                              - /url: /solutions/api-governance/
+                              - generic:
+                                - paragraph: API Governance
+                                - paragraph: Enforce API standards at scale
+                          - generic:
+                            - link:
+                              - /url: /solutions/api-documentation/
+                              - generic:
+                                - paragraph: API Documentation
+                                - paragraph: Instantly generate up-to-date docs
+                      - generic:
+                        - generic:
+                          - generic:
+                            - link:
+                              - /url: /solutions/api-distribution-reuse/
+                              - generic:
+                                - paragraph: API Distribution and Reuse
+                                - paragraph: Publish APIs internally or publicly
+            - link:
+              - /url: /pricing/
+              - text: Pricing
+            - link:
+              - /url: /postman-enterprise/
+              - text: Enterprise
+            - generic:
+              - button:
+                - generic: Resources
+                - generic:
+                  - img
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - paragraph: Learn
+                        - generic:
+                          - generic:
+                            - link:
+                              - /url: /learn/
+                              - generic:
+                                - paragraph: Learning Hub
+                          - generic:
+                            - link:
+                              - /url: https://learning.postman.com
+                              - generic:
+                                - paragraph: Docs
+                          - generic:
+                            - link:
+                              - /url: https://academy.postman.com
+                              - generic:
+                                - paragraph: Postman Academy
+                          - generic:
+                            - link:
+                              - /url: /templates/
+                              - generic:
+                                - paragraph: Templates
+                          - generic:
+                            - link:
+                              - /url: /customer-stories/
+                              - generic:
+                                - paragraph: Customer Stories
+                          - generic:
+                            - link:
+                              - /url: /postman-best-practices/
+                              - generic:
+                                - paragraph: Postman Best Practices
+                      - generic:
+                        - paragraph: Connect
+                        - generic:
+                          - generic:
+                            - link:
+                              - /url: https://community.postman.com
+                              - generic:
+                                - paragraph: Community
+                          - generic:
+                            - link:
+                              - /url: /events/
+                              - generic:
+                                - paragraph: Events
+                          - generic:
+                            - link:
+                              - /url: https://discord.com/invite/pqf9eVQwf7
+                              - generic:
+                                - paragraph: Discord
+                          - generic:
+                            - link:
+                              - /url: /product/mcp-server/
+                              - generic:
+                                - paragraph: Postman MCP Server
+                      - generic:
+                        - paragraph: Get Support
+                        - generic:
+                          - generic:
+                            - link:
+                              - /url: https://support.postman.com/hc/en-us/
+                              - generic:
+                                - paragraph: Support Center
+                          - generic:
+                            - link:
+                              - /url: /release-notes/
+                              - generic:
+                                - paragraph: Release Notes
+                          - generic:
+                            - link:
+                              - /url: https://status.postman.com
+                              - generic:
+                                - paragraph: Postman Status
+                          - generic:
+                            - link:
+                              - /url: /security/
+                              - generic:
+                                - paragraph: Security
+                      - generic:
+                        - paragraph: Postman
+                        - generic:
+                          - generic:
+                            - link:
+                              - /url: https://blog.postman.com
+                              - generic:
+                                - paragraph: Blog
+                          - generic:
+                            - link:
+                              - /url: /company/press-media/
+                              - generic:
+                                - paragraph: Press and Media
+                          - generic:
+                            - link:
+                              - /url: /company/about-postman/
+                              - generic:
+                                - paragraph: About Postman
+          - generic:
+            - link:
+              - /url: https://www.postman.com/company/contact-sales/
+              - generic:
+                - generic: Contact Sales
+            - link:
+              - /url: https://identity.getpostman.com/login?continue=https%3A%2F%2Fgo.postman.co%2Fhome
+              - generic:
+                - generic: Sign In
+            - link:
+              - /url: https://identity.getpostman.com/signup?continue=https%3A%2F%2Fgo.postman.co%2Fbuild
+              - generic:
+                - generic: Sign Up for Free
+  - main "Main content" [ref=e17]:
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic "Starburst" [ref=e22]
+        - paragraph [ref=e23]: A NEW POSTMAN IS HERE
+      - heading "The AI-native API Platform" [level=1] [ref=e24]
+      - paragraph [ref=e26]: Develop, test, manage, and distribute APIs and services. Built for engineers. Designed for enterprise scale.
+      - link "Try the New Postman" [ref=e28] [cursor=pointer]:
+        - /url: https://identity.getpostman.com/signup
+    - generic [ref=e35]:
+      - img "Microsoft Logo" [ref=e37]
+      - img "Meta Logo" [ref=e39]
+      - img "Salesforce Logo" [ref=e41]
+      - img "Mastercard Logo" [ref=e43]
+      - img "AWS Logo" [ref=e45]
+      - img "Cover Genius Logo" [ref=e47]
+      - img "Mercedes-Benz Logo" [ref=e49]
+      - img "Intuit Logo" [ref=e51]
+      - img "PayPal Logo" [ref=e53]
+      - img "HubSpot Logo" [ref=e55]
+      - img "Uber Logo" [ref=e57]
+      - img "Stripe Logo" [ref=e59]
+    - generic [ref=e104]:
+      - generic [ref=e105]:
+        - heading "The world's APIs are built and shipped on Postman." [level=2] [ref=e107]
+        - link "Sign Up for Free" [ref=e109] [cursor=pointer]:
+          - /url: https://identity.getpostman.com/signup
+          - generic [ref=e111]: Sign Up for Free
+      - img "API Design Example in Postman." [ref=e113]
+  - contentinfo [ref=e114]:
+    - generic [ref=e115]:
+      - generic [ref=e116]:
+        - img "Postman API Platform" [ref=e118]
+        - navigation "Product" [ref=e120]:
+          - heading "Product" [level=2] [ref=e121]
+          - list [ref=e122]:
+            - listitem [ref=e123]:
+              - link "Read more about Postman" [ref=e124] [cursor=pointer]:
+                - /url: /product/
+                - text: Postman Overview
+            - listitem [ref=e125]:
+              - link "Read more about Postman enterprise" [ref=e126] [cursor=pointer]:
+                - /url: /postman-enterprise/
+                - text: Enterprise
+            - listitem [ref=e127]:
+              - link "Read more about Postman Product Spec Hub" [ref=e128] [cursor=pointer]:
+                - /url: /product/spec-hub/
+                - generic [ref=e129]: Spec Hub
+            - listitem [ref=e130]:
+              - link "Read more about Postman Flows" [ref=e131] [cursor=pointer]:
+                - /url: /product/flows/
+                - text: Flows
+            - listitem [ref=e132]:
+              - link "Read more about Postman Agent Mode" [ref=e133] [cursor=pointer]:
+                - /url: /product/agent-mode/
+                - text: Agent Mode
+            - listitem [ref=e134]:
+              - link "Read more about Postman API Catalog" [ref=e135] [cursor=pointer]:
+                - /url: /product/api-catalog/
+                - text: API Catalog
+            - listitem [ref=e136]:
+              - link "Learn more about Fern" [ref=e137] [cursor=pointer]:
+                - /url: https://buildwithfern.com/
+                - text: Fern
+            - listitem [ref=e138]:
+              - link "Read more about Postman Client" [ref=e139] [cursor=pointer]:
+                - /url: /downloads/#work-with-postman-in-your-existing-tools
+                - text: Postman CLI
+            - listitem [ref=e140]:
+              - link "Read more about Postman integrations" [ref=e141] [cursor=pointer]:
+                - /url: /product/integrations/
+                - text: Integrations
+            - listitem [ref=e142]:
+              - link "Read more about Postman workspaces" [ref=e143] [cursor=pointer]:
+                - /url: /product/workspaces/
+                - text: Workspaces
+            - listitem [ref=e144]:
+              - link "Read more about Postman plans and pricing" [ref=e145] [cursor=pointer]:
+                - /url: /pricing/
+                - text: Plans and Pricing
+        - navigation "API Network" [ref=e147]:
+          - heading "API Network" [level=2] [ref=e148]
+          - list [ref=e149]:
+            - listitem [ref=e150]:
+              - link "App Security" [ref=e151] [cursor=pointer]:
+                - /url: https://www.postman.com/category/app-security/
+            - listitem [ref=e152]:
+              - link "Artificial Intelligence" [ref=e153] [cursor=pointer]:
+                - /url: https://www.postman.com/category/artificial-intelligence/
+            - listitem [ref=e154]:
+              - link "Communication" [ref=e155] [cursor=pointer]:
+                - /url: https://www.postman.com/category/communication/
+            - listitem [ref=e156]:
+              - link "Data Analytics" [ref=e157] [cursor=pointer]:
+                - /url: https://www.postman.com/category/data-analytics/
+            - listitem [ref=e158]:
+              - link "Database" [ref=e159] [cursor=pointer]:
+                - /url: https://www.postman.com/category/database-apis/
+            - listitem [ref=e160]:
+              - link "Developer Productivity" [ref=e161] [cursor=pointer]:
+                - /url: https://www.postman.com/category/developer-productivity/
+            - listitem [ref=e162]:
+              - link "DevOps" [ref=e163] [cursor=pointer]:
+                - /url: https://www.postman.com/category/devops/
+            - listitem [ref=e164]:
+              - link "E-Commerce" [ref=e165] [cursor=pointer]:
+                - /url: https://www.postman.com/category/e-commerce-apis/
+            - listitem [ref=e166]:
+              - link "eSignature" [ref=e167] [cursor=pointer]:
+                - /url: https://www.postman.com/category/e-signature-apis/
+            - listitem [ref=e168]:
+              - link "Financial Services" [ref=e169] [cursor=pointer]:
+                - /url: https://www.postman.com/category/financial-services/
+            - listitem [ref=e170]:
+              - link "Payments" [ref=e171] [cursor=pointer]:
+                - /url: https://www.postman.com/category/payments/
+            - listitem [ref=e172]:
+              - link "Travel" [ref=e173] [cursor=pointer]:
+                - /url: https://www.postman.com/category/travel-apis/
+        - navigation "Resources" [ref=e175]:
+          - heading "Resources" [level=2] [ref=e176]
+          - list [ref=e177]:
+            - listitem [ref=e178]:
+              - link "Postman Docs" [ref=e179] [cursor=pointer]:
+                - /url: https://learning.postman.com/docs/introduction/overview/
+            - listitem [ref=e180]:
+              - link "Academy" [ref=e181] [cursor=pointer]:
+                - /url: https://academy.postman.com/
+            - listitem [ref=e182]:
+              - link "Community" [ref=e183] [cursor=pointer]:
+                - /url: https://community.postman.com/
+            - listitem [ref=e184]:
+              - link "Templates" [ref=e185] [cursor=pointer]:
+                - /url: /templates/
+            - listitem [ref=e186]:
+              - link "Intergalactic" [ref=e187] [cursor=pointer]:
+                - /url: /events/intergalactic/
+            - listitem [ref=e188]:
+              - link "Videos" [ref=e189] [cursor=pointer]:
+                - /url: https://www.youtube.com/postman/
+            - listitem [ref=e190]:
+              - link "MCP Servers" [ref=e191] [cursor=pointer]:
+                - /url: https://www.postman.com/explore/mcp-servers
+        - navigation "Legal and Security" [ref=e193]:
+          - heading "Legal and Security" [level=2] [ref=e194]
+          - list [ref=e195]:
+            - listitem [ref=e196]:
+              - link "Read more about Postman's legal terms hub" [ref=e197] [cursor=pointer]:
+                - /url: /legal/
+                - text: Legal Terms Hub
+            - listitem [ref=e198]:
+              - link "Read more about Postman's terms'" [ref=e199] [cursor=pointer]:
+                - /url: /legal/terms/
+                - text: Terms of Service
+            - listitem [ref=e200]:
+              - link "Read more about Postman's product terms'" [ref=e201] [cursor=pointer]:
+                - /url: /legal/postman-product-terms/
+                - text: Postman Product Terms
+            - listitem [ref=e202]:
+              - link "Read more about Postman Security" [ref=e203] [cursor=pointer]:
+                - /url: /security/
+                - text: Security
+            - listitem [ref=e204]:
+              - link "Read more about website terms of use" [ref=e205] [cursor=pointer]:
+                - /url: /legal/postman-website-terms-of-use/
+                - text: Website Terms of Use
+        - navigation "Company" [ref=e207]:
+          - heading "Company" [level=2] [ref=e208]
+          - list [ref=e209]:
+            - listitem [ref=e210]:
+              - link "Read more about Postman, the company" [ref=e211] [cursor=pointer]:
+                - /url: /company/about-postman/
+                - text: About
+            - listitem [ref=e212]:
+              - link "Read more about careers and culture at Postman" [ref=e213] [cursor=pointer]:
+                - /url: /company/careers/
+                - text: Careers and Culture
+            - listitem [ref=e214]:
+              - link "Contact us at Postman" [ref=e215] [cursor=pointer]:
+                - /url: /company/contact-us/
+                - text: Contact Us
+            - listitem [ref=e216]:
+              - link "Read more about the Partner Program for Postman" [ref=e217] [cursor=pointer]:
+                - /url: /partner-program/
+                - text: Partner Program
+            - listitem [ref=e218]:
+              - link "Read more about Postman customers and their stories" [ref=e219] [cursor=pointer]:
+                - /url: /customer-stories/
+                - text: Customer Stories
+            - listitem [ref=e220]:
+              - link "Read more about press and media for Postman" [ref=e221] [cursor=pointer]:
+                - /url: /company/press-media/
+                - text: Press and Media
+      - generic [ref=e222]:
+        - link "Follow Postman on X" [ref=e223] [cursor=pointer]:
+          - /url: https://x.com/getpostman
+          - img "X icon" [ref=e224]
+        - link "Follow Postman on Linked In" [ref=e225] [cursor=pointer]:
+          - /url: https://www.linkedin.com/company/postman-platform
+          - img "LinkedIn icon" [ref=e226]
+        - link "Contribute to Postman on Git Hub" [ref=e227] [cursor=pointer]:
+          - /url: https://github.com/postmanlabs
+          - img "Github icon" [ref=e228]
+        - link "Watch our Postman You Tube channel" [ref=e229] [cursor=pointer]:
+          - /url: https://www.youtube.com/postman
+          - img "YouTube icon" [ref=e230]
+        - link "Follow Postman on Instagram" [ref=e231] [cursor=pointer]:
+          - /url: https://www.instagram.com/getpostman
+          - img "Instagram icon" [ref=e232]
+        - link "Follow Postman on Discord" [ref=e233] [cursor=pointer]:
+          - /url: https://discord.gg/rKZgwpZqqV
+          - img "Discord icon" [ref=e234]
+      - separator [ref=e235]
+      - generic [ref=e236]:
+        - link "Download Postman" [ref=e238] [cursor=pointer]:
+          - /url: /downloads/
+        - link "Read more about Postman's privacy policy" [ref=e240] [cursor=pointer]:
+          - /url: https://privacy.postman.com/policies/
+          - text: Privacy Policy
+        - button "Manage your cookie and privacy preferences" [ref=e242] [cursor=pointer]: Cookie Preferences
+        - paragraph [ref=e244]: © 2026 Postman, Inc.
+  - alert [ref=e245]

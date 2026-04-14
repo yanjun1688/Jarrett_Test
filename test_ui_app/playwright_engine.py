@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # 不要设置SelectorEventLoopPolicy，会导致NotImplementedError（不支持子进程）
 
 
-def create_windows_compatible_event_loop():
+def create_windows_compatible_event_loop() -> asyncio.AbstractEventLoop:
     """
     创建与Windows兼容的事件循环（用于Playwright）
     
@@ -49,11 +49,11 @@ class PlaywrightEngine:
     - PlaywrightRecorder 类已废弃，请使用 SyncBrowserRecorder
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
-        self.playwright = None
+        self.playwright: Any = None
         self.screenshots_dir = Path(settings.BASE_DIR) / 'media' / 'ui_test_screenshots'
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
     
@@ -103,7 +103,7 @@ class PlaywrightEngine:
     
     async def initialize(self, browser_type: str = 'chromium', headless: bool = True,
                         viewport_width: int = 1280, viewport_height: int = 720,
-                        timeout: int = 30000):
+                        timeout: int = 30000) -> bool:
         """
         初始化浏览器
         
@@ -120,87 +120,28 @@ class PlaywrightEngine:
         Raises:
             Exception: 初始化失败
         """
-        # #region agent log
-        import json, time
-        log_path = r'd:\Project\JTest\.cursor\debug.log'
-        # #endregion
-        
         try:
             # Windows上Playwright需要ProactorEventLoopPolicy（默认）
             # 不要设置SelectorEventLoopPolicy，会导致NotImplementedError
             
-            # #region agent log
-            with open(log_path, 'a', encoding='utf-8') as f:
-                policy = asyncio.get_event_loop_policy().__class__.__name__
-                f.write(json.dumps({
-                    'id': 'log_004',
-                    'timestamp': time.time() * 1000,
-                    'location': 'playwright_engine.py:127',
-                    'message': 'Playwright初始化前的事件循环策略',
-                    'data': {'policy': policy},
-                    'sessionId': 'debug-session',
-                    'runId': 'post-fix',
-                    'hypothesisId': 'C'
-                }) + '\n')
-            # #endregion
-            
             # 添加超时保护防止卡死
             try:
-                # #region agent log
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({
-                        'id': 'log_005',
-                        'timestamp': time.time() * 1000,
-                        'location': 'playwright_engine.py:139',
-                        'message': '开始启动Playwright驱动',
-                        'data': {'browser_type': browser_type, 'headless': headless},
-                        'sessionId': 'debug-session',
-                        'runId': 'post-fix',
-                        'hypothesisId': 'C'
-                    }) + '\n')
-                # #endregion
-                
                 self.playwright = await asyncio.wait_for(
-    async_playwright().start(),
+                    async_playwright().start(),
                     timeout=15.0
                 )
-                
-                # #region agent log
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({
-                        'id': 'log_006',
-                        'timestamp': time.time() * 1000,
-                        'location': 'playwright_engine.py:151',
-                        'message': 'Playwright驱动启动成功',
-                        'data': {},
-                        'sessionId': 'debug-session',
-                        'runId': 'post-fix',
-                        'hypothesisId': 'C'
-                    }) + '\n')
-                # #endregion
             except asyncio.TimeoutError:
-                # #region agent log
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({
-                        'id': 'log_007',
-                        'timestamp': time.time() * 1000,
-                        'location': 'playwright_engine.py:157',
-                        'message': 'Playwright初始化超时',
-                        'data': {},
-                        'sessionId': 'debug-session',
-                        'runId': 'post-fix',
-                        'hypothesisId': 'C'
-                    }) + '\n')
-                # #endregion
                 raise Exception("Playwright初始化超时（15秒），请检查安装：playwright install")
             
             browser_map = {
-                'chromium': self.playwright.chromium,
-                'firefox': self.playwright.firefox,
-                'webkit': self.playwright.webkit,
+                'chromium': self.playwright.chromium if self.playwright else None,
+                'firefox': self.playwright.firefox if self.playwright else None,
+                'webkit': self.playwright.webkit if self.playwright else None,
             }
             
-            browser_launcher = browser_map.get(browser_type, self.playwright.chromium)
+            browser_launcher = browser_map.get(browser_type, self.playwright.chromium if self.playwright else None)
+            if browser_launcher is None:
+                raise Exception("Playwright浏览器启动器未初始化")
             self.browser = await browser_launcher.launch(headless=headless)
             
             self.context = await self.browser.new_context(
@@ -212,22 +153,6 @@ class PlaywrightEngine:
             logger.info(f"Playwright引擎初始化成功: {browser_type}, headless={headless}")
             return True
         except Exception as e:
-            # #region agent log
-            try:
-                with open(log_path, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({
-                        'id': 'log_008',
-                        'timestamp': time.time() * 1000,
-                        'location': 'playwright_engine.py:180',
-                        'message': 'Playwright初始化异常',
-                        'data': {'error_type': type(e).__name__, 'error': str(e)},
-                        'sessionId': 'debug-session',
-                        'runId': 'post-fix',
-                        'hypothesisId': 'C'
-                    }) + '\n')
-            except:
-                pass
-            # #endregion
             logger.error(f"Playwright引擎初始化失败: {str(e)}")
             raise
     
@@ -273,10 +198,10 @@ class PlaywrightEngine:
             logger.warning(f"未知的选择器类型: {selector_type}，将作为CSS选择器使用")
             return selector_value
     
-    def _get_semantic_locator(self, selector: Optional[Dict[str, Any]]):
+    def _get_semantic_locator(self, selector: Optional[Dict[str, Any]]) -> Any:
         """
         获取语义化定位器 - 遵循Playwright最佳实践
-        
+
         优先级顺序：
         1. testid: get_by_test_id() - 专门用于测试的标识
         2. role: get_by_role() - 基于ARIA角色的语义化定位
@@ -284,50 +209,62 @@ class PlaywrightEngine:
         4. text: get_by_text() - 基于文本内容定位
         5. placeholder: get_by_placeholder() - 基于占位符定位
         6. id/name/css: locator() - 传统CSS选择器
-        
+
+        支持index字段：当选择器有index时，使用.nth(index)选择第几个匹配元素
+
         Args:
-            selector: 选择器对象，格式为 {'type': 'xxx', 'value': 'xxx'}
-            
+            selector: 选择器对象，格式为 {'type': 'xxx', 'value': 'xxx', 'index': 0}
+
         Returns:
             Locator: Playwright Locator对象
-            
+
         Raises:
             ValueError: selector格式错误或page未初始化
         """
         if not self.page:
             raise RuntimeError("页面未初始化")
-        
+
         if not selector:
             raise ValueError("selector不能为空")
-        
-        # 支持两种格式：旧格式(locator_type/locator_value)和新格式(type/value)
+
         selector_type = selector.get('type') or selector.get('locator_type')
         selector_value = selector.get('value') or selector.get('locator_value')
-        
+        element_index = selector.get('index')
+
         if not selector_type or not selector_value:
             raise ValueError(f"selector格式错误: {selector}")
-        
-        # 使用Playwright语义化定位器
+
         if selector_type == 'testid':
-            return self.page.get_by_test_id(selector_value)
+            locator = self.page.get_by_test_id(selector_value)
         elif selector_type == 'role':
-            return self.page.get_by_role(selector_value)
+            role_name = selector.get('name')
+            if role_name:
+                locator = self.page.get_by_role(selector_value, name=role_name)
+            else:
+                locator = self.page.get_by_role(selector_value)
         elif selector_type == 'label':
-            return self.page.get_by_label(selector_value)
+            locator = self.page.get_by_label(selector_value)
         elif selector_type == 'text':
-            return self.page.get_by_text(selector_value, exact=False)
+            locator = self.page.get_by_text(selector_value, exact=False)
         elif selector_type == 'placeholder':
-            return self.page.get_by_placeholder(selector_value)
+            locator = self.page.get_by_placeholder(selector_value)
+        elif selector_type == 'aria-label':
+            locator = self.page.locator(f"[aria-label='{selector_value}']")
         elif selector_type == 'id':
-            return self.page.locator(f"#{selector_value}")
+            locator = self.page.locator(f"#{selector_value}")
         elif selector_type == 'name':
-            return self.page.locator(f"[name='{selector_value}']")
+            locator = self.page.locator(f"[name='{selector_value}']")
         elif selector_type == 'css':
-            return self.page.locator(selector_value)
+            locator = self.page.locator(selector_value)
         else:
-            # 未知类型，尝试作为CSS选择器
             logger.warning(f"未知的选择器类型: {selector_type}，将作为CSS选择器使用")
-            return self.page.locator(selector_value)
+            locator = self.page.locator(selector_value)
+        
+        if element_index is not None:
+            locator = locator.nth(element_index)
+            logger.debug(f"[Locator] 使用 .nth({element_index}) 选择第 {element_index + 1} 个匹配元素")
+        
+        return locator
     
     def _get_locator_description(self, selector: Optional[Dict[str, Any]]) -> str:
         """
@@ -355,6 +292,7 @@ class PlaywrightEngine:
             'label': 'label',
             'text': 'text',
             'placeholder': 'placeholder',
+            'aria-label': 'aria-label',
             'id': 'id',
             'name': 'name',
             'css': 'css'
@@ -380,10 +318,12 @@ class PlaywrightEngine:
         timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
         filename = f"{name}_{timestamp}.png"
         filepath = self.screenshots_dir / filename
+        if self.page is None:
+            raise RuntimeError("页面未初始化")
         await self.page.screenshot(path=str(filepath))
         return str(filepath.relative_to(settings.BASE_DIR))
     
-    async def cleanup(self):
+    async def cleanup(self) -> None:
         """
         清理资源（带超时保护）
         

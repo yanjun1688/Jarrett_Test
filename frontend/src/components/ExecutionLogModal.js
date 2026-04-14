@@ -1,6 +1,7 @@
 /**
  * 统一执行日志弹窗组件
  * 支持 API 测试、UI 测试、集合执行三种类型
+ * 配合后端同步执行优化，无需复杂轮询机制
  */
 import React from 'react';
 import { Modal, Button, Space, Row, Col, Card, Tag, Typography, Divider, Table, Progress } from 'antd';
@@ -251,7 +252,7 @@ const ExecutionLogModal = ({
           {isRunning ? '后台执行' : '关闭'}
         </Button>,
       ]}
-      width={900}
+      width={1000}
       destroyOnClose
     >
       <Space direction="vertical" className="ui-test-space-vertical" size="middle" style={{ width: '100%' }}>
@@ -318,19 +319,19 @@ const ExecutionLogModal = ({
             </Row>
           )}
 
-          {/* 进度条 */}
+          {/* 进度条 - 适配同步执行 */}
           {isRunning && executionType === 'collection' && (
             <Progress percent={progress} status="active" style={{ marginTop: 12 }} />
           )}
-          {!isRunning && (status === 'passed' || status === 'success') && (
+          {!isRunning && status === 'passed' && (
             <Progress percent={100} status="success" style={{ marginTop: 12 }} />
           )}
           {!isRunning && (status === 'failed' || status === 'error') && (
-            <Progress percent={100} status="exception" style={{ marginTop: 12 }} />
+            <Progress percent={Math.round((passedCount / Math.max(totalCount, 1)) * 100)} status="exception" style={{ marginTop: 12 }} />
           )}
         </Card>
 
-        {/* 断言结果（API 测试） */}
+        {/* 断言结果（API 测试） - 简化逻辑，适配后端同步结果 */}
         {executionType === 'api' && assertions && assertions.length > 0 && (
           <>
             <Divider style={{ margin: '12px 0' }} />
@@ -339,19 +340,28 @@ const ExecutionLogModal = ({
               columns={assertionColumns}
               dataSource={assertions.map((a, i) => ({ ...a, key: a.id || i }))}
               size="small"
-              pagination={false}
+              pagination={{ pageSize: 10 }}
               scroll={{ x: 700 }}
             />
           </>
         )}
 
-        {/* 执行日志 */}
+        {/* 执行日志 - 改良显示 */}
         {logs && (
           <>
             <Divider style={{ margin: '12px 0' }} />
             <Title level={5}>执行日志</Title>
-            <Card className="ui-test-log-card">
-              <pre className="ui-test-log-pre">
+            <Card 
+              className="ui-test-log-card"
+              bodyStyle={{ 
+                maxHeight: 250,
+                overflow: 'auto',
+                fontSize: 12,
+                backgroundColor: '#f5f5f5',
+                fontFamily: 'monospace'
+              }}
+            >
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                 {formatLogs()}
               </pre>
             </Card>
@@ -366,13 +376,15 @@ const ExecutionLogModal = ({
             <Card 
               size="small"
               bodyStyle={{ 
-                maxHeight: 200, 
+                maxHeight: 300, 
                 overflow: 'auto', 
                 backgroundColor: '#f0f2f5',
-                padding: 12
+                padding: 12,
+                fontFamily: 'monospace',
+                fontSize: 12
               }}
             >
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 12 }}>
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
                 {formatResponseBody()}
               </pre>
             </Card>
@@ -394,13 +406,14 @@ const ExecutionLogModal = ({
                         alt={`截图 ${idx + 1}`}
                         src={screenshot.startsWith('http') || screenshot.startsWith('/') ? screenshot : `/media/${screenshot}`}
                         className="ui-test-screenshot-img"
+                        style={{ maxHeight: 200, objectFit: 'contain' }}
                       />
                     }
                   >
                     <Card.Meta
                       description={
                         <Text ellipsis className="ui-test-screenshot-text">
-                          {screenshot}
+                          {screenshot.split('/').pop()}
                         </Text>
                       }
                     />
@@ -416,8 +429,16 @@ const ExecutionLogModal = ({
           <>
             <Divider style={{ margin: '12px 0' }} />
             <Title level={5}>错误信息</Title>
-            <Card className="ui-test-error-card">
-              <pre className="ui-test-error-pre">
+            <Card 
+              className="ui-test-error-card"
+              bodyStyle={{ 
+                backgroundColor: '#fff1f0',
+                border: '1px solid #ffa39e',
+                fontFamily: 'monospace',
+                fontSize: 12 
+              }}
+            >
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#cf1322' }}>
                 {errorMessage}
               </pre>
             </Card>

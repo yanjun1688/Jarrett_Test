@@ -1,5 +1,6 @@
 import apiClient from './axios';
 
+// 简化版请求集合API，配合后端重构的集合执行优化
 export const requestCollectionsAPI = {
   // 获取所有请求集合
   getAll: (params = {}) => {
@@ -22,10 +23,10 @@ export const requestCollectionsAPI = {
   // 删除请求集合
   delete: (id) => apiClient.delete(`/request-collections/${id}/`),
 
-  // 执行请求集合
+  // 执行请求集合 - 使用简化逻辑，支持后台任务执行
   execute: (id) => apiClient.post(`/request-collections/${id}/execute/`),
 
-  // YAML配置相关
+  // YAML配置相关 - 简化错误处理
   yamlToCollection: (projectId, data) => apiClient.post(`/projects/${projectId}/yaml-to-collection/`, data),
 
   validateYaml: (projectId, data) => apiClient.post(`/projects/${projectId}/yaml/validate/`, data),

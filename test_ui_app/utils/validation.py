@@ -1,6 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Tuple
+
 from .validators.script_validator import ScriptValidator, ValidationError
 
-def validate_script_actions(script):
+if TYPE_CHECKING:
+    from test_ui_app.models import UITestScript
+
+
+def validate_script_actions(script: UITestScript) -> Tuple[bool, str | None]:
     """
     统一的脚本验证逻辑
     

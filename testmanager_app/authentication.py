@@ -19,13 +19,10 @@ class ExpiringTokenAuthentication(authentication.TokenAuthentication):
         except self.model.DoesNotExist:
             raise exceptions.AuthenticationFailed('Invalid token.')
         
-        # 检查token是否过期
         if token.is_expired():
-            # 删除过期的token
             token.delete()
             raise exceptions.AuthenticationFailed('Token has expired.')
         
-        # 更新最后使用时间
         token.last_used = timezone.now()
         token.save(update_fields=['last_used'])
         

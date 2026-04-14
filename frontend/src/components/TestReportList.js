@@ -1,15 +1,16 @@
-import React, { useReducer, useEffect, useCallback, useState, useMemo, memo } from 'react';
+import React, { useReducer, useEffect, useCallback, useState, useMemo, useRef } from 'react';
 import axios from 'axios';
 import apiClient from '../api/axios';
 import { Row, Col, Card, Statistic, Progress, Typography, Space, notification, Tabs, Table, Tag, Button, Spin } from 'antd';
 import ExecutionPieChart from './ExecutionPieChart';
 import { testExecutionsAPI } from '../api/testExecutions';
 import { uiTestsAPI } from '../api/uiTests';
-import { EXECUTION_STATUS, EXECUTION_STATUS_COLORS } from '../constants';
+import { chatbotAPI } from '../api/chatbot';
+import { EXECUTION_STATUS } from '../constants';
 import ExecutionLogModal from './ExecutionLogModal';
 import '../css/TestReportList.css';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 const { TabPane } = Tabs;
 
 const initialState = {
@@ -38,8 +39,66 @@ function reducer(state, action) {
 }
 
 function TestReportList() {
+  // 统一数据规范化函数
+  const normalizeExecutionRecord = useCallback((record, type) => {
+    const testName = type === 'api' 
+      ? record.api_request_name 
+      : type === 'ui' 
+        ? record.script_name 
+        : record.title;
+    
+    const executorName = type === 'api' 
+      ? record.executor_name 
+      : type === 'ui' 
+        ? record.executed_by_username 
+        : null;
+    
+    const executedTime = type === 'ui' && record.created_at 
+      ? record.created_at 
+      : record.executed_at;
+
+    return {
+      ...record,
+      test_name: testName,
+      executor_name: executorName,
+      executed_at: executedTime,
+    };
+  }, []);
+
   const [state, dispatch] = useReducer(reducer, initialState);
   const { statistics, loading } = state;
+  
+  // 根据URL参数设置默认tab
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'statistics';
+  });
+
+  // ChatBot执行日志相关状态（需要在useEffect之前定义）
+  const [chatbotLogs, setChatbotLogs] = useState([]);
+  const [chatbotLogsLoading, setChatbotLogsLoading] = useState(false);
+  const [chatbotLogsPagination, setChatbotLogsPagination] = useState({
+    current: 1,
+    pageSize: 20,
+    total: 0,
+  });
+
+  // 监听URL参数变化
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab && tab !== activeTab) {
+        setActiveTab(tab);
+        if (tab === 'chatbot-logs' && chatbotLogs.length === 0 && fetchChatbotLogsRef.current) {
+          fetchChatbotLogsRef.current(1, 20);
+        }
+      }
+    };
+    
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeTab, chatbotLogs.length]);
   
   // API测试日志相关状态
   const [apiLogs, setApiLogs] = useState([]);
@@ -100,7 +159,8 @@ function TestReportList() {
       });
       
       const { results, count } = response.data;
-      setApiLogs(results || []);
+      const normalizedData = (results || []).map(record => normalizeExecutionRecord(record, 'api'));
+      setApiLogs(normalizedData);
       setApiLogsPagination(prev => ({
         ...prev,
         current: page,
@@ -114,7 +174,7 @@ function TestReportList() {
     } finally {
       setApiLogsLoading(false);
     }
-  }, []);
+  }, [normalizeExecutionRecord]);
 
   // 获取UI测试日志列表
   const fetchUiTestLogs = useCallback(async (page = 1, pageSize = 20) => {
@@ -126,7 +186,8 @@ function TestReportList() {
       });
       
       const { results, count } = response.data;
-      setUiLogs(results || []);
+      const normalizedData = (results || []).map(record => normalizeExecutionRecord(record, 'ui'));
+      setUiLogs(normalizedData);
       setUiLogsPagination(prev => ({
         ...prev,
         current: page,
@@ -140,10 +201,42 @@ function TestReportList() {
     } finally {
       setUiLogsLoading(false);
     }
+  }, [normalizeExecutionRecord]);
+
+  // 获取ChatBot执行日志列表
+  const fetchChatbotLogs = useCallback(async (page = 1, pageSize = 20) => {
+    setChatbotLogsLoading(true);
+    try {
+      const response = await chatbotAPI.getExecutionLogs({
+        page,
+        page_size: pageSize,
+      });
+      
+      const { logs, total } = response.data.data;
+      setChatbotLogs(logs || []);
+      setChatbotLogsPagination(prev => ({
+        ...prev,
+        current: page,
+        pageSize,
+        total: total || 0,
+      }));
+    } catch (error) {
+      if (!axios.isCancel(error)) {
+        notification.error({ message: '获取ChatBot执行日志失败', description: error.message });
+      }
+    } finally {
+      setChatbotLogsLoading(false);
+    }
   }, []);
 
+  // 用于解决 useEffect 依赖引用问题的 ref
+  const fetchChatbotLogsRef = useRef(null);
+  useEffect(() => {
+    fetchChatbotLogsRef.current = fetchChatbotLogs;
+  }, [fetchChatbotLogs]);
+
   // 查看API测试详细日志
-  const handleViewApiLog = async (record) => {
+  const handleViewApiLog = useCallback(async (record) => {
     setSelectedLog(record);
     setLogType('api');
     setLogModalVisible(true);
@@ -151,17 +244,17 @@ function TestReportList() {
     setLogDetail(null);
     
     try {
-      const response = await testExecutionsAPI.getAction(record.id, 'logs');
+      const response = await testExecutionsAPI.getById(record.id);
       setLogDetail(response.data);
     } catch (error) {
       notification.error({ message: '获取日志详情失败', description: error.message });
     } finally {
       setLogDetailLoading(false);
     }
-  };
-
+  }, []);
+  
   // 查看UI测试详细日志
-  const handleViewUiLog = async (record) => {
+  const handleViewUiLog = useCallback(async (record) => {
     setSelectedLog(record);
     setLogType('ui');
     setLogModalVisible(true);
@@ -176,7 +269,7 @@ function TestReportList() {
     } finally {
       setLogDetailLoading(false);
     }
-  };
+  }, []);
 
   // 处理API测试日志分页变化
   const handleApiTableChange = (pagination) => {
@@ -188,12 +281,12 @@ function TestReportList() {
     fetchUiTestLogs(pagination.current, pagination.pageSize);
   };
 
-  // API测试日志表格列定义 - 使用useMemo优化
+  // API测试日志表格列定义 - 使用统一配置
   const apiLogsColumns = useMemo(() => [
     {
       title: 'API名称',
-      dataIndex: 'api_request_name',
-      key: 'api_request_name',
+      dataIndex: 'test_name',
+      key: 'test_name',
       render: (text) => <strong>{text}</strong>,
     },
     {
@@ -227,9 +320,11 @@ function TestReportList() {
         const statusMap = {
           [EXECUTION_STATUS.PASSED]: { color: 'success', text: '通过' },
           [EXECUTION_STATUS.FAILED]: { color: 'error', text: '失败' },
-          pending: { color: 'default', text: '待执行' },
-          blocked: { color: 'warning', text: '阻塞' },
-          skipped: { color: 'default', text: '跳过' },
+          [EXECUTION_STATUS.PENDING]: { color: 'default', text: '待执行' },
+          [EXECUTION_STATUS.RUNNING]: { color: 'processing', text: '执行中' },
+          'pending': { color: 'default', text: '待执行' },
+          'blocked': { color: 'warning', text: '阻塞' },
+          'skipped': { color: 'default', text: '跳过' },
         };
         const config = statusMap[status] || { color: 'default', text: status };
         return <Tag color={config.color}>{config.text}</Tag>;
@@ -240,13 +335,14 @@ function TestReportList() {
       dataIndex: 'executor_name',
       key: 'executor_name',
       width: 100,
+      render: (name) => name || '-',
     },
     {
       title: '执行时间',
       dataIndex: 'executed_at',
       key: 'executed_at',
       width: 180,
-      render: (text) => new Date(text).toLocaleString(),
+      render: (text) => text ? new Date(text).toLocaleString() : '-',
     },
     {
       title: '操作',
@@ -260,12 +356,12 @@ function TestReportList() {
     },
   ], [handleViewApiLog]);
 
-  // UI测试日志表格列定义 - 使用useMemo优化
+  // UI测试日志表格列定义 - 使用统一配置
   const uiLogsColumns = useMemo(() => [
     {
       title: '脚本名称',
-      dataIndex: 'script_name',
-      key: 'script_name',
+      dataIndex: 'test_name',
+      key: 'test_name',
       render: (text) => <strong>{text}</strong>,
     },
     {
@@ -279,7 +375,9 @@ function TestReportList() {
           [EXECUTION_STATUS.FAILED]: { color: 'error', text: '失败' },
           [EXECUTION_STATUS.PENDING]: { color: 'default', text: '待执行' },
           [EXECUTION_STATUS.RUNNING]: { color: 'processing', text: '执行中' },
-          skipped: { color: 'default', text: '跳过' },
+          'pending': { color: 'default', text: '待执行' },
+          'blocked': { color: 'warning', text: '阻塞' },
+          'skipped': { color: 'default', text: '跳过' },
         };
         const config = statusMap[status] || { color: 'default', text: status };
         return <Tag color={config.color}>{config.text}</Tag>;
@@ -287,16 +385,17 @@ function TestReportList() {
     },
     {
       title: '执行人',
-      dataIndex: 'executed_by_username',
-      key: 'executed_by_username',
+      dataIndex: 'executor_name',
+      key: 'executor_name',
       width: 100,
+      render: (name) => name || '-',
     },
     {
       title: '执行时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
+      dataIndex: 'executed_at',
+      key: 'executed_at',
       width: 180,
-      render: (text) => new Date(text).toLocaleString(),
+      render: (text) => text ? new Date(text).toLocaleString() : '-',
     },
     {
       title: '操作',
@@ -314,11 +413,14 @@ function TestReportList() {
     <Space direction="vertical" size="large" className="test-report-container">
       <Title level={2}>测试报告</Title>
 
-      <Tabs defaultActiveKey="statistics" onChange={(key) => {
+      <Tabs activeKey={activeTab} onChange={(key) => {
+        setActiveTab(key);
         if (key === 'api-logs' && apiLogs.length === 0) {
           fetchApiTestLogs(1, 20);
         } else if (key === 'ui-logs' && uiLogs.length === 0) {
           fetchUiTestLogs(1, 20);
+        } else if (key === 'chatbot-logs' && chatbotLogs.length === 0) {
+          fetchChatbotLogs(1, 20);
         }
       }}>
         <TabPane tab="测试统计" key="statistics">
@@ -401,6 +503,61 @@ function TestReportList() {
             />
           </Card>
         </TabPane>
+        
+        <TabPane tab="ChatBot执行日志" key="chatbot-logs">
+          <Card>
+            <Table
+              columns={[
+                {
+                  title: '类型',
+                  dataIndex: 'log_type',
+                  key: 'log_type',
+                  width: 100,
+                  render: (type) => {
+                    const typeMap = {
+                      'skill': <Tag color="purple">Skill</Tag>,
+                      'api_test': <Tag color="blue">API测试</Tag>,
+                      'ui_test': <Tag color="green">UI测试</Tag>,
+                    };
+                    return typeMap[type] || <Tag>{type}</Tag>;
+                  },
+                },
+                {
+                  title: '标题',
+                  dataIndex: 'title',
+                  key: 'title',
+                  width: 250,
+                },
+                {
+                  title: '消息',
+                  dataIndex: 'message',
+                  key: 'message',
+                  ellipsis: true,
+                },
+                {
+                  title: '执行时间',
+                  dataIndex: 'created_at',
+                  key: 'created_at',
+                  width: 180,
+                  render: (text) => text ? new Date(text).toLocaleString() : '-',
+                },
+              ]}
+              dataSource={chatbotLogs}
+              loading={chatbotLogsLoading}
+              rowKey="id"
+              pagination={{
+                current: chatbotLogsPagination.current,
+                pageSize: chatbotLogsPagination.pageSize,
+                total: chatbotLogsPagination.total,
+                showSizeChanger: true,
+                showTotal: (total) => `共 ${total} 条记录`,
+                pageSizeOptions: ['10', '20', '50', '100'],
+              }}
+              onChange={(pagination) => fetchChatbotLogs(pagination.current, pagination.pageSize)}
+              scroll={{ x: 'max-content' }}
+            />
+          </Card>
+        </TabPane>
       </Tabs>
 
       {/* 日志详情Modal */}
@@ -454,4 +611,4 @@ function TestReportList() {
   );
 }
 
-export default React.memo(TestReportList);
+export default TestReportList;

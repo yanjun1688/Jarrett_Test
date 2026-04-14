@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import logger from '../utils/logger';
 import {
   Card,
@@ -17,14 +17,12 @@ import {
   Form,
   Input,
   Checkbox,
-  Divider,
 } from 'antd';
 import {
   UploadOutlined,
   FileTextOutlined,
   CheckCircleOutlined,
   LoadingOutlined,
-  SettingOutlined,
   SaveOutlined,
 } from '@ant-design/icons';
 import { processPRD } from '../api/aiAgent';
@@ -32,57 +30,14 @@ import { featureTestsAPI } from '../api/featureTests';
 
 const { Title, Text, Paragraph } = Typography;
 const { Panel } = Collapse;
-const STORAGE_KEY = 'ai_analysis_config';
 
 function AiTestCaseAnalysis() {
   const [loading, setLoading] = useState(false);
   const [testSuites, setTestSuites] = useState([]);
   const [fileList, setFileList] = useState([]);
-  const [configModalVisible, setConfigModalVisible] = useState(false);
-  const [configForm] = Form.useForm();
   const [selectedTestCases, setSelectedTestCases] = useState(new Set());
   const [saveModalVisible, setSaveModalVisible] = useState(false);
   const [saveForm] = Form.useForm();
-
-  // 加载配置
-  useEffect(() => {
-    const savedConfig = localStorage.getItem(STORAGE_KEY);
-    if (!savedConfig) {
-      // 如果没有保存的配置，显示配置弹窗
-      setConfigModalVisible(true);
-    } else {
-      try {
-        const config = JSON.parse(savedConfig);
-        configForm.setFieldsValue(config);
-      } catch (e) {
-        logger.error('Failed to load config:', e);
-      }
-    }
-  }, [configForm]);
-
-  // 获取配置
-  const getConfig = () => {
-    const savedConfig = localStorage.getItem(STORAGE_KEY);
-    if (savedConfig) {
-      try {
-        return JSON.parse(savedConfig);
-      } catch (e) {
-        return null;
-      }
-    }
-    return null;
-  };
-
-  // 保存配置
-  const handleSaveConfig = () => {
-    configForm.validateFields().then((values) => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(values));
-      message.success('配置已保存');
-      setConfigModalVisible(false);
-    }).catch((error) => {
-      logger.error('Config validation failed:', error);
-    });
-  };
 
   // 处理文件上传和分析
   const handleProcessPRD = async (file) => {
@@ -91,20 +46,12 @@ function AiTestCaseAnalysis() {
       return;
     }
 
-    // 检查配置
-    const config = getConfig();
-    if (!config || !config.api_key || !config.api_key.trim()) {
-      message.error('请先配置有效的 Key 和 Value');
-      setConfigModalVisible(true);
-      return;
-    }
-
     setLoading(true);
     setTestSuites([]);
     setSelectedTestCases(new Set());
 
     try {
-      const response = await processPRD(file, config.api_key);
+      const response = await processPRD(file);
       
       if (response.success && response.data && response.data.test_suites) {
         setTestSuites(response.data.test_suites);
@@ -336,47 +283,6 @@ function AiTestCaseAnalysis() {
         上传PRD文档（PDF/Word/TXT），AI将自动分析并生成测试用例
       </Paragraph>
 
-      {/* 配置弹窗 */}
-      <Modal
-        title={
-          <Space>
-            <SettingOutlined />
-            <span>AI模型配置</span>
-          </Space>
-        }
-        open={configModalVisible}
-        onOk={handleSaveConfig}
-        onCancel={() => {
-          const config = getConfig();
-          if (config && config.api_key) {
-            setConfigModalVisible(false);
-          } else {
-            message.warning('请先配置有效的 Key 和 Value');
-          }
-        }}
-        okText="保存配置"
-        cancelText="跳过"
-        width={600}
-      >
-        <Form form={configForm} layout="vertical">
-          <Form.Item
-            name="api_key"
-            label="API Key"
-            rules={[
-              { required: true, message: '请输入API Key' },
-              { min: 10, message: 'API Key长度至少10个字符' },
-            ]}
-          >
-            <Input.Password placeholder="请输入OpenAI API Key" />
-          </Form.Item>
-          <Form.Item name="api_value" label="API Value (可选)">
-            <Input placeholder="可选：API Value或其他配置参数" />
-          </Form.Item>
-          <Paragraph type="secondary" style={{ marginTop: '16px' }}>
-            <Text type="warning">注意：</Text>配置信息将保存在浏览器本地存储中，不会上传到服务器。
-          </Paragraph>
-        </Form>
-      </Modal>
 
       <Card style={{ marginBottom: '24px' }}>
         <Space direction="vertical" style={{ width: '100%' }} size="large">
@@ -400,12 +306,6 @@ function AiTestCaseAnalysis() {
               disabled={loading || fileList.length === 0}
             >
               {loading ? 'AI分析中...' : '开始分析'}
-            </Button>
-            <Button
-              icon={<SettingOutlined />}
-              onClick={() => setConfigModalVisible(true)}
-            >
-              配置
             </Button>
             {testSuites.length > 0 && (
               <Button

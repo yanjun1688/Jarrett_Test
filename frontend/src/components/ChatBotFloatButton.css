@@ -1,0 +1,68 @@
+/* ChatBot 悬浮按钮样式 */
+
+.chatbot-float-button-container {
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  z-index: 1000;
+}
+
+.chatbot-float-button {
+  width: 56px;
+  height: 56px;
+  font-size: 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chatbot-float-button:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 6px 16px rgba(102,1026, 234, 0.6);
+}
+
+.chatbot-float-button:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* 呼吸动画 */
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  }
+  50% {
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.6);
+  }
+}
+
+.chatbot-float-button.pulsing {
+  animation: pulse 2s infinite;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .chatbot-float-button-container {
+    bottom: 20px;
+    right: 20px;
+  }
+  
+  .chatbot-float-button {
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+  }
+}
+
+/* 徽章样式覆盖 */
+.chatbot-float-button-container .ant-badge {
+  display: block;
+}
+
+.chatbot-float-button-container .ant-badge .ant-badge-count {
+  background: #ff4d4f;
+  box-shadow: 0 2px 4px rgba(255, 77, 79, 0.4);
+}

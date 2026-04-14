@@ -15,6 +15,7 @@ import {
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, UserOutlined } from '@ant-design/icons';
 import apiClient from '../api/axios';
+import logger from '../utils/logger';
 
 const { Option } = Select;
 const { Title, Text } = Typography;
@@ -25,7 +26,7 @@ const MemberManager = () => {
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [userLoading, setUserLoading] = useState(false);
-  const [roleLoading, setRoleLoading] = useState(false);
+  const [roleLoading] = useState(false);
   const [form] = Form.useForm();
 
   // 获取用户列表
@@ -43,7 +44,9 @@ const MemberManager = () => {
   };
 
   // 获取角色列表
+  // TODO: Backend API not implemented - /roles/ endpoint missing
   const fetchRoles = async () => {
+    /*
     setRoleLoading(true);
     try {
       const response = await apiClient.get('/roles/');
@@ -54,6 +57,8 @@ const MemberManager = () => {
     } finally {
       setRoleLoading(false);
     }
+    */
+    setRoles([]);
   };
 
   // 打开弹窗
@@ -98,7 +103,10 @@ const MemberManager = () => {
   };
 
   // 分配角色给用户
+  // TODO: Backend API not implemented - /users/{id}/assign-role/ endpoint missing
   const handleAssignRole = async (userId, roleId) => {
+    message.warning('角色分配功能暂不可用，后端 API 未实现');
+    /*
     try {
       await apiClient.post(`/users/${userId}/assign-role/`, { role_id: roleId });
       message.success('角色分配成功');
@@ -107,10 +115,14 @@ const MemberManager = () => {
       message.error('角色分配失败: ' + (error.response?.data?.error || '未知错误'));
       logger.error('Error assigning role:', error);
     }
+    */
   };
 
   // 移除用户的角色
+  // TODO: Backend API not implemented - /users/{id}/remove-role/{roleId}/ endpoint missing
   const handleRemoveRole = async (userId, roleId) => {
+    message.warning('角色移除功能暂不可用，后端 API 未实现');
+    /*
     try {
       await apiClient.delete(`/users/${userId}/remove-role/${roleId}/`);
       message.success('角色移除成功');
@@ -119,6 +131,7 @@ const MemberManager = () => {
       message.error('角色移除失败');
       logger.error('Error removing role:', error);
     }
+    */
   };
 
   // 权限标签颜色

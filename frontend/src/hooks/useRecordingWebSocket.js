@@ -1,3 +1,8 @@
+/**
+ * WebSocket Hook for Recording - DISABLED
+ * 
+ * 保留用于将来可能的双向通信场景。
+ */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import logger from '../utils/logger';
 
@@ -177,7 +182,7 @@ export const useRecordingWebSocket = (sessionId, autoConnect = false) => {
 
     setConnected(false);
     reconnectAttemptsRef.current = maxReconnectAttempts; // 阻止自动重连
-  }, []);
+  }, [stopHeartbeat]);
 
   // 发送消息
   const sendMessage = useCallback((message) => {

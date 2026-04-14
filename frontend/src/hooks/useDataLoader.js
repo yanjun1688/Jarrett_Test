@@ -14,7 +14,6 @@ import { handleApiError } from '../utils/errorHandler';
  */
 function useDataLoader(apiFunction, options = {}) {
   const {
-    autoLoad = false,
     showErrorNotification = true,
     initialData = null,
   } = options;

@@ -4,7 +4,7 @@ Base ViewSets and Mixins for testmanager_app
 """
 
 from rest_framework import viewsets
-from testmanager_app.permissions import RoleBasedPermission
+from testmanager_app.permissions import IsSuperUser
 
 
 class BaseViewSet(viewsets.ModelViewSet):
@@ -12,10 +12,10 @@ class BaseViewSet(viewsets.ModelViewSet):
     基础ViewSet，统一定义权限和数据创建逻辑
 
     特性：
-    - 自动设置 permission_classes = [RoleBasedPermission]
+    - 自动设置 permission_classes = [IsSuperUser]
     - 自动填充 created_by / executor 字段
     """
-    permission_classes = [RoleBasedPermission]
+    permission_classes = [IsSuperUser]
 
     def perform_create(self, serializer):
         """
@@ -44,7 +44,7 @@ class BaseViewSet(viewsets.ModelViewSet):
             # 如果无法获取模型，尝试保存 created_by
             try:
                 serializer.save(created_by=user)
-            except:
+            except Exception:
                 # 如果失败，不设置创建者
                 serializer.save()
 
@@ -75,8 +75,8 @@ class QueryOptimizerMixin:
 
         继承类无需重写此方法，只需声明上面的字段列表即可
         """
-        # 从父类或自身获取queryset
-        queryset = super().get_queryset() if hasattr(super(), 'get_queryset') else self.queryset
+        # 从父类获取queryset
+        queryset = super().get_queryset()
 
         # 自动应用select_related优化
         if self.select_related_fields:
@@ -98,69 +98,87 @@ class CommonFilterMixin:
 
     支持的过滤类型：
     - filter_int_fields: 整数字段精确匹配（?project=1&module=2）
-    - filter_str_fields: 字符串包含查询（?name=xxx）
-    - filter_choice_fields: 选项字段过滤（?status=pending）
-    - filter_related_icontains: 关联字段模糊查询（?project__name__icontains=xxx）
-
-    示例：
-        class MyViewSet(CommonFilterMixin, QueryOptimizerMixin, BaseViewSet):
-            queryset = MyModel.objects.all()
-
-            filter_int_fields = ['project', 'module']
-            filter_str_fields = ['name', 'description']
-            filter_choice_fields = {'status': ['pending', 'passed', 'failed']}
-            filter_related_icontains = ['project__name', 'module__name']
+    - filter_str_fields: 字符串段精确匹配（?name=test）
+    - filter_choice_fields: 选项段精确匹配（?status=pending）
+    - filter_bool_fields: 布尔段匹配（?is_active=true）
+    - filter_related_icontains: 关联模型字段的模糊搜索（?project__name__icontains=xxx）
+    - filter_date_range: 日期范围过滤（?date_from=2024-01-01&date_to=2024-12-31）
     """
 
-    # 整数字段精确匹配（会从query_params获取并转换为int）
+    # 整数段过滤器配置（字段名列表）
     filter_int_fields = []
 
-    # 字符串字段包含查询（使用__icontains）
+    # 字符串字段过滤器配置（字段名列表）
     filter_str_fields = []
 
-    # 选项字段及可选值（字典：字段名 -> 可选值列表）
+    # 选项字段过滤器配置（字段名: 可选值列表）
     filter_choice_fields = {}
 
-    # 关联字段模糊查询（使用__icontains）
+    # 布尔字段过滤器配置（字段名列表）
+    filter_bool_fields = []
+
+    # 关联模型字段的模糊搜索配置（字段名列表，如 'project__name'）
     filter_related_icontains = []
+
+    # 日期范围过滤器配置（字段名列表）
+    filter_date_range = []
 
     def get_queryset(self):
         """
-        应用通用过滤器
+        自动应用所有配置的过滤器
 
-        会自动处理上述声明的过滤字段
+        子类可以重写此方法来添加自定义过滤逻辑，
+        但要记得调用 super().get_queryset() 来应用这里的通用过滤器
         """
-        # 先调用父类的get_queryset（可能是QueryOptimizerMixin）
-        queryset = super().get_queryset() if hasattr(super(), 'get_queryset') else self.queryset
+        queryset = super().get_queryset()
 
-        # 导入工具函数
-        from testmanager_app.viewsets.filters import safe_get_int_param, safe_get_str_param, safe_get_choice_param
-
-        # 整数字段精确匹配（?project=1&module=2）
+        # 整数段精确匹配
         for field in self.filter_int_fields:
-            value = safe_get_int_param(self.request, field)
-            if value is not None:
-                queryset = queryset.filter(**{field: value})
+            value = self.request.query_params.get(field)
+            if value:
+                try:
+                    queryset = queryset.filter(**{field: int(value)})
+                except (ValueError, TypeError):
+                    pass
 
-        # 字符串字段包含查询（?name=xxx&description=yyy）
+        # 字符串字段精确匹配
         for field in self.filter_str_fields:
-            value = safe_get_str_param(self.request, field)
-            if value is not None:
-                queryset = queryset.filter(**{f"{field}__icontains": value})
-
-        # 选项字段过滤（?status=pending）
-        for field, choices in self.filter_choice_fields.items():
-            value = safe_get_choice_param(self.request, field, choices)
-            if value is not None:
+            value = self.request.query_params.get(field)
+            if value:
                 queryset = queryset.filter(**{field: value})
 
-        # 关联字段模糊查询（?project__name__icontains=xxx）
-        # query_params格式: project__name__icontains (双下划线)
+        # 选项字段精确匹配
+        for field, choices in self.filter_choice_fields.items():
+            value = self.request.query_params.get(field)
+            if value and value in choices:
+                queryset = queryset.filter(**{field: value})
+
+        # 布尔字段匹配
+        for field in self.filter_bool_fields:
+            value = self.request.query_params.get(field)
+            if value:
+                queryset = queryset.filter(**{field: value.lower() == 'true'})
+
+        # 关联模型字段的模糊搜索（icontains）
         for field in self.filter_related_icontains:
-            # 将 model字段格式(project__name) 转换为 query_params格式(project__name__icontains)
-            query_param = f"{field}__icontains"
-            value = safe_get_str_param(self.request, query_param)
-            if value is not None:
+            value = self.request.query_params.get(field)
+            if value:
                 queryset = queryset.filter(**{f"{field}__icontains": value})
+
+        # 日期范围过滤
+        for field in self.filter_date_range:
+            from_param = f"{field}_from"
+            to_param = f"{field}_to"
+            from_value = self.request.query_params.get(from_param)
+            to_value = self.request.query_params.get(to_param)
+
+            if from_value or to_value:
+                filter_dict = {}
+                if from_value:
+                    filter_dict[f"{field}__gte"] = from_value
+                if to_value:
+                    filter_dict[f"{field}__lte"] = to_value
+                if filter_dict:
+                    queryset = queryset.filter(**filter_dict)
 
         return queryset

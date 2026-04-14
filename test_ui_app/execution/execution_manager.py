@@ -6,7 +6,7 @@ import asyncio
 import tempfile
 import shutil
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from asgiref.sync import sync_to_async
 from django.utils import timezone
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class ExecutionManager:
     """执行管理器"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.validator = ScriptValidator()
         self.runner = ActionRunner()
 
@@ -185,7 +185,7 @@ class ExecutionManager:
 
     async def _execute_core(
         self, script: UITestScript, execution: UITestExecution,
-        actions: list, work_dir: Path
+        actions: List[Dict[str, Any]], work_dir: Path
     ) -> Dict[str, Any]:
         """
         执行核心流程（公共逻辑提取）
@@ -235,7 +235,7 @@ class ExecutionManager:
             'message': '执行完成'
         }
 
-    async def _cleanup_resources(self, work_dir: Optional[Path]):
+    async def _cleanup_resources(self, work_dir: Optional[Path]) -> None:
         """清理资源"""
         try:
             print(f"[UITest] 清理资源...", flush=True)
@@ -252,9 +252,9 @@ class ExecutionManager:
             print(f"[UITest] [ERROR] 资源清理失败: {str(e)}", flush=True)
             logger.error(f"资源清理失败: {str(e)}")
 
-    async def _update_execution_status(self, execution: UITestExecution, status: str):
+    async def _update_execution_status(self, execution: UITestExecution, status: str) -> None:
         """更新执行记录状态"""
-        def _update():
+        def _update() -> None:
             execution.status = status
             if status == 'running' and not execution.started_at:
                 execution.started_at = timezone.now()
@@ -264,14 +264,14 @@ class ExecutionManager:
 
     async def _get_script(self, script_id: int) -> UITestScript:
         """获取脚本对象"""
-        def _get():
+        def _get() -> UITestScript:
             return UITestScript.objects.get(id=script_id)
 
         return await sync_to_async(_get, thread_sensitive=True)()
 
     async def _create_execution(self, script: UITestScript, user_id: Optional[int]) -> UITestExecution:
         """创建执行记录"""
-        def _create():
+        def _create() -> UITestExecution:
             from django.contrib.auth.models import User
             executed_by = None
             if user_id:
@@ -291,14 +291,14 @@ class ExecutionManager:
 
     async def _get_execution(self, execution_id: int) -> UITestExecution:
         """获取执行记录"""
-        def _get():
+        def _get() -> UITestExecution:
             return UITestExecution.objects.get(id=execution_id)
 
         return await sync_to_async(_get, thread_sensitive=True)()
 
-    async def _mark_execution_failed(self, execution: UITestExecution, error_msg: str):
+    async def _mark_execution_failed(self, execution: UITestExecution, error_msg: str) -> None:
         """标记执行失败"""
-        def _mark():
+        def _mark() -> None:
             execution.status = 'failed'
             execution.error_message = error_msg
             execution.completed_at = timezone.now()
@@ -317,9 +317,9 @@ class ExecutionManager:
         work_dir = tempfile.mkdtemp(prefix="execution_", dir=str(base_dir))
         return Path(work_dir)
 
-    async def _cleanup_work_directory(self, work_dir: Path):
+    async def _cleanup_work_directory(self, work_dir: Path) -> None:
         """清理工作目录"""
-        def _cleanup():
+        def _cleanup() -> None:
             if work_dir and work_dir.exists():
                 shutil.rmtree(work_dir, ignore_errors=True)
 

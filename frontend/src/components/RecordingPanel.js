@@ -26,6 +26,8 @@ import {
   CloseCircleOutlined,
 } from '@ant-design/icons';
 import { uiTestsAPI } from '../api/uiTests';
+import { useProjects } from '../hooks/useProjects';
+import ProjectSelect from './FormFields/ProjectSelect';
 
 const { Text, Title } = Typography;
 
@@ -39,6 +41,8 @@ const { Text, Title } = Typography;
  * 4. 保存脚本 (saving阶段)
  */
 const RecordingPanel = ({ visible, onClose, onSave }) => {
+  const { projects, loading: projectsLoading } = useProjects();
+  
   // 阶段状态：'config' | 'recording' | 'saving'
   const [stage, setStage] = useState('config');
   const [isLoading, setIsLoading] = useState(false);
@@ -211,7 +215,7 @@ const RecordingPanel = ({ visible, onClose, onSave }) => {
       await uiTestsAPI.createScript({
         name: values.scriptName,
         description: values.description || '',
-        project_id: values.project || null,
+        project: values.project || null,
         browser_type: configForm.getFieldValue('browserType') || 'chromium',
         actions: actions,
       });
@@ -470,6 +474,11 @@ const RecordingPanel = ({ visible, onClose, onSave }) => {
         <Form.Item label="详细描述" name="description">
           <Input.TextArea rows={3} />
         </Form.Item>
+        <ProjectSelect 
+          projects={projects} 
+          required={true}
+          loading={projectsLoading}
+        />
         <div style={{ textAlign: 'right', marginTop: 24 }}>
           <Space>
             <Button onClick={() => setStage('recording')}>返回调整步骤</Button>

@@ -1,0 +1,46 @@
+[tool.mypy]
+python_version = "3.11"
+plugins = [
+    "mypy_django_plugin.main",
+    "mypy_drf_plugin.main",
+]
+
+# 严格模式
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unreachable = true
+
+# 忽略的文件
+exclude = [
+    "venv",
+    ".venv",
+    "node_modules",
+    "migrations",
+    "tests",
+    ".agents",
+    "skills",
+]
+
+# 忽略缺失的 imports（针对第三方库）
+ignore_missing_imports = true
+
+# 显示错误代码
+show_error_codes = true
+show_column_numbers = true
+
+# 类型注解要求
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+
+# 其他配置
+implicit_optional = true
+strict_optional = true
+warn_no_return = true
+
+[tool.django-stubs]
+django_settings_module = "testmanager.settings"
+strict_settings = false

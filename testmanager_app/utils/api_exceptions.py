@@ -4,7 +4,10 @@
 提供自定义业务异常类和统一的异常处理装饰器
 """
 
+from __future__ import annotations
+
 from functools import wraps
+from typing import Any, Callable, Optional, TypeVar, Union
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -15,19 +18,21 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+F = TypeVar('F', bound=Callable[..., Any])
+
 
 class BusinessException(Exception):
     """业务异常基类"""
-    def __init__(self, message, code=None, status_code=status.HTTP_400_BAD_REQUEST):
-        self.message = message
-        self.code = code
-        self.status_code = status_code
+    def __init__(self, message: str, code: Optional[str] = None, status_code: int = status.HTTP_400_BAD_REQUEST):
+        self.message: str = message
+        self.code: Optional[str] = code
+        self.status_code: int = status_code
         super().__init__(self.message)
 
 
 class ResourceNotFoundException(BusinessException):
     """资源未找到异常"""
-    def __init__(self, resource_name, resource_id):
+    def __init__(self, resource_name: str, resource_id: Union[int, str]):
         super().__init__(
             message=f"{resource_name} (ID: {resource_id}) 未找到",
             code="RESOURCE_NOT_FOUND",
@@ -37,7 +42,7 @@ class ResourceNotFoundException(BusinessException):
 
 class ValidationFailedException(BusinessException):
     """验证失败异常"""
-    def __init__(self, detail):
+    def __init__(self, detail: Any):
         super().__init__(
             message=str(detail),
             code="VALIDATION_FAILED",
@@ -47,7 +52,7 @@ class ValidationFailedException(BusinessException):
 
 class DuplicateResourceException(BusinessException):
     """重复资源异常"""
-    def __init__(self, resource_name, field, value):
+    def __init__(self, resource_name: str, field: str, value: Any):
         super().__init__(
             message=f"{resource_name} 已存在: {field}={value}",
             code="DUPLICATE_RESOURCE",
@@ -57,7 +62,7 @@ class DuplicateResourceException(BusinessException):
 
 class PermissionDeniedException(BusinessException):
     """权限不足异常"""
-    def __init__(self, message="权限不足"):
+    def __init__(self, message: str = "权限不足"):
         super().__init__(
             message=message,
             code="PERMISSION_DENIED",
@@ -65,7 +70,7 @@ class PermissionDeniedException(BusinessException):
         )
 
 
-def api_exception_handler(func):
+def api_exception_handler(func: F) -> F:
     """
     统一API异常处理装饰器（同步方法）
 
@@ -75,10 +80,10 @@ def api_exception_handler(func):
             ...
     """
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         # 获取请求对象和执行的函数名
-        request = None
-        func_name = func.__name__
+        request: Any = None
+        func_name: str = func.__name__
 
         # 从args中查找request对象（支持函数视图和类方法视图）
         for arg in args:
@@ -87,7 +92,7 @@ def api_exception_handler(func):
                 break
 
         # 生成请求ID用于日志追踪
-        request_id = f"req_{id(request)}" if request else f"func_{id(func)}"
+        request_id: str = f"req_{id(request)}" if request else f"func_{id(func)}"
 
         try:
             logger.debug(f"[API] 开始执行 {func_name} - RequestID: {request_id}")
@@ -146,7 +151,7 @@ def api_exception_handler(func):
     return wrapper
 
 
-def async_api_exception_handler(func):
+def async_api_exception_handler(func: F) -> F:
     """
     统一的异步API异常处理装饰器
 
@@ -156,16 +161,16 @@ def async_api_exception_handler(func):
             ...
     """
     @wraps(func)
-    async def wrapper(*args, **kwargs):
-        request = None
-        func_name = func.__name__
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        request: Any = None
+        func_name: str = func.__name__
 
         for arg in args:
             if hasattr(arg, 'user'):
                 request = arg
                 break
 
-        request_id = f"req_{id(request)}" if request else f"func_{id(func)}"
+        request_id: str = f"req_{id(request)}" if request else f"func_{id(func)}"
 
         try:
             logger.debug(f"[API] 开始执行异步方法 {func_name} - RequestID: {request_id}")

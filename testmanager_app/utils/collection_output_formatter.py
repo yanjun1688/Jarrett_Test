@@ -4,6 +4,8 @@
 提供集合执行结果的格式化输出，支持清晰的请求分离和详细信息展示
 """
 
+from __future__ import annotations
+
 import json
 from datetime import datetime
 from typing import List, Dict, Any

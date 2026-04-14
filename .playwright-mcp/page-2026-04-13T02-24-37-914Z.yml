@@ -1,0 +1,113 @@
+- generic [ref=e3]:
+  - generic:
+    - generic [ref=e6]:
+      - link "新闻" [ref=e7] [cursor=pointer]:
+        - /url: http://news.baidu.com
+      - link "hao123" [ref=e8] [cursor=pointer]:
+        - /url: https://www.hao123.com?src=from_pc
+      - link "地图" [ref=e9] [cursor=pointer]:
+        - /url: http://map.baidu.com
+      - link "贴吧" [ref=e10] [cursor=pointer]:
+        - /url: http://tieba.baidu.com/
+      - link "视频" [ref=e11] [cursor=pointer]:
+        - /url: https://haokan.baidu.com/?sfrom=baidu-top
+      - link "图片" [ref=e12] [cursor=pointer]:
+        - /url: http://image.baidu.com/
+      - link "网盘" [ref=e13] [cursor=pointer]:
+        - /url: https://pan.baidu.com?from=1026962h
+      - link "文库" [ref=e14] [cursor=pointer]:
+        - /url: https://wenku.baidu.com/?fr=bdpcindex
+      - link "文心" [ref=e15] [cursor=pointer]:
+        - /url: https://chat.baidu.com/search?isShowHello=1&pd=csaitab&setype=csaitab&extParamsJson=%7B%22enter_type%22%3A%22home_tab%22%7D
+      - link "更多" [ref=e17] [cursor=pointer]:
+        - /url: http://www.baidu.com/more/
+    - generic [ref=e18]:
+      - generic [ref=e19] [cursor=pointer]: 设置
+      - link "登录" [ref=e20] [cursor=pointer]:
+        - /url: https://passport.baidu.com/v2/?login&tpl=mn&u=http%3A%2F%2Fwww.baidu.com%2F&sms=5
+  - generic [ref=e23]:
+    - generic [ref=e24]:
+      - img [ref=e25]
+      - generic:
+        - link "点击一下，了解更多":
+          - /url: //www.baidu.com/s?wd=%E7%99%BE%E5%BA%A6%E7%83%AD%E6%90%9C&sa=ire_dl_gh_logo_texing&rsv_dl=igh_logo_pcs
+    - generic [ref=e30]:
+      - generic [ref=e33]:
+        - textbox "姚敏学同志逝世" [active] [ref=e35]
+        - generic [ref=e37]:
+          - generic [ref=e38]:
+            - img [ref=e46] [cursor=pointer]
+            - generic [ref=e49]:
+              - img [ref=e53] [cursor=pointer]
+              - img [ref=e58] [cursor=pointer]
+          - button "百度一下" [ref=e62] [cursor=pointer]
+      - link "复杂问题就找文心助手，深入思考回答更优 " [ref=e66] [cursor=pointer]:
+        - /url: https://chat.baidu.com/search?extParams=%7B%22enter_type%22%3A%22home_operate%22%7D&isShowHello=1
+        - img [ref=e67]
+        - generic [ref=e68]:
+          - generic [ref=e69]: 复杂问题就找文心助手，深入思考回答更优
+          - generic [ref=e70]: 
+    - generic [ref=e73]:
+      - generic [ref=e74]:
+        - link "百度热搜":
+          - /url: https://top.baidu.com/board?platform=pc&sa=pcindex_entry
+          - generic "百度热搜" [ref=e75] [cursor=pointer]: 
+        - generic [ref=e76] [cursor=pointer]:
+          - generic [ref=e77]: 
+          - text: 换一换
+      - list:
+        - listitem [ref=e78]:
+          - link " 习近平主席寄望中美青年" [ref=e79] [cursor=pointer]:
+            - /url: https://www.baidu.com/s?wd=%E4%B9%A0%E8%BF%91%E5%B9%B3%E4%B8%BB%E5%B8%AD%E5%AF%84%E6%9C%9B%E4%B8%AD%E7%BE%8E%E9%9D%92%E5%B9%B4&sa=fyb_n_homepage&rsv_dl=fyb_n_homepage&from=super&cl=3&tn=baidutop10&fr=top1000&rsv_idx=2&hisfilter=1
+            - generic [ref=e80]: 
+            - text: 习近平主席寄望中美青年
+        - listitem [ref=e82]:
+          - link "5 马斯克的“西方微信”要上线了" [ref=e83] [cursor=pointer]:
+            - /url: https://www.baidu.com/s?wd=%E9%A9%AC%E6%96%AF%E5%85%8B%E7%9A%84%E2%80%9C%E8%A5%BF%E6%96%B9%E5%BE%AE%E4%BF%A1%E2%80%9D%E8%A6%81%E4%B8%8A%E7%BA%BF%E4%BA%86&sa=fyb_n_homepage&rsv_dl=fyb_n_homepage&from=super&cl=3&tn=baidutop10&fr=top1000&rsv_idx=2&hisfilter=1
+            - generic [ref=e84]: "5"
+            - text: 马斯克的“西方微信”要上线了
+        - listitem [ref=e86]:
+          - link "1 欧尔班败选" [ref=e87] [cursor=pointer]:
+            - /url: https://www.baidu.com/s?wd=%E6%AC%A7%E5%B0%94%E7%8F%AD%E8%B4%A5%E9%80%89&sa=fyb_n_homepage&rsv_dl=fyb_n_homepage&from=super&cl=3&tn=baidutop10&fr=top1000&rsv_idx=2&hisfilter=1
+            - generic [ref=e88]: "1"
+            - text: 欧尔班败选
+          - generic [ref=e89]: 热
+        - listitem [ref=e90]:
+          - link "6 伊朗公布驱离美军舰视频" [ref=e91] [cursor=pointer]:
+            - /url: https://www.baidu.com/s?wd=%E4%BC%8A%E6%9C%97%E5%85%AC%E5%B8%83%E9%A9%B1%E7%A6%BB%E7%BE%8E%E5%86%9B%E8%88%B0%E8%A7%86%E9%A2%91&sa=fyb_n_homepage&rsv_dl=fyb_n_homepage&from=super&cl=3&tn=baidutop10&fr=top1000&rsv_idx=2&hisfilter=1
+            - generic [ref=e92]: "6"
+            - text: 伊朗公布驱离美军舰视频
+          - generic [ref=e93]: 热
+        - listitem [ref=e94]:
+          - link "2 两车剐蹭藏族大哥坚持赔偿 女子婉拒" [ref=e95] [cursor=pointer]:
+            - /url: https://www.baidu.com/s?wd=%E4%B8%A4%E8%BD%A6%E5%89%90%E8%B9%AD%E8%97%8F%E6%97%8F%E5%A4%A7%E5%93%A5%E5%9D%9A%E6%8C%81%E8%B5%94%E5%81%BF+%E5%A5%B3%E5%AD%90%E5%A9%89%E6%8B%92&sa=fyb_n_homepage&rsv_dl=fyb_n_homepage&from=super&cl=3&tn=baidutop10&fr=top1000&rsv_idx=2&hisfilter=1
+            - generic [ref=e96]: "2"
+            - text: 两车剐蹭藏族大哥坚持赔偿 女子婉拒
+          - generic [ref=e97]: 热
+        - listitem [ref=e98]:
+          - link "7 吉尔吉斯斯坦前总理：这对中国不公平" [ref=e99] [cursor=pointer]:
+            - /url: https://www.baidu.com/s?wd=%E5%90%89%E5%B0%94%E5%90%89%E6%96%AF%E6%96%AF%E5%9D%A6%E5%89%8D%E6%80%BB%E7%90%86%EF%BC%9A%E8%BF%99%E5%AF%B9%E4%B8%AD%E5%9B%BD%E4%B8%8D%E5%85%AC%E5%B9%B3&sa=fyb_n_homepage&rsv_dl=fyb_n_homepage&from=super&cl=3&tn=baidutop10&fr=top1000&rsv_idx=2&hisfilter=1
+            - generic [ref=e100]: "7"
+            - text: 吉尔吉斯斯坦前总理：这对中国不公平
+        - listitem [ref=e102]:
+          - link "3 4K修复中国人首飞太空画面" [ref=e103] [cursor=pointer]:
+            - /url: https://www.baidu.com/s?wd=4K%E4%BF%AE%E5%A4%8D%E4%B8%AD%E5%9B%BD%E4%BA%BA%E9%A6%96%E9%A3%9E%E5%A4%AA%E7%A9%BA%E7%94%BB%E9%9D%A2&sa=fyb_n_homepage&rsv_dl=fyb_n_homepage&from=super&cl=3&tn=baidutop10&fr=top1000&rsv_idx=2&hisfilter=1
+            - generic [ref=e104]: "3"
+            - text: 4K修复中国人首飞太空画面
+        - listitem [ref=e106]:
+          - link "8 男子被老鼠咬10天后确诊鼠咬热" [ref=e107] [cursor=pointer]:
+            - /url: https://www.baidu.com/s?wd=%E7%94%B7%E5%AD%90%E8%A2%AB%E8%80%81%E9%BC%A0%E5%92%AC10%E5%A4%A9%E5%90%8E%E7%A1%AE%E8%AF%8A%E9%BC%A0%E5%92%AC%E7%83%AD&sa=fyb_n_homepage&rsv_dl=fyb_n_homepage&from=super&cl=3&tn=baidutop10&fr=top1000&rsv_idx=2&hisfilter=1
+            - generic [ref=e108]: "8"
+            - text: 男子被老鼠咬10天后确诊鼠咬热
+          - generic [ref=e109]: 新
+        - listitem [ref=e110]:
+          - link "4 张雪笑谈超越本田夺冠：神也不过如此" [ref=e111] [cursor=pointer]:
+            - /url: https://www.baidu.com/s?wd=%E5%BC%A0%E9%9B%AA%E7%AC%91%E8%B0%88%E8%B6%85%E8%B6%8A%E6%9C%AC%E7%94%B0%E5%A4%BA%E5%86%A0%EF%BC%9A%E7%A5%9E%E4%B9%9F%E4%B8%8D%E8%BF%87%E5%A6%82%E6%AD%A4&sa=fyb_n_homepage&rsv_dl=fyb_n_homepage&from=super&cl=3&tn=baidutop10&fr=top1000&rsv_idx=2&hisfilter=1
+            - generic [ref=e112]: "4"
+            - text: 张雪笑谈超越本田夺冠：神也不过如此
+          - generic [ref=e113]: 热
+        - listitem [ref=e114]:
+          - link "9 每天做好这3件事能延寿近10年" [ref=e115] [cursor=pointer]:
+            - /url: https://www.baidu.com/s?wd=%E6%AF%8F%E5%A4%A9%E5%81%9A%E5%A5%BD%E8%BF%993%E4%BB%B6%E4%BA%8B%E8%83%BD%E5%BB%B6%E5%AF%BF%E8%BF%9110%E5%B9%B4&sa=fyb_n_homepage&rsv_dl=fyb_n_homepage&from=super&cl=3&tn=baidutop10&fr=top1000&rsv_idx=2&hisfilter=1
+            - generic [ref=e116]: "9"
+            - text: 每天做好这3件事能延寿近10年
