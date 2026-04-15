@@ -60,7 +60,7 @@ class ProcessPRDView(APIView):
 
             # 文件大小限制
             if uploaded_file.size is None:
-                return JsonResponse({
+                return JsonResponse({  # type: ignore[unreachable]
                     'success': False,
                     'error': 'Invalid file: size is None'
                 }, status=400)

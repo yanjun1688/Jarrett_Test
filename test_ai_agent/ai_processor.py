@@ -1,3 +1,7 @@
+"""
+AI处理器 - 处理PRD并生成测试用例
+"""
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false
 import os
 import json
 from typing import List

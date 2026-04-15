@@ -3,8 +3,10 @@ Knowledge Retriever - Core retrieval component
 
 Combines EmbeddingService and ChromaVectorStore for knowledge retrieval.
 Uses global collection with metadata-based filtering.
+Implements hybrid search: vector similarity + keyword matching.
 """
-from typing import List, Dict, Any, Optional
+import re
+from typing import List, Dict, Any, Optional, Tuple
 
 from core.agents.rag.embedding_service import EmbeddingService
 from core.agents.rag.vector_store import ChromaVectorStore
@@ -64,10 +66,11 @@ class KnowledgeRetriever:
         top_k: int = 10,
         doc_types: Optional[List[str]] = None,
         project_id: Optional[int] = None,
-        boost_project: bool = False
+        boost_project: bool = False,
+        hybrid_search: bool = True
     ) -> List[Dict[str, Any]]:
         """
-        Semantic search with optional filters
+        Semantic search with optional filters and hybrid keyword matching
         
         Args:
             query: Search query
@@ -75,6 +78,7 @@ class KnowledgeRetriever:
             doc_types: Filter by document types
             project_id: Filter by project ID
             boost_project: If True, prioritize results from project_id
+            hybrid_search: If True, combine vector search with keyword matching
             
         Returns:
             List of matching documents
@@ -83,7 +87,7 @@ class KnowledgeRetriever:
         
         where = self._build_where_clause(doc_types, project_id)
         
-        n_results = top_k * 2 if boost_project and project_id else top_k
+        n_results = top_k * 3 if hybrid_search else (top_k * 2 if boost_project and project_id else top_k)
         
         results = self.vector_store.query(
             query_embedding=query_embedding,
@@ -92,6 +96,9 @@ class KnowledgeRetriever:
         )
         
         formatted = self._format_results(results)
+        
+        if hybrid_search:
+            formatted = self._apply_keyword_boost(formatted, query, top_k * 2)
         
         if boost_project and project_id:
             formatted = self._boost_project_results(formatted, project_id, top_k)
@@ -192,6 +199,82 @@ class KnowledgeRetriever:
             return conditions[0]
         
         return {"$and": conditions}
+    
+    def _extract_query_keywords(self, query: str) -> List[str]:
+        keywords = []
+        
+        api_patterns = re.findall(r'API[_\-\w]*', query, re.IGNORECASE)
+        keywords.extend(api_patterns)
+        
+        words = re.findall(r'\b[A-Z_]{2,}\b', query)
+        keywords.extend(words)
+        
+        words = re.findall(r'\b\w{3,}\b', query)
+        keywords.extend(words[:5])
+        
+        unique = []
+        seen = set()
+        for kw in keywords:
+            kw_lower = kw.lower()
+            if kw_lower not in seen and len(kw) >= 2:
+                seen.add(kw_lower)
+                unique.append(kw)
+        
+        return unique
+    
+    def _apply_keyword_boost(
+        self,
+        results: List[Dict[str, Any]],
+        query: str,
+        target_count: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Apply keyword matching boost to results
+        
+        Documents that match query keywords get higher ranking.
+        Boost score is based on keyword match count and position.
+        """
+        query_keywords = self._extract_query_keywords(query)
+        if not query_keywords:
+            return results
+        
+        scored_results = []
+        for r in results:
+            metadata = r.get('metadata', {})
+            doc_keywords_str = metadata.get('keywords', '')
+            doc_keywords = doc_keywords_str.split(',') if doc_keywords_str else []
+            title = metadata.get('title', '')
+            content = r.get('content', '') or ''
+            
+            keyword_score = 0.0
+            
+            for kw in query_keywords:
+                kw_lower = kw.lower()
+                
+                for doc_kw in doc_keywords:
+                    if kw_lower in doc_kw.lower():
+                        keyword_score += 1.0
+                
+                if kw_lower in title.lower():
+                    keyword_score += 0.5
+                
+                if kw_lower in content[:500].lower():
+                    keyword_score += 0.2
+            
+            distance = r.get('distance') or 1.0
+            vector_score = 1.0 - distance
+            
+            combined_score = vector_score + (keyword_score * 0.3)
+            
+            scored_results.append({
+                **r,
+                'keyword_score': keyword_score,
+                'combined_score': combined_score
+            })
+        
+        scored_results.sort(key=lambda x: x.get('combined_score', 0), reverse=True)
+        
+        return scored_results[:target_count]
     
     def _boost_project_results(
         self,

@@ -135,7 +135,7 @@ class DjangoORMRAGRetriever(RAGRetriever):
             from core.models.knowledge import KnowledgeBase
             try:
                 kb = KnowledgeBase.objects.get(id=self.knowledge_base_id)
-                return kb.project_id  # type: ignore[attr-defined]
+                return kb.project_id
             except KnowledgeBase.DoesNotExist:
                 return None
         return None
@@ -173,7 +173,8 @@ class DjangoORMRAGRetriever(RAGRetriever):
             results = self.retriever.search(
                 query,
                 top_k=top_k,
-                project_id=self.project_id
+                project_id=self.project_id,
+                hybrid_search=True
             )
             
             return [
@@ -181,7 +182,8 @@ class DjangoORMRAGRetriever(RAGRetriever):
                     'document': r.get('content', ''),
                     'metadata': r.get('metadata', {}),
                     'distance': r.get('distance'),
-                    'combined_score': 1.0 - (r.get('distance') or 0.0)
+                    'combined_score': r.get('combined_score', 1.0 - (r.get('distance') or 0.0)),
+                    'keyword_score': r.get('keyword_score', 0.0),
                 }
                 for r in results
             ]
@@ -234,7 +236,8 @@ class DjangoORMRAGRetriever(RAGRetriever):
                 query,
                 top_k=top_k,
                 doc_types=['code'],
-                project_id=self.project_id
+                project_id=self.project_id,
+                hybrid_search=True
             )
             
             filtered = results
@@ -246,6 +249,7 @@ class DjangoORMRAGRetriever(RAGRetriever):
                     'document': r.get('content', ''),
                     'metadata': r.get('metadata', {}),
                     'distance': r.get('distance'),
+                    'combined_score': r.get('combined_score', 1.0 - (r.get('distance') or 0.0)),
                 }
                 for r in filtered
             ]

@@ -4,9 +4,11 @@ ChatBot Execution Logger Service
 Provides unified logging for ChatBot-triggered operations.
 """
 
+from __future__ import annotations
+
 import logging
 from contextlib import contextmanager
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Generator
 from dataclasses import dataclass, field
 
 from core.models import ChatBotExecutionLog
@@ -67,7 +69,7 @@ class ChatBotExecutionLogger:
             message=message,
             details=self._details
         )
-        self._log_ids.append(self._current_log.id)  # type: ignore[attr-defined]
+        self._log_ids.append(self._current_log.id)  # pyright: ignore
         logger.info(f"[ChatBotLogger] Started: [{log_type}] {title}")
         return self._current_log
 
@@ -101,7 +103,7 @@ class ChatBotExecutionLogger:
             if result:
                 self._current_log.details = {**self._current_log.details, **result}
                 self._current_log.save(update_fields=['details'])
-            logger.info(f"[ChatBotLogger] Finished: {self._current_log.id}")  # type: ignore[attr-defined]
+            logger.info(f"[ChatBotLogger] Finished: {self._current_log.id}")  # pyright: ignore
 
     def get_log_ids(self) -> List[int]:
         """获取所有日志ID"""
@@ -114,12 +116,12 @@ class ChatBotExecutionLogger:
             try:
                 log = ChatBotExecutionLog.objects.get(id=log_id)
                 logs.append(LogEntry(
-                    id=log.id,  # type: ignore[attr-defined]
+                    id=log.id,  # pyright: ignore
                     log_type=log.log_type,
                     title=log.title,
                     message=log.message,
                     details=log.details,
-                    execution_id=log.execution_id,  # type: ignore[attr-defined]
+                    execution_id=log.execution_id,  # pyright: ignore
                     created_at=log.created_at.isoformat() if log.created_at else None
                 ))
             except ChatBotExecutionLog.DoesNotExist:
@@ -127,7 +129,7 @@ class ChatBotExecutionLogger:
         return logs
 
     @contextmanager
-    def log_operation(self, log_type: str, title: str, message: str = ''):
+    def log_operation(self, log_type: str, title: str, message: str = '') -> Generator[ChatBotExecutionLogger, None, None]:
         """上下文管理器方式记录操作"""
         self.start(log_type, title, message)
         try:

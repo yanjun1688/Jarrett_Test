@@ -1,6 +1,7 @@
 """
 执行管理器 - 协调整个执行生命周期
 """
+# pyright: reportAttributeAccessIssue=false
 import logging
 import asyncio
 import tempfile

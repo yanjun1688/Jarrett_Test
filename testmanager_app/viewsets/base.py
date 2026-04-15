@@ -3,6 +3,13 @@ Base ViewSets and Mixins for testmanager_app
 优化代码重复问题，提供通用功能
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, List, Dict
+
+if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
 from rest_framework import viewsets
 from testmanager_app.permissions import IsSuperUser
 
@@ -25,27 +32,20 @@ class BaseViewSet(viewsets.ModelViewSet):
         - created_by: 常规创建者字段
         - executor: 执行者字段（用于执行记录）
         """
-        # 获取用户（未认证则为None）
         user = self.request.user if self.request.user.is_authenticated else None
 
-        # 检查serializer的Meta.model有哪些字段
         Model = getattr(serializer.Meta, 'model', None)
         if Model:
-            # 如果模型有executor字段，优先使用（执行记录类）
             if hasattr(Model, 'executor'):
                 serializer.save(executor=user)
-            # 如果模型有created_by字段，使用它
             elif hasattr(Model, 'created_by'):
                 serializer.save(created_by=user)
             else:
-                # 默认调用父类方法
                 serializer.save()
         else:
-            # 如果无法获取模型，尝试保存 created_by
             try:
                 serializer.save(created_by=user)
             except Exception:
-                # 如果失败，不设置创建者
                 serializer.save()
 
 
@@ -63,26 +63,20 @@ class QueryOptimizerMixin:
             prefetch_related_fields = ['tags', 'comments']
     """
 
-    # 需要select_related的字段列表
-    select_related_fields = []
+    select_related_fields: List[str] = []
+    prefetch_related_fields: List[str] = []
 
-    # 需要prefetch_related的字段列表
-    prefetch_related_fields = []
-
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         """
         自动应用查询优化
 
         继承类无需重写此方法，只需声明上面的字段列表即可
         """
-        # 从父类获取queryset
-        queryset = super().get_queryset()
+        queryset = super().get_queryset()  # type: ignore[misc]
 
-        # 自动应用select_related优化
         if self.select_related_fields:
             queryset = queryset.select_related(*self.select_related_fields)
 
-        # 自动应用prefetch_related优化
         if self.prefetch_related_fields:
             queryset = queryset.prefetch_related(*self.prefetch_related_fields)
 
@@ -105,72 +99,55 @@ class CommonFilterMixin:
     - filter_date_range: 日期范围过滤（?date_from=2024-01-01&date_to=2024-12-31）
     """
 
-    # 整数段过滤器配置（字段名列表）
-    filter_int_fields = []
+    filter_int_fields: List[str] = []
+    filter_str_fields: List[str] = []
+    filter_choice_fields: Dict[str, List[str]] = {}
+    filter_bool_fields: List[str] = []
+    filter_related_icontains: List[str] = []
+    filter_date_range: List[str] = []
 
-    # 字符串字段过滤器配置（字段名列表）
-    filter_str_fields = []
-
-    # 选项字段过滤器配置（字段名: 可选值列表）
-    filter_choice_fields = {}
-
-    # 布尔字段过滤器配置（字段名列表）
-    filter_bool_fields = []
-
-    # 关联模型字段的模糊搜索配置（字段名列表，如 'project__name'）
-    filter_related_icontains = []
-
-    # 日期范围过滤器配置（字段名列表）
-    filter_date_range = []
-
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         """
         自动应用所有配置的过滤器
 
         子类可以重写此方法来添加自定义过滤逻辑，
         但要记得调用 super().get_queryset() 来应用这里的通用过滤器
         """
-        queryset = super().get_queryset()
+        queryset = super().get_queryset()  # type: ignore[misc]
 
-        # 整数段精确匹配
         for field in self.filter_int_fields:
-            value = self.request.query_params.get(field)
+            value = self.request.query_params.get(field)  # type: ignore[attr-defined]
             if value:
                 try:
                     queryset = queryset.filter(**{field: int(value)})
                 except (ValueError, TypeError):
                     pass
 
-        # 字符串字段精确匹配
         for field in self.filter_str_fields:
-            value = self.request.query_params.get(field)
+            value = self.request.query_params.get(field)  # type: ignore[attr-defined]
             if value:
                 queryset = queryset.filter(**{field: value})
 
-        # 选项字段精确匹配
         for field, choices in self.filter_choice_fields.items():
-            value = self.request.query_params.get(field)
+            value = self.request.query_params.get(field)  # type: ignore[attr-defined]
             if value and value in choices:
                 queryset = queryset.filter(**{field: value})
 
-        # 布尔字段匹配
         for field in self.filter_bool_fields:
-            value = self.request.query_params.get(field)
+            value = self.request.query_params.get(field)  # type: ignore[attr-defined]
             if value:
                 queryset = queryset.filter(**{field: value.lower() == 'true'})
 
-        # 关联模型字段的模糊搜索（icontains）
         for field in self.filter_related_icontains:
-            value = self.request.query_params.get(field)
+            value = self.request.query_params.get(field)  # type: ignore[attr-defined]
             if value:
                 queryset = queryset.filter(**{f"{field}__icontains": value})
 
-        # 日期范围过滤
         for field in self.filter_date_range:
             from_param = f"{field}_from"
             to_param = f"{field}_to"
-            from_value = self.request.query_params.get(from_param)
-            to_value = self.request.query_params.get(to_param)
+            from_value = self.request.query_params.get(from_param)  # type: ignore[attr-defined]
+            to_value = self.request.query_params.get(to_param)  # type: ignore[attr-defined]
 
             if from_value or to_value:
                 filter_dict = {}

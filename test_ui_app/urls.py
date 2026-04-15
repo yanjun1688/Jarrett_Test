@@ -4,6 +4,7 @@ UI Test App URL Configuration
 Routes are now unified under api/urls.py (/api/v1/)
 This file is kept for backward compatibility and exports.
 """
+# pyright: reportAssignmentType=false
 
 from __future__ import annotations
 

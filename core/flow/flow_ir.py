@@ -40,7 +40,7 @@ class FlowNodeIR:
     condition: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize default values"""
         if not self.id:
             self.id = str(uuid.uuid4())
@@ -71,19 +71,19 @@ class FlowNodeIR:
         
         # 验证参数
         if not isinstance(self.parameters, dict):
-            errors.append("参数必须是字典类型")
+            errors.append("参数必须是字典类型")  # type: ignore[unreachable]
         
         # 验证依赖关系
         if not isinstance(self.depends_on, list):
-            errors.append("依赖关系必须是列表类型")
+            errors.append("依赖关系必须是列表类型")  # type: ignore[unreachable]
         else:
             for dep in self.depends_on:
                 if not isinstance(dep, str):
-                    errors.append(f"依赖项必须是字符串: {dep}")
+                    errors.append(f"依赖项必须是字符串: {dep}")  # type: ignore[unreachable]
         
         # 验证元数据
         if not isinstance(self.metadata, dict):
-            errors.append("元数据必须是字典类型")
+            errors.append("元数据必须是字典类型")  # type: ignore[unreachable]
         
         return errors
 
@@ -144,7 +144,7 @@ class FlowIR:
     metadata: Dict[str, Any] = field(default_factory=dict)
     version: str = "1.0.0"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize default values"""
         # 如果没有节点但有起始节点，清除起始节点
         if not self.nodes and self.start_node:
@@ -174,8 +174,8 @@ class FlowIR:
         Returns:
             验证结果字典: {"errors": [], "warnings": []}
         """
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
         
         # 验证节点
         if not self.nodes:
@@ -374,7 +374,7 @@ class FlowIR:
         visited = set()
         result = []
         
-        def visit(node_id: str):
+        def visit(node_id: str) -> None:
             if node_id in visited:
                 return
             if node_id not in self.nodes:
@@ -420,7 +420,7 @@ class FlowIR:
 
     def get_statistics(self) -> Dict[str, Any]:
         """获取流程统计信息"""
-        node_types = {}
+        node_types: Dict[str, int] = {}
         for node in self.nodes.values():
             node_types[node.node_type] = node_types.get(node.node_type, 0) + 1
         

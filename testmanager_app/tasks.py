@@ -1,10 +1,16 @@
 """
 Celery 任务定义 - 请求集合后台执行
 
+DEPRECATED: 2026-04-15
+该模块已废弃，压测功能已迁移到 WebSocket 实时推送
+保留原因：兼容现有代码，观察期后删除
+
 提供请求集合的异步执行能力，避免 HTTP 请求超时，
 支持任务状态查询和进度跟踪。
 """
+# pyright: reportAttributeAccessIssue=false
 from __future__ import annotations
+import warnings
 import logging
 import sys
 import asyncio
@@ -15,6 +21,13 @@ from asgiref.sync import async_to_sync
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+# 模块级废弃警告
+warnings.warn(
+    "tasks module is deprecated. Pressure test functionality has been moved to WebSocket.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 
 @shared_task(bind=True, name='testmanager_app.execute_collection')
@@ -27,6 +40,10 @@ def execute_collection_task(
     """
     后台执行请求集合任务
     
+    DEPRECATED: 2026-04-15
+    请使用 WebSocket 压测功能替代
+    保留原因：兼容现有代码，观察期后删除
+    
     Args:
         self: Celery 任务实例（bind=True 时自动传入）
         collection_id: 请求集合 ID
@@ -36,6 +53,12 @@ def execute_collection_task(
     Returns:
         dict[str, Any]: 执行结果摘要
     """
+    warnings.warn(
+        "execute_collection_task is deprecated. Use WebSocket pressure test instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
     from testmanager_app.models import (
         RequestCollection, CollectionExecution, CollectionRequest
     )
@@ -65,7 +88,7 @@ def execute_collection_task(
         collection_exec.save(update_fields=['status'])
         
         collection_requests = list(
-            collection.collection_requests.select_related('api_request')  # type: ignore[attr-defined]
+            collection.collection_requests.select_related('api_request')
             .order_by('order_index')
         )
         
@@ -279,10 +302,14 @@ def execute_api_request_task(
             
             # 解析响应体
             try:
-                response_body = json.loads(result['response_body'])
+                raw_body = result['response_body']
+                if isinstance(raw_body, dict):
+                    response_body = raw_body
+                else:
+                    response_body = json.loads(raw_body)
                 formatted_json = json.dumps(response_body, indent=2, ensure_ascii=False)
                 logs.append(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] 响应体内容:\n{formatted_json}")
-            except (json.JSONDecodeError, ValueError):
+            except (json.JSONDecodeError, ValueError, TypeError):
                 logs.append(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] 响应体内容:\n{result['response_body']}")
             
             # 断言结果

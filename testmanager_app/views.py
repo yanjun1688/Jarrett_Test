@@ -5,7 +5,7 @@ JTest API Views - 主导入文件
 路由已统一到 api/urls.py (/api/v1/)
 """
 from __future__ import annotations
-from typing import Any
+from typing import Any, Dict, cast
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -13,7 +13,11 @@ from .project_views import ProjectViewSet, ModuleViewSet
 from .testcase_views import TestCaseViewSet, TestExecutionViewSet
 from .controllers.api_views import (
     ApiRequestViewSet, ApiAssertionViewSet,
-    RequestCollectionViewSet, CollectionExecutionViewSet
+    RequestCollectionViewSet, CollectionExecutionViewSet,
+    PressureTestConfigViewSet, PressureTestExecutionViewSet
+)
+from .controllers.advanced_pressure_views import (
+    AdvancedPressureTestConfigViewSet, AdvancedPressureTestExecutionViewSet
 )
 from .controllers.report_views import (
     TestReportViewSet, TestReportDataView
@@ -46,6 +50,10 @@ __all__ = [
     'ApiAssertionViewSet',
     'RequestCollectionViewSet',
     'CollectionExecutionViewSet',
+    'PressureTestConfigViewSet',
+    'PressureTestExecutionViewSet',
+    'AdvancedPressureTestConfigViewSet',
+    'AdvancedPressureTestExecutionViewSet',
     
     'TestReportViewSet',
     'TestReportDataView',
@@ -79,7 +87,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from testmanager_app.services.yaml_converter import YamlToCollectionConverter
+from testmanager_app.services.yaml_converter import YamlToScriptConverter, YamlToCollectionConverter
 from testmanager_app.services.yaml_validator import YamlValidator
 import base64
 import logging
@@ -102,7 +110,9 @@ def _decode_yaml_content(yaml_content: str) -> str:
 @permission_classes([IsAuthenticated])
 def yaml_to_collection(request: Request, project_id: int) -> Response:
     """
-    将YAML配置转换为RequestCollection
+    将YAML配置转换为TestScript（改造后）
+    
+    DEPRECATED: 接口名保持yaml_to_collection以兼容前端，实际创建TestScript
     
     Args:
         request: HTTP请求
@@ -111,13 +121,19 @@ def yaml_to_collection(request: Request, project_id: int) -> Response:
     Returns:
         Response: 转换结果
     """
+    import warnings
+    warnings.warn(
+        "yaml_to_collection is deprecated. The API now creates TestScript instead of RequestCollection.",
+        DeprecationWarning
+    )
+    
     try:
-        yaml_content = request.data.get('yaml_content', '')
+        data = request.data
+        yaml_content = data.get('yaml_content', '')
         yaml_content = _decode_yaml_content(yaml_content)
-        name = request.data.get('name', '')
-        description = request.data.get('description', '')
-        execution_mode = request.data.get('execution_mode', 'chain')
-        validate_only = request.data.get('validate_only', False)
+        name = data.get('name', '')
+        description = data.get('description', '')
+        validate_only = bool(data.get('validate_only', False))
         
         if not yaml_content:
             return Response(
@@ -127,11 +143,12 @@ def yaml_to_collection(request: Request, project_id: int) -> Response:
         
         if not name:
             return Response(
-                {'code': 400, 'message': '集合名称不能为空', 'data': {}},
+                {'code': 400, 'message': '脚本名称不能为空', 'data': {}},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        converter = YamlToCollectionConverter(
+        # 使用新的转换器创建 TestScript
+        converter = YamlToScriptConverter(
             project_id=project_id,
             created_by_id=request.user.id
         )
@@ -140,7 +157,6 @@ def yaml_to_collection(request: Request, project_id: int) -> Response:
             yaml_content=yaml_content,
             name=name,
             description=description,
-            execution_mode=execution_mode,
             validate_only=validate_only
         )
         
@@ -156,7 +172,7 @@ def yaml_to_collection(request: Request, project_id: int) -> Response:
             else:
                 return Response({
                     'code': 201,
-                    'message': '转换成功',
+                    'message': 'YAML已保存为测试脚本，请手动执行',
                     'data': result
                 }, status=status.HTTP_201_CREATED)
         else:
@@ -188,7 +204,8 @@ def validate_yaml_config(request: Request, project_id: int) -> Response:
         Response: 验证结果
     """
     try:
-        yaml_content = request.data.get('yaml_content', '')
+        data = request.data
+        yaml_content = data.get('yaml_content', '')
         yaml_content = _decode_yaml_content(yaml_content)
         
         if not yaml_content:
@@ -199,8 +216,8 @@ def validate_yaml_config(request: Request, project_id: int) -> Response:
         
         validator = YamlValidator()
         
-        check_variables = request.data.get('check_variables', True)
-        check_jsonpath = request.data.get('check_jsonpath', True)
+        check_variables = bool(data.get('check_variables', True))
+        check_jsonpath = bool(data.get('check_jsonpath', True))
         
         is_valid, errors, warnings = validator.validate(yaml_content, check_variables, check_jsonpath)
         

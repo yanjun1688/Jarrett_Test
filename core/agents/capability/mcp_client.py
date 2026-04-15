@@ -1,5 +1,10 @@
-from typing import Dict, List, Any
+from __future__ import annotations
+
+from typing import Dict, List, Any, Optional, TYPE_CHECKING
 import logging
+
+if TYPE_CHECKING:
+    from .registry import CapabilityRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -7,7 +12,7 @@ logger = logging.getLogger(__name__)
 class MCPClient:
     """MCP 客户端 - 管理 MCP server 连接"""
     
-    def __init__(self, capability_registry=None):
+    def __init__(self, capability_registry: Optional[CapabilityRegistry] = None) -> None:
         self.registry = capability_registry
         self._connections: Dict[str, Any] = {}
     
@@ -57,7 +62,7 @@ class MCPClient:
             logger.error(f"[MCPClient] 服务器未连接: {server_name}")
             return []
         
-        tools = await self._connections[server_name].list_tools()
+        tools: List[Dict[str, Any]] = await self._connections[server_name].list_tools()
         logger.info(f"[MCPClient] {server_name} 提供 {len(tools)} 个工具")
         return tools
     

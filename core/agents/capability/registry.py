@@ -1,4 +1,6 @@
-from typing import Dict, List, Optional, Any
+from __future__ import annotations
+
+from typing import Dict, List, Optional, Any, TYPE_CHECKING
 import logging
 from threading import Lock
 from datetime import datetime
@@ -15,6 +17,9 @@ from .events import (
     global_capability_event_bus
 )
 
+if TYPE_CHECKING:
+    from skills.base import SkillSpec
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,7 +35,7 @@ class CapabilityRegistry:
     线程安全，支持并发访问
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self._skills: Dict[str, SkillCapability] = {}
         self._tools: Dict[str, ToolCapability] = {}
         self._mcp_servers: Dict[str, MCPServerCapability] = {}
@@ -39,9 +44,9 @@ class CapabilityRegistry:
         
         logger.info("CapabilityRegistry initialized")
     
-    def register_skill(self, skill) -> None:
+    def register_skill(self, skill: Any) -> None:
         with self._lock:
-            spec = skill.spec
+            spec: SkillSpec = skill.spec
             
             capability = SkillCapability(
                 name=spec.name,
@@ -200,4 +205,4 @@ class CapabilityRegistry:
         logger.info("Cleared all capabilities")
 
 
-global_capability_registry = CapabilityRegistry()
+global_capability_registry: CapabilityRegistry = CapabilityRegistry()

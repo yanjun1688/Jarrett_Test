@@ -75,7 +75,7 @@ class AgentConversation(models.Model):
         ]
     
     def __str__(self) -> str:
-        return f"{self.get_agent_type_display()} - {self.conversation_id}"  # type: ignore[attr-defined]
+        return f"{self.get_agent_type_display()} - {self.conversation_id}"
     
     @property
     def message_count(self) -> int:
@@ -166,7 +166,7 @@ class AgentExecution(models.Model):
         ]
     
     def __str__(self) -> str:
-        return f"{self.get_agent_type_display()} - {self.get_task_type_display()}"  # type: ignore[attr-defined]
+        return f"{self.get_agent_type_display()} - {self.get_task_type_display()}"
     
     @property
     def duration(self) -> float:

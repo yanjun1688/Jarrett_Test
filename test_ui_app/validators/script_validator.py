@@ -3,7 +3,7 @@
 """
 from __future__ import annotations
 import logging
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -236,7 +236,10 @@ class ScriptValidator:
     
     def _validate_action_order(self, actions: list[dict[str, Any]]) -> None:
         """校验action顺序"""
-        orders = [action.get('order') for action in actions if action.get('order')]
+        orders: list[int] = [
+            cast(int, action['order']) for action in actions 
+            if isinstance(action.get('order'), int) and action.get('order') is not None
+        ]
         if orders:
             sorted_orders = sorted(orders)
             expected_orders = list(range(1, len(orders) + 1))

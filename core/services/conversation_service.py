@@ -100,7 +100,7 @@ class ConversationService:
         md_store = get_markdown_store()
         md_created = md_store.create_session(
             session_id=conversation_id,
-            user_id=str(user.id),  # type: ignore
+            user_id=str(user.id),  # pyright: ignore
             project_id=str(project_id) if project_id else None
         )
         
@@ -118,11 +118,11 @@ class ConversationService:
                 migrated_to_markdown=True
             )
         except Exception as e:
-            md_store.delete_session(conversation_id, str(user.id), hard_delete=True)  # type: ignore
+            md_store.delete_session(conversation_id, str(user.id), hard_delete=True)  # pyright: ignore
             logger.error(f"Failed to create MySQL conversation record: {e}")
             return None, "创建会话失败"
         
-        logger.info(f"Created conversation: {conversation_id} for user {user.id}")  # type: ignore
+        logger.info(f"Created conversation: {conversation_id} for user {user.id}")  # pyright: ignore
         return conversation, None
     
     @staticmethod
@@ -184,7 +184,7 @@ class ConversationService:
         
         if migrated_to_markdown:
             md_store = get_markdown_store()
-            md_deleted = md_store.delete_session(conversation_id, str(user.id), hard_delete=True)  # type: ignore
+            md_deleted = md_store.delete_session(conversation_id, str(user.id), hard_delete=True)  # pyright: ignore
             if not md_deleted:
                 logger.warning(f"MySQL deleted but Markdown cleanup failed for: {conversation_id}")
         
@@ -220,7 +220,7 @@ class ConversationService:
             md_store = get_markdown_store()
             success = md_store.append_message(
                 session_id=conversation_id,
-                user_id=str(user.id),  # type: ignore
+                user_id=str(user.id),  # pyright: ignore
                 role=role,
                 content=content,
                 metadata=metadata
@@ -269,7 +269,7 @@ class ConversationService:
         
         if conversation.migrated_to_markdown:
             md_store = get_markdown_store()
-            context = md_store.get_context(conversation_id, str(user.id))  # type: ignore
+            context = md_store.get_context(conversation_id, str(user.id))  # pyright: ignore
             if context:
                 return context.get("messages", []), None
             return [], "读取消息失败"
@@ -320,7 +320,7 @@ class ConversationService:
             md_store = get_markdown_store()
             success = md_store.update_context_state(
                 session_id=conversation_id,
-                user_id=str(user.id),  # type: ignore
+                user_id=str(user.id),  # pyright: ignore
                 updates=metadata
             )
             if success:
@@ -352,7 +352,7 @@ class ConversationService:
         
         if conversation.migrated_to_markdown:
             md_store = get_markdown_store()
-            context = md_store.get_context(conversation_id, str(user.id))  # type: ignore
+            context = md_store.get_context(conversation_id, str(user.id))  # pyright: ignore
             if context:
                 return context.get("context_state", {}), None
             return {}, "读取元数据失败"
@@ -434,7 +434,7 @@ class ConversationService:
             md_store = get_markdown_store()
             return md_store.delete_context_fields(
                 session_id=conversation_id,
-                user_id=str(user.id),  # type: ignore
+                user_id=str(user.id),  # pyright: ignore
                 fields=["pending_tests", "last_action_time"]
             ), None
         

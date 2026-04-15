@@ -2,6 +2,7 @@
 export { projectsAPI } from './projects';
 export { testExecutionsAPI } from './testExecutions';
 export { apiRequestsAPI } from './apiRequests';
+export { pressureTestAPI } from './pressureTest';
 
 export { testCasesAPI } from './testCases';
 export { featureTestsAPI } from './featureTests';

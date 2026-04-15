@@ -1,6 +1,8 @@
 """
 安装Playwright浏览器的管理命令
 """
+from __future__ import annotations
+from typing import Any
 from django.core.management.base import BaseCommand
 import subprocess
 import sys
@@ -9,7 +11,7 @@ import sys
 class Command(BaseCommand):
     help = '安装Playwright浏览器'
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
             '--browser',
             type=str,
@@ -18,7 +20,7 @@ class Command(BaseCommand):
             help='要安装的浏览器类型'
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         browser = options['browser']
         
         self.stdout.write(self.style.SUCCESS(f'开始安装Playwright浏览器: {browser}'))

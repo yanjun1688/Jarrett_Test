@@ -3,10 +3,19 @@
 提供安全的参数获取和验证功能
 """
 
+from __future__ import annotations
+
 import re
+from typing import Any, Optional, Union, Protocol, runtime_checkable
 
 
-def safe_get_int_param(request_or_params, param_name):
+@runtime_checkable
+class HasQueryParams(Protocol):
+    """具有query_params属性的对象协议"""
+    query_params: dict[str, Any]
+
+
+def safe_get_int_param(request_or_params: Union[HasQueryParams, dict[str, Any]], param_name: str) -> Optional[int]:
     """
     安全获取整数查询参数
 
@@ -26,7 +35,7 @@ def safe_get_int_param(request_or_params, param_name):
             queryset = queryset.filter(project=project_id)
     """
     # 支持传入request对象或直接传入query_params
-    if hasattr(request_or_params, 'query_params'):
+    if isinstance(request_or_params, HasQueryParams):
         query_params = request_or_params.query_params
     else:
         query_params = request_or_params
@@ -41,7 +50,7 @@ def safe_get_int_param(request_or_params, param_name):
         return None
 
 
-def safe_get_str_param(request_or_params, param_name):
+def safe_get_str_param(request_or_params: Union[HasQueryParams, dict[str, Any]], param_name: str) -> Optional[str]:
     """
     安全获取字符串查询参数并进行简单验证
 
@@ -62,7 +71,7 @@ def safe_get_str_param(request_or_params, param_name):
             queryset = queryset.filter(name__icontains=name)
     """
     # 支持传入request对象或直接传入query_params
-    if hasattr(request_or_params, 'query_params'):
+    if isinstance(request_or_params, HasQueryParams):
         query_params = request_or_params.query_params
     else:
         query_params = request_or_params
@@ -75,11 +84,11 @@ def safe_get_str_param(request_or_params, param_name):
     # 阻止SQL注入和XSS攻击
     # 最大长度200个字符
     if re.match(r'^[a-zA-Z0-9\s\-_.\u4e00-\u9fa5]{0,200}$', str(value)):
-        return value
+        return str(value)
     return None
 
 
-def safe_get_choice_param(request_or_params, param_name, choices):
+def safe_get_choice_param(request_or_params: Union[HasQueryParams, dict[str, Any]], param_name: str, choices: Union[list[str], tuple[str, ...]]) -> Optional[str]:
     """
     安全获取选项查询参数
 
@@ -99,7 +108,7 @@ def safe_get_choice_param(request_or_params, param_name, choices):
             queryset = queryset.filter(status=status)
     """
     # 支持传入request对象或直接传入query_params
-    if hasattr(request_or_params, 'query_params'):
+    if isinstance(request_or_params, HasQueryParams):
         query_params = request_or_params.query_params
     else:
         query_params = request_or_params
@@ -107,4 +116,4 @@ def safe_get_choice_param(request_or_params, param_name, choices):
     value = query_params.get(param_name, None)
     if value is None or value not in choices:
         return None
-    return value
+    return str(value)

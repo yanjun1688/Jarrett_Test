@@ -1,6 +1,7 @@
 """
 WebSocket认证中间件，支持Token认证
 """
+# pyright: reportAttributeAccessIssue=false
 import logging
 from urllib.parse import parse_qs
 from channels.middleware import BaseMiddleware

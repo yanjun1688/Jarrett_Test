@@ -1,6 +1,7 @@
 """
 Playwright执行引擎
 """
+# pyright: reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
 import asyncio
 import sys
 from pathlib import Path

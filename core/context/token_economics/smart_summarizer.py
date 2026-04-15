@@ -61,9 +61,9 @@ class SmartSummarizer:
     
     def __init__(
         self,
-        llm_service=None,
+        llm_service: Optional[Any] = None,
         config: Optional[SummaryConfig] = None
-    ):
+    ) -> None:
         """
         初始化摘要生成器
         
@@ -77,7 +77,7 @@ class SmartSummarizer:
     def generate_warm_summary(
         self,
         messages: List[Dict[str, Any]],
-        token_calculator=None
+        token_calculator: Optional[Any] = None
     ) -> StructuredSummary:
         """
         生成温区结构化摘要
@@ -146,8 +146,8 @@ class SmartSummarizer:
                 if len(action) > 3 and len(action) < 100:
                     actions.append(action)
         
-        topics = list(topics)[:self.config.max_topics]
-        entities = list(entities)[:self.config.max_entities]
+        topics_list = list(topics)[:self.config.max_topics]
+        entities_list = list(entities)[:self.config.max_entities]
         actions = actions[:self.config.max_actions]
         decisions = decisions[:5]
         
@@ -155,7 +155,7 @@ class SmartSummarizer:
         if token_calculator:
             original_tokens = token_calculator.count_messages_tokens(messages)
         
-        summary_text = self._format_summary_text(topics, decisions, entities, actions)
+        summary_text = self._format_summary_text(topics_list, decisions, entities_list, actions)
         summary_tokens = 0
         if token_calculator:
             summary_tokens = token_calculator.count_tokens(summary_text)
@@ -164,9 +164,9 @@ class SmartSummarizer:
         compression_ratio = tokens_saved / original_tokens if original_tokens > 0 else 0
         
         return StructuredSummary(
-            topics=topics,
+            topics=topics_list,
             decisions=decisions,
-            entities=entities,
+            entities=entities_list,
             actions=actions,
             token_saved=tokens_saved,
             compression_ratio=compression_ratio
@@ -263,8 +263,8 @@ class SmartSummarizer:
 """
         
         try:
-            assert self.llm_service is not None, "llm_service should not be None in this context"
-            response = await self.llm_service.generate(prompt)
+            assert self.llm_service is not None
+            response: str = await self.llm_service.generate(prompt)
             return response.strip()[:500]
         except Exception as e:
             logger.warning(f"LLM summarization failed: {e}")
@@ -321,7 +321,7 @@ class SmartSummarizer:
         self,
         messages: List[Dict[str, Any]],
         zone_type: str,
-        token_calculator
+        token_calculator: Any
     ) -> int:
         """
         估算摘要的 Token 数

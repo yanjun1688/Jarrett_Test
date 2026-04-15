@@ -24,7 +24,7 @@ class UITestScript(models.Model):
         related_name='ui_test_scripts',
         verbose_name="所属项目"
     )
-    created_by: models.ForeignKey[User, User] = models.ForeignKey(
+    created_by: models.ForeignKey[User | None, User | None] = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         null=True,
@@ -80,7 +80,7 @@ class UITestExecution(models.Model):
         related_name='executions',
         verbose_name="测试脚本"
     )
-    executed_by: models.ForeignKey[User, User] = models.ForeignKey(
+    executed_by: models.ForeignKey[User | None, User | None] = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         null=True,
@@ -111,4 +111,4 @@ class UITestExecution(models.Model):
         ordering = ['-created_at']
     
     def __str__(self) -> str:
-        return f"{self.script.name} - {self.get_status_display()} - {self.created_at}"  # type: ignore[attr-defined]
+        return f"{self.script.name} - {self.get_status_display()} - {self.created_at}"

@@ -5,6 +5,7 @@ Handles document sync to ChromaDB on save/delete.
 
 Uses Celery .delay() for async execution to avoid blocking Django requests.
 """
+# pyright: reportAttributeAccessIssue=false, reportCallIssue=false
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 

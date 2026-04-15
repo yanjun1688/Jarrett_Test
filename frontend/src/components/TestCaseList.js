@@ -7,6 +7,44 @@ import FeatureTestCaseManager from './FeatureTestCaseManager';
 const { Title } = Typography;
 const { TabPane } = Tabs;
 
+/**
+ * 解析并校验 headers 输入 - 只接受标准 JSON 格式
+ * @param {string} input - 用户输入的 headers
+ * @returns {object} - 解析后的 headers 对象
+ * @throws {Error} - 如果不是标准 JSON 格式
+ */
+function parseHeadersInput(input) {
+  if (!input || typeof input !== 'string') return {};
+  
+  const trimmed = input.trim();
+  if (!trimmed) return {};
+  
+  // 只接受 JSON 格式
+  if (!trimmed.startsWith('{')) {
+    throw new Error('请求头格式错误：请使用标准 JSON 格式，例如 {"Content-Type": "application/json"}');
+  }
+  
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      // 校验每个键值都是字符串
+      for (const [key, value] of Object.entries(parsed)) {
+        if (typeof key !== 'string' || typeof value !== 'string') {
+          throw new Error('请求头格式错误：键和值都必须是字符串');
+        }
+      }
+      return parsed;
+    } else {
+      throw new Error('请求头格式错误：必须是 JSON 对象格式');
+    }
+  } catch (e) {
+    if (e.message.includes('请求头格式错误')) {
+      throw e;
+    }
+    throw new Error('请求头格式错误：JSON 解析失败，请检查格式是否正确');
+  }
+}
+
 function TestCaseList({ projectId }) { // Accept projectId as a prop
   const [testCases, setTestCases] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -136,29 +174,20 @@ function TestCaseList({ projectId }) { // Accept projectId as a prop
     try {
       const values = await form.validateFields();
 
-      // 处理headers，转换为JSON字符串
-      let headers = {};
-      if (values.headers) {
-        values.headers.split('\n').forEach(line => {
-          const [key, value] = line.split(':').map(str => str.trim());
-          if (key && value) {
-            headers[key] = value;
-          }
-        });
-      }
+      // 智能解析 headers，支持 JSON 和多行文本格式
+      const headers = parseHeadersInput(values.headers);
 
       await apiClient.post('/api-requests/', {
         name: values.name,
         url: values.url,
         method: values.method,
-        headers: JSON.stringify(headers), // 转换为JSON字符串
+        headers: JSON.stringify(headers),
         body: values.body || '',
-        project: values.project, // 使用选中的项目ID
+        project: values.project,
       });
       notification.success({ message: 'API测试用例创建成功' });
       setModalOpen(false);
       form.resetFields();
-      // 刷新列表以显示新创建的API测试用例（使用当前的filter）
       fetchTestCases(filter);
     } catch (error) {
       handleApiError(error, '创建API测试用例失败');
@@ -277,8 +306,8 @@ function TestCaseList({ projectId }) { // Accept projectId as a prop
             </Select>
           </Form.Item>
 
-          <Form.Item name="headers" label="请求头">
-            <Input.TextArea rows={4} placeholder={'Content-Type: application/json\nAuthorization: Bearer token'} />
+          <Form.Item name="headers" label="请求头（JSON格式）">
+            <Input.TextArea rows={4} placeholder='{"Content-Type": "application/json", "Authorization": "Bearer token"}' />
           </Form.Item>
 
           <Form.Item name="body" label="请求体">

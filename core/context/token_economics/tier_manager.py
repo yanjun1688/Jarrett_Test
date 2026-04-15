@@ -113,8 +113,8 @@ class ContextTierManager:
     def classify_messages(
         self,
         messages: List[Dict[str, Any]],
-        token_calculator
-    ) -> Tuple[List[Dict], List[Dict], List[Dict]]:
+        token_calculator: Any
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         将消息分类到三个区域
         
@@ -149,7 +149,7 @@ class ContextTierManager:
     def calculate_tier_state(
         self,
         messages: List[Dict[str, Any]],
-        token_calculator
+        token_calculator: Any
     ) -> TierState:
         """
         计算三层状态
@@ -222,9 +222,8 @@ class ContextTierManager:
             return token_count > self.hot_budget
         elif zone_type == ZoneType.WARM:
             return token_count > self.warm_budget
-        elif zone_type == ZoneType.COLD:
+        else:
             return token_count > self.cold_budget
-        return False
     
     def get_compression_priority(
         self,
@@ -256,7 +255,7 @@ class ContextTierManager:
         self,
         messages: List[Dict[str, Any]],
         zone_type: ZoneType,
-        token_calculator
+        token_calculator: Any
     ) -> int:
         """
         估算压缩节省的 Token 数
@@ -272,7 +271,7 @@ class ContextTierManager:
         if not messages:
             return 0
         
-        original_tokens = token_calculator.count_messages_tokens(messages)
+        original_tokens: int = token_calculator.count_messages_tokens(messages)
         
         if zone_type == ZoneType.WARM:
             estimated_summary_tokens = min(
@@ -280,10 +279,7 @@ class ContextTierManager:
                 int(original_tokens * 0.3)
             )
         elif zone_type == ZoneType.COLD:
-            estimated_summary_tokens = min(
-                200,
-                int(original_tokens * 0.1)
-            )
+            estimated_summary_tokens = int(original_tokens * 0.1)
         else:
             estimated_summary_tokens = int(original_tokens * 0.5)
         
@@ -301,7 +297,7 @@ class ContextTierManager:
             "total_budget": self.total_budget
         }
     
-    def update_budget(self, new_budget: int):
+    def update_budget(self, new_budget: int) -> None:
         """更新 Token 预算"""
         self.total_budget = new_budget
         self.hot_budget = int(new_budget * self.DEFAULT_HOT_RATIO)

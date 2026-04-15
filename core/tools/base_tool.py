@@ -3,7 +3,7 @@ Base tool class for all tools
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 from dataclasses import dataclass
 import logging
 import time
@@ -78,7 +78,7 @@ class BaseTool(ABC):
         self.logger.info(f"Tool '{name}' v{version} initialized")
     
     @abstractmethod
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs: Any) -> ToolResult:
         """
         Execute the tool
         
@@ -130,7 +130,7 @@ class BaseTool(ABC):
     
     async def execute_with_validation(
         self,
-        **kwargs
+        **kwargs: Any
     ) -> ToolResult:
         """
         Execute tool with parameter validation
@@ -242,7 +242,7 @@ class BaseTool(ABC):
 class ToolRegistry:
     """Registry for managing tools"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self._tools: Dict[str, BaseTool] = {}
         self.logger = logging.getLogger("tool.registry")
     
@@ -293,7 +293,7 @@ class ToolRegistry:
     async def execute(
         self,
         tool_name: str,
-        **kwargs
+        **kwargs: Any
     ) -> ToolResult:
         """
         Execute a tool by name
@@ -341,7 +341,7 @@ class ToolRegistry:
 
 
 # Global tool registry instance
-global_tool_registry = ToolRegistry()
+global_tool_registry: ToolRegistry = ToolRegistry()
 
 
 class LazyLoadingRegistry:
@@ -350,25 +350,27 @@ class LazyLoadingRegistry:
     这个设计只在需要的时候才加载特定工具
     """
     
-    def __init__(self, max_tools: int = 10):  # 限制最大工具数量来避免加载过多技能
+    def __init__(self, max_tools: int = 10) -> None:
         self._tools: Dict[str, BaseTool] = {}
-        self._loaded = False
-        self._initial_tools = []  # 存储初始时加载的必需工具
+        self._loaded: bool = False
+        self._initial_tools: List[BaseTool] = []
         self.logger = logging.getLogger("lazy_tool.registry")
         
-    def register(self, tool: BaseTool) -> None:
+    def register(self, tool: BaseTool, name: Optional[str] = None) -> None:
         """
         注册一个工具
         
         Args:
             tool: 要注册的工具
+            name: 可选的工具名称（默认使用tool.name）
         """
-        if tool.name not in self._tools:
-            self._tools[tool.name] = tool
+        register_name = name or tool.name
+        if register_name not in self._tools:
+            self._tools[register_name] = tool
         else:
-            self.logger.warning(f"Tool '{tool.name}' already registered, overwriting")
+            self.logger.warning(f"Tool '{register_name}' already registered, overwriting")
         
-        self.logger.info(f"Tool '{tool.name}' registered")
+        self.logger.info(f"Tool '{register_name}' registered")
     
     def get(self, name: str) -> Optional[BaseTool]:
         """
@@ -403,7 +405,7 @@ class LazyLoadingRegistry:
     async def execute(
         self,
         tool_name: str,
-        **kwargs
+        **kwargs: Any
     ) -> ToolResult:
         """
         执行名为的工具

@@ -87,9 +87,6 @@ class TemplateRenderer:
             elif value == "" and default_value:
                 # 变量存在但为空字符串，且有全局默认值，使用全局默认值
                 value = default_value
-            elif not var_exists and var_default is None and not default_value:
-                # 变量不存在且没有默认值，保留模板不变
-                continue
 
             # 替换模板中的变量
             result = result.replace(full_match, str(value))
@@ -117,7 +114,7 @@ class TemplateRenderer:
             return None
 
         parts = path.split('.')
-        current = context
+        current: Any = context
 
         for part in parts:
             if isinstance(current, dict) and part in current:
@@ -149,7 +146,7 @@ class TemplateRenderer:
             return "" in context
 
         parts = path.split('.')
-        current = context
+        current: Any = context
 
         try:
             for part in parts:

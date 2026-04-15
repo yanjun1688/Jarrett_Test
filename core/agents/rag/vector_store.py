@@ -4,6 +4,7 @@ ChromaDB Vector Store - Thread-safe global vector storage
 Uses ChromaDB PersistentClient for persistent storage.
 Single global collection: kb_knowledge (configured in settings)
 """
+# pyright: reportAttributeAccessIssue=false
 import os
 import threading
 from typing import List, Dict, Any, Optional

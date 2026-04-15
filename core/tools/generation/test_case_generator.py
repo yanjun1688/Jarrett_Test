@@ -3,7 +3,7 @@ Test case generation tool from API specifications
 """
 
 import json
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Callable, Union, cast
 import logging
 from faker import Faker
 
@@ -16,14 +16,14 @@ logger = logging.getLogger(__name__)
 class TestCaseGeneratorTool(BaseTool):
     """Test case generation tool from API specifications"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="test_case_generator",
             description="Generate test cases from API specifications (OpenAPI/Swagger)",
             version="1.0.0"
         )
         self.faker = Faker()
-        self.faker.seed_instance(42)  # Fixed seed for reproducibility
+        self.faker.seed_instance(42)
     
     def _build_parameters_schema(self) -> Dict[str, Any]:
         """Build parameters schema"""
@@ -58,7 +58,7 @@ class TestCaseGeneratorTool(BaseTool):
             }
         }
     
-    def _get_required_parameters(self) -> list:
+    def _get_required_parameters(self) -> List[str]:
         """Get required parameters"""
         return ["api_spec"]
     
@@ -82,7 +82,7 @@ class TestCaseGeneratorTool(BaseTool):
             }
         }
     
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs: Any) -> ToolResult:
         """
         Generate test cases from API specification
         
@@ -117,7 +117,6 @@ class TestCaseGeneratorTool(BaseTool):
                 include_rules=include_rules
             )
             
-            # Build result
             result_data = {
                 'test_cases': test_cases,
                 'summary': {
@@ -137,7 +136,7 @@ class TestCaseGeneratorTool(BaseTool):
                 data=result_data,
                 metadata={
                     'total_cases': len(test_cases),
-                    'endpoints_covered': result_data['summary']['endpoints_covered']
+                    'endpoints_covered': result_data['summary']['endpoints_covered']  # type: ignore[index]
                 }
             )
             
@@ -192,14 +191,13 @@ class TestCaseGeneratorTool(BaseTool):
         test_types: List[str],
         max_cases: int,
         include_rules: bool,
-        cases_per_type: Dict[str, int] = None
+        cases_per_type: Optional[Dict[str, int]] = None
     ) -> List[Dict[str, Any]]:
         """Generate test cases for a single endpoint"""
         test_cases = []
         if cases_per_type is None:
             cases_per_type = {}
         
-        # Generate positive test cases
         if 'positive' in test_types and cases_per_type.get('positive', 0) < max_cases:
             positive_cases = self._generate_positive_test_cases(
                 path=path,
@@ -331,8 +329,7 @@ class TestCaseGeneratorTool(BaseTool):
         request_body = details.get('requestBody', {})
         parameters = details.get('parameters', [])
         
-        # Common negative test scenarios
-        negative_scenarios = [
+        negative_scenarios: List[Dict[str, Any]] = [
             {
                 'name': 'Missing Required Fields',
                 'description': 'Test with missing required fields',
@@ -355,15 +352,13 @@ class TestCaseGeneratorTool(BaseTool):
             }
         ]
         
-        # Generate test cases for each scenario
         for i, scenario in enumerate(negative_scenarios):
             if i >= max_cases:
                 break
             
-            # Generate invalid test data
-            test_data = scenario['data_generator'](details)
+            data_generator: Callable[[Dict[str, Any]], Dict[str, Any]] = scenario['data_generator']
+            test_data = data_generator(details)
             
-            # Create test case
             test_case = {
                 'name': f"{method.upper()} {path} - {scenario['name']}",
                 'description': scenario['description'],
@@ -373,7 +368,7 @@ class TestCaseGeneratorTool(BaseTool):
                 'test_type': 'negative',
                 'priority': 'medium',
                 'steps': [
-                    f"Send {method.upper()} request to {full_url} with {scenario['name'].lower()}",
+                    f"Send {method.upper()} request to {full_url} with {str(scenario['name']).lower()}",
                     "Verify error response"
                 ],
                 'expected_result': "Should return appropriate error status code (4xx)",
@@ -528,8 +523,7 @@ class TestCaseGeneratorTool(BaseTool):
                 max_items = prop_schema.get('maxItems', 3)
                 item_count = self.faker.random_int(min=min_items, max=max_items)
                 
-                # Generate array items
-                array_data = []
+                array_data: List[Union[str, int, None]] = []
                 for _ in range(item_count):
                     if items_schema.get('type') == 'string':
                         array_data.append(self.faker.word())
@@ -548,15 +542,14 @@ class TestCaseGeneratorTool(BaseTool):
     
     def _generate_data_from_parameters(self, parameters: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Generate data from parameters"""
-        data = {}
+        data: Dict[str, Any] = {}
         
         for param in parameters:
             param_name = param.get('name')
             param_in = param.get('in', 'query')
             param_schema = param.get('schema', {})
             
-            # Only generate data for query/path/header parameters
-            if param_in in ['query', 'path', 'header']:
+            if param_in in ['query', 'path', 'header'] and param_name:
                 param_type = param_schema.get('type', 'string')
                 
                 if param_type == 'string':
@@ -694,7 +687,9 @@ class TestCaseGeneratorTool(BaseTool):
         
         for content_type, content_info in content.items():
             if 'application/json' in content_type:
-                return content_info.get('schema', {})
+                schema = content_info.get('schema')
+                if schema:
+                    return cast(Dict[str, Any], schema)
         
         return {}
     

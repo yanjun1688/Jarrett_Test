@@ -5,7 +5,7 @@ Uses lazy loading to avoid circular dependencies from core to business apps.
 """
 import json
 import yaml
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Type
 from shared.constants import DocType
 
 
@@ -17,13 +17,13 @@ class DocumentConverter:
     """
     
     @staticmethod
-    def _get_model(model_name: str):
+    def _get_model(model_name: str) -> Type[Any]:
         """Lazy load model to avoid circular import"""
         from django.apps import apps
         return apps.get_model(model_name)
     
     @staticmethod
-    def feature_test_to_markdown(test_case) -> Dict[str, Any]:
+    def feature_test_to_markdown(test_case: Any) -> Dict[str, Any]:
         """
         Convert feature test case to Markdown
         
@@ -80,7 +80,7 @@ class DocumentConverter:
         }
     
     @staticmethod
-    def api_test_to_markdown(api_request) -> Dict[str, Any]:
+    def api_test_to_markdown(api_request: Any) -> Dict[str, Any]:
         """
         Convert API test request to Markdown
         
@@ -126,7 +126,7 @@ class DocumentConverter:
         }
     
     @staticmethod
-    def ui_test_to_markdown(ui_script) -> Dict[str, Any]:
+    def ui_test_to_markdown(ui_script: Any) -> Dict[str, Any]:
         """
         Convert UI test script to Markdown
         
@@ -321,9 +321,7 @@ class DocumentConverter:
             else:
                 result = yaml.safe_load(content)
             
-            if isinstance(result, dict):
-                return result
-            return None
+            return result if isinstance(result, dict) else None
         except (json.JSONDecodeError, yaml.YAMLError):
             return None
     

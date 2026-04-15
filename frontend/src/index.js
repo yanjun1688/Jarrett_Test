@@ -17,10 +17,9 @@ const TestReportList = lazy(() => import('./components/TestReportList'));
 const TestScriptList = lazy(() => import('./components/TestScriptList'));
 const UiTestManager = lazy(() => import('./components/UiTestManager'));
 const ApiRequestTester = lazy(() => import('./components/ApiRequestTester'));
-const RequestCollectionManager = lazy(() => import('./components/collection/RequestCollectionManager'));
+const PressureTestManager = lazy(() => import('./components/PressureTestManager'));
+const AdvancedPressureTestManager = lazy(() => import('./components/AdvancedPressureTestManager'));
 const FeatureTestCaseManager = lazy(() => import('./components/FeatureTestCaseManager'));
-// TODO: 移除 YAML 上传功能（依赖请求集合）
-// const YamlConfigUploaderSimple = lazy(() => import('./components/YamlConfigUploaderSimple'));
 const AiTestCaseAnalysis = lazy(() => import('./components/AiTestCaseAnalysis'));
 const TestFlowList = lazy(() => import('./components/TestFlowList'));
 const TestFlowBuilder = lazy(() => import('./components/TestFlowBuilder'));
@@ -115,10 +114,18 @@ root.render(
               } 
             />
             <Route 
-              path="request-collections" 
+              path="pressure-tests" 
               element={
                 <ProtectedRoute>
-                  <LazyRoute><RequestCollectionManager /></LazyRoute>
+                  <LazyRoute><PressureTestManager /></LazyRoute>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="advanced-pressure-tests" 
+              element={
+                <ProtectedRoute>
+                  <LazyRoute><AdvancedPressureTestManager /></LazyRoute>
                 </ProtectedRoute>
               } 
             />

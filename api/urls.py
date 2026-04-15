@@ -7,9 +7,7 @@ Structure:
     ├── auth/                      # Authentication
     ├── chatbot/                   # Chatbot AI
     ├── knowledge/                 # Knowledge base
-    ├── flows/                     # Test flows
     ├── planning/                  # Test planning
-    ├── execution/                 # Test execution
     ├── projects/                  # Project management (ViewSet)
     ├── modules/                   # Module management (ViewSet)
     ├── testcases/                 # Test cases (ViewSet)
@@ -37,7 +35,6 @@ from rest_framework.routers import DefaultRouter
 from rest_framework.urlpatterns import format_suffix_patterns
 
 from api.v1.knowledge import views as knowledge_views
-from api.v1.flows import views as flows_views
 from api.v1.planning import views as planning_views
 from api.v1.execution import views as execution_views
 
@@ -63,6 +60,10 @@ router.register(r'api-requests', tm_views.ApiRequestViewSet, basename='api-reque
 router.register(r'api-assertions', tm_views.ApiAssertionViewSet, basename='api-assertion')
 router.register(r'request-collections', tm_views.RequestCollectionViewSet, basename='request-collection')
 router.register(r'collection-executions', tm_views.CollectionExecutionViewSet, basename='collection-execution')
+router.register(r'pressure-test-configs', tm_views.PressureTestConfigViewSet, basename='pressure-test-config')
+router.register(r'pressure-test-executions', tm_views.PressureTestExecutionViewSet, basename='pressure-test-execution')
+router.register(r'advanced-pressure-configs', tm_views.AdvancedPressureTestConfigViewSet, basename='advanced-pressure-config')
+router.register(r'advanced-pressure-executions', tm_views.AdvancedPressureTestExecutionViewSet, basename='advanced-pressure-execution')
 router.register(r'users', tm_views.UserViewSet, basename='user')
 router.register(r'feature-tests', tm_views.FeatureTestCaseViewSet, basename='feature-test')
 
@@ -85,6 +86,7 @@ chatbot_patterns = [
     path('conversations/', chatbot_views.ConversationListView.as_view(), name='chatbot-conversations'),
     path('conversations/<str:conversation_id>/', chatbot_views.ConversationDetailView.as_view(), name='chatbot-conversation-detail'),
     path('cache-stats/', chatbot_views.CacheStatsView.as_view(), name='chatbot-cache-stats'),
+    path('mcp-status/', chatbot_views.MCPStatusView.as_view(), name='chatbot-mcp-status'),
     path('execution-logs/', chatbot_views.ChatBotExecutionLogListView.as_view(), name='chatbot-execution-logs'),
     path('execution-logs/<int:log_id>/', chatbot_views.ChatBotExecutionLogDetailView.as_view(), name='chatbot-execution-log-detail'),
 ]
@@ -101,22 +103,9 @@ knowledge_patterns = [
     path('documents/<int:pk>/sync/', knowledge_views.SyncDocumentView.as_view(), name='sync-document'),
 ]
 
-flows_patterns = [
-    path('execute/', flows_views.ExecuteTestFlowView.as_view(), name='execute-test-flow'),
-    path('list/', flows_views.ListTestFlowsView.as_view(), name='list-test-flows'),
-    path('<int:flow_id>/', flows_views.GetTestFlowView.as_view(), name='get-test-flow'),
-    path('execution/<int:execution_id>/', flows_views.GetFlowExecutionView.as_view(), name='get-flow-execution'),
-    path('executions/', flows_views.ListFlowExecutionsView.as_view(), name='list-flow-executions'),
-    path('node-types/', planning_views.GetAvailableNodeTypesView.as_view(), name='get-node-types'),
-]
-
 planning_patterns = [
     path('plan/', planning_views.PlanTestView.as_view(), name='plan-test'),
     path('refine/', planning_views.RefinePlanView.as_view(), name='refine-plan'),
-]
-
-execution_patterns = [
-    path('execute/', execution_views.ExecuteFlowIRView.as_view(), name='execute-flow-ir'),
 ]
 
 ui_test_patterns = [
@@ -140,9 +129,7 @@ urlpatterns = [
     path('auth/', include((auth_patterns, 'auth'), namespace='auth')),
     path('chatbot/', include((chatbot_patterns, 'chatbot'), namespace='chatbot')),
     path('knowledge/', include((knowledge_patterns, 'knowledge'), namespace='knowledge')),
-    path('flows/', include((flows_patterns, 'flows'), namespace='flows')),
     path('planning/', include((planning_patterns, 'planning'), namespace='planning')),
-    path('execution/', include((execution_patterns, 'execution'), namespace='execution')),
     path('ui-test/', include((ui_test_patterns, 'ui-test'), namespace='ui-test')),
     path('skills/', include((skills_patterns, 'skills'), namespace='skills')),
     path('ai-agent/', include((ai_agent_patterns, 'ai-agent'), namespace='ai-agent')),

@@ -65,7 +65,7 @@ class AnthropicLLMService(BaseLLMService):
             )
             
             # 提取生成的文本
-            generated_text = response.content[0].text  # type: ignore[attr-defined]
+            generated_text = response.content[0].text
             
             logger.debug(f"Generated {len(generated_text)} characters")
             

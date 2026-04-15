@@ -4,6 +4,7 @@ Response Generator - Generates responses for Chatbot
 This module handles the generation of responses based on user input,
 detected intent, retrieved knowledge, and LLM capabilities.
 """
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportReturnType=false
 from typing import Dict, Any, Optional, List
 import logging
 

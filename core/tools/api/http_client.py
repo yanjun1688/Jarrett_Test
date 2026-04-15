@@ -4,7 +4,7 @@ HTTP client tool for making API requests
 
 import httpx
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import logging
 from urllib.parse import urlparse, urljoin
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class HTTPClientTool(BaseTool):
     """HTTP client tool for making API requests"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="http_client",
             description="HTTP client for making API requests with support for various methods and authentication",
@@ -80,11 +80,11 @@ class HTTPClientTool(BaseTool):
             }
         }
     
-    def _get_required_parameters(self) -> list:
+    def _get_required_parameters(self) -> List[str]:
         """Get required parameters"""
         return ["url", "method"]
     
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs: Any) -> ToolResult:
         """
         Execute HTTP request
         
@@ -180,10 +180,9 @@ class HTTPClientTool(BaseTool):
         merged_headers = {**self.default_headers, **headers}
         
         # Prepare body
-        prepared_body = None
+        prepared_body: Any = None
         if body is not None:
             if isinstance(body, dict):
-                # Check if we should send as form data
                 content_type = merged_headers.get('Content-Type', '').lower()
                 if 'application/x-www-form-urlencoded' in content_type:
                     prepared_body = body
@@ -256,22 +255,22 @@ class HTTPClientTool(BaseTool):
             # Fallback to text
             return response.text
     
-    async def get(self, url: str, **kwargs) -> ToolResult:
+    async def get(self, url: str, **kwargs: Any) -> ToolResult:
         """Convenience method for GET requests"""
         return await self.execute(url=url, method='GET', **kwargs)
     
-    async def post(self, url: str, body: Any = None, **kwargs) -> ToolResult:
+    async def post(self, url: str, body: Any = None, **kwargs: Any) -> ToolResult:
         """Convenience method for POST requests"""
         return await self.execute(url=url, method='POST', body=body, **kwargs)
     
-    async def put(self, url: str, body: Any = None, **kwargs) -> ToolResult:
+    async def put(self, url: str, body: Any = None, **kwargs: Any) -> ToolResult:
         """Convenience method for PUT requests"""
         return await self.execute(url=url, method='PUT', body=body, **kwargs)
     
-    async def delete(self, url: str, **kwargs) -> ToolResult:
+    async def delete(self, url: str, **kwargs: Any) -> ToolResult:
         """Convenience method for DELETE requests"""
         return await self.execute(url=url, method='DELETE', **kwargs)
     
-    async def patch(self, url: str, body: Any = None, **kwargs) -> ToolResult:
+    async def patch(self, url: str, body: Any = None, **kwargs: Any) -> ToolResult:
         """Convenience method for PATCH requests"""
         return await self.execute(url=url, method='PATCH', body=body, **kwargs)

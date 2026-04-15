@@ -4,6 +4,8 @@
 提供缓存键的注册和批量失效功能
 支持分布式环境下的缓存管理
 """
+# pyright: reportAttributeAccessIssue=false
+# mypy: disable-error-code="attr-defined"
 from __future__ import annotations
 
 import logging

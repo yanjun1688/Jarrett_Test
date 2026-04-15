@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import asyncio
 import logging
+
 from typing import Callable, Dict, List, Any, Awaitable, Optional
 from dataclasses import dataclass
 from enum import Enum
@@ -24,7 +27,7 @@ class CapabilityEvent:
     capability_data: Any = None
     timestamp: Optional[str] = None
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.timestamp is None:
             from datetime import datetime
             self.timestamp = datetime.now().isoformat()
@@ -41,14 +44,14 @@ class CapabilityEventBus:
     支持同步和异步回调，适配异步上下文
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self._subscribers: Dict[CapabilityEventType, List[EventCallback]] = {}
     
     def subscribe(
         self, 
         event_type: CapabilityEventType, 
         callback: EventCallback
-    ):
+    ) -> None:
         if event_type not in self._subscribers:
             self._subscribers[event_type] = []
         self._subscribers[event_type].append(callback)
@@ -58,11 +61,11 @@ class CapabilityEventBus:
         self, 
         event_type: CapabilityEventType, 
         callback: EventCallback
-    ):
+    ) -> None:
         if event_type in self._subscribers:
             self._subscribers[event_type].remove(callback)
     
-    async def publish(self, event: CapabilityEvent):
+    async def publish(self, event: CapabilityEvent) -> None:
         logger.info(f"Publishing event: {event.event_type.value} - {event.capability_name}")
         
         if event.event_type not in self._subscribers:
@@ -77,7 +80,7 @@ class CapabilityEventBus:
             except Exception as e:
                 logger.error(f"Event handler error: {e}")
     
-    def publish_sync(self, event: CapabilityEvent):
+    def publish_sync(self, event: CapabilityEvent) -> None:
         logger.info(f"Publishing sync event: {event.event_type.value} - {event.capability_name}")
         
         if event.event_type not in self._subscribers:
@@ -93,4 +96,4 @@ class CapabilityEventBus:
                 logger.error(f"Event handler error: {e}")
 
 
-global_capability_event_bus = CapabilityEventBus()
+global_capability_event_bus: CapabilityEventBus = CapabilityEventBus()

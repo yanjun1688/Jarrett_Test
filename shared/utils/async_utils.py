@@ -9,7 +9,7 @@ import subprocess
 import time
 import os
 import sys
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Coroutine, Union
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Coroutine, Union, cast
 from functools import wraps
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from ..exceptions import ExecutionError
@@ -30,11 +30,10 @@ async def run_async(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     """
     loop = asyncio.get_running_loop()
     
-    # 如果函数已经是协程，直接运行
     if asyncio.iscoroutinefunction(func):
-        return await func(*args, **kwargs)
+        result = await func(*args, **kwargs)
+        return cast(T, result)
     
-    # 否则在线程池中运行
     return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
 
 
@@ -74,11 +73,10 @@ async def batch_process(
             current_results = await asyncio.gather(*current_tasks, return_exceptions=True)
             batch_results.extend(current_results)
         
-        # 处理异常
         for result in batch_results:
             if isinstance(result, Exception):
                 raise ExecutionError(f"批量处理失败: {str(result)}")
-            results.append(result)
+            results.append(cast(T, result))
     
     return results
 
@@ -111,7 +109,7 @@ async def retry_async(
     max_attempts: int = 3,
     delay: float = 1.0,
     backoff_factor: float = 2.0,
-    exceptions: tuple = (Exception,)
+    exceptions: tuple[type[Exception], ...] = (Exception,)
 ) -> T:
     """重试异步函数
     
@@ -194,10 +192,10 @@ async def measure_execution_time(coro: Coroutine[Any, Any, T]) -> tuple[T, float
 class AsyncQueue:
     """异步队列"""
     
-    def __init__(self, maxsize: int = 0):
-        self._queue = asyncio.Queue(maxsize=maxsize)
+    def __init__(self, maxsize: int = 0) -> None:
+        self._queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=maxsize)
     
-    async def put(self, item: Any):
+    async def put(self, item: Any) -> None:
         """放入项目"""
         await self._queue.put(item)
     
@@ -221,14 +219,14 @@ class AsyncQueue:
         self,
         process_func: Callable[[Any], Coroutine[Any, Any, Any]],
         num_workers: int = 1
-    ):
+    ) -> None:
         """处理队列中的项目
         
         Args:
             process_func: 处理函数
             num_workers: 工作线程数
         """
-        async def worker():
+        async def worker() -> None:
             while True:
                 try:
                     item = await self.get()
@@ -240,25 +238,21 @@ class AsyncQueue:
                     print(f"处理项目失败: {str(e)}")
                     self._queue.task_done()
         
-        # 创建工作线程
         workers = [asyncio.create_task(worker()) for _ in range(num_workers)]
         
-        # 等待所有项目处理完成
         await self._queue.join()
         
-        # 取消工作线程
         for worker_task in workers:
             worker_task.cancel()
         
-        # 等待工作线程结束
         await asyncio.gather(*workers, return_exceptions=True)
 
 
 async def run_in_threadpool(
     func: Callable[..., T],
-    *args,
+    *args: Any,
     max_workers: int = 10,
-    **kwargs
+    **kwargs: Any
 ) -> T:
     """在线程池中运行函数
     
@@ -282,9 +276,9 @@ async def run_in_threadpool(
 
 async def run_in_processpool(
     func: Callable[..., T],
-    *args,
+    *args: Any,
     max_workers: int = 4,
-    **kwargs
+    **kwargs: Any
 ) -> T:
     """在进程池中运行函数（适用于CPU密集型任务）
     
@@ -356,7 +350,7 @@ async def async_run_command(
         run_env = env if env is not None else None
         
         if isinstance(command, list):
-            cmd = command
+            cmd: Union[str, List[str]] = command
             use_shell = shell
         else:
             cmd = command

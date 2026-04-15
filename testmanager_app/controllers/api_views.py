@@ -2,6 +2,7 @@
 API测试相关视图
 包含：ApiRequestViewSet, ApiAssertionViewSet, RequestCollectionViewSet, CollectionExecutionViewSet
 """
+# pyright: reportAttributeAccessIssue=false
 
 import logging
 from rest_framework import status, viewsets
@@ -10,13 +11,17 @@ from rest_framework.response import Response
 
 from core.models import Project, TestExecution
 from testmanager_app.models import (
-    ApiRequest, ApiAssertion, RequestCollection, CollectionExecution
+    ApiRequest, ApiAssertion, RequestCollection, CollectionExecution,
+    PressureTestConfig, PressureTestExecution
 )
 from testmanager_app.serializers import (
     ApiRequestSerializer, ApiRequestCreateSerializer,
     ApiAssertionSerializer, ApiAssertionCreateSerializer,
     RequestCollectionSerializer, RequestCollectionCreateSerializer,
-    CollectionExecutionSerializer, CollectionExecutionCreateSerializer
+    CollectionExecutionSerializer, CollectionExecutionCreateSerializer,
+    PressureTestConfigSerializer, PressureTestConfigCreateSerializer,
+    PressureTestExecutionSerializer, PressureTestExecutionCreateSerializer,
+    PressureTestExecuteResponseSerializer
 )
 from testmanager_app.viewsets import BaseViewSet, QueryOptimizerMixin, CommonFilterMixin, CacheMixin
 from testmanager_app.utils.api_exceptions import api_exception_handler
@@ -333,7 +338,7 @@ class ApiAssertionViewSet(QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
     serializer_class = ApiAssertionSerializer
 
     # 查询优化配置
-    select_related_fields = ['api_request', 'created_by']
+    select_related_fields = ['api_request']
 
     # 过滤器配置
     filter_int_fields = ['api_request']
@@ -345,7 +350,13 @@ class ApiAssertionViewSet(QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
 
 
 class RequestCollectionViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
-    """请求集合管理API"""
+    """
+    请求集合管理API
+    
+    DEPRECATED: 2026-04-15
+    请使用 PressureTestConfigViewSet 替代
+    保留原因：兼容现有代码，观察期后删除
+    """
     queryset = RequestCollection.objects.all()
     serializer_class = RequestCollectionSerializer
 
@@ -371,11 +382,23 @@ class RequestCollectionViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixi
         """
         执行请求集合（后台任务版本）
         
+        DEPRECATED: 2026-04-15
+        请使用 PressureTestConfigViewSet.execute() 替代
+        保留原因：兼容现有代码，观察期后删除
+        
         改进点：
         - 使用 Celery 后台任务执行，避免 HTTP 请求超时
         - 立即返回 execution_id 和 task_id
         - 用户可通过 task_id 查询执行进度
         """
+        import warnings
+        warnings.warn(
+            "RequestCollection.execute() is deprecated. "
+            "Use PressureTestConfig.execute() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        
         collection = self.get_object()
         
         execution = CollectionExecution.objects.create(
@@ -396,7 +419,13 @@ class RequestCollectionViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixi
 
 
 class CollectionExecutionViewSet(QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
-    """集合执行记录API"""
+    """
+    集合执行记录API
+    
+    DEPRECATED: 2026-04-15
+    请使用 PressureTestExecutionViewSet 替代
+    保留原因：兼容现有代码，观察期后删除
+    """
     queryset = CollectionExecution.objects.all()
     serializer_class = CollectionExecutionSerializer
 
@@ -410,3 +439,116 @@ class CollectionExecutionViewSet(QueryOptimizerMixin, CommonFilterMixin, BaseVie
         if self.action in ['create', 'update', 'partial_update']:
             return CollectionExecutionCreateSerializer
         return CollectionExecutionSerializer
+
+
+# ============================================================================
+# 压测配置和执行 ViewSet (Pressure Test)
+# ============================================================================
+
+class PressureTestConfigViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
+    """压测配置管理API"""
+    queryset = PressureTestConfig.objects.all()
+    serializer_class = PressureTestConfigSerializer
+    
+    # 查询优化
+    select_related_fields = ['project', 'api_request', 'created_by']
+    
+    # 过滤器配置
+    filter_int_fields = ['project', 'api_request']
+    
+    # 缓存配置
+    cache_timeout = 120  # 2分钟
+    cache_detail_timeout = 300  # 5分钟
+    
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return PressureTestConfigCreateSerializer
+        return PressureTestConfigSerializer
+    
+    @api_exception_handler
+    @action(detail=True, methods=['post'])
+    def execute(self, request, pk=None):
+        """
+        开始压测
+        返回 WebSocket 连接 URL
+        """
+        config = self.get_object()
+        logger.info(f"[PressureTest] Execute called - config_id={config.id}, config_name={config.name}, "
+                    f"mode={config.pressure_mode}, user={request.user if request.user.is_authenticated else 'anonymous'}")
+        
+        execution = PressureTestExecution.objects.create(
+            config=config,
+            executor=request.user if request.user.is_authenticated else None,
+            status='pending'
+        )
+        logger.info(f"[PressureTest] Created execution record - execution_id={execution.id}, status=pending")
+        
+        websocket_url = f"/ws/pressure-test/{execution.id}/"
+        logger.info(f"[PressureTest] WebSocket URL: {websocket_url}")
+        
+        serializer = PressureTestExecuteResponseSerializer({
+            'execution_id': execution.id,
+            'websocket_url': websocket_url,
+            'message': '请连接WebSocket并开始压测'
+        })
+        
+        logger.info(f"[PressureTest] Execute response - execution_id={execution.id}, ws_url={websocket_url}")
+        return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
+    
+    @api_exception_handler
+    @action(detail=True, methods=['get'])
+    def history(self, request, pk=None):
+        """获取压测历史记录"""
+        config = self.get_object()
+        executions = config.executions.order_by('-started_at')[:10]
+        serializer = PressureTestExecutionSerializer(executions, many=True)
+        return Response(serializer.data)
+
+
+class PressureTestExecutionViewSet(QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
+    """压测执行记录API"""
+    queryset = PressureTestExecution.objects.all()
+    serializer_class = PressureTestExecutionSerializer
+    
+    # 查询优化
+    select_related_fields = ['config', 'executor']
+    
+    # 过滤器配置
+    filter_int_fields = ['config']
+    filter_choice_fields = {
+        'status': ['pending', 'running', 'completed', 'stopped', 'failed']
+    }
+    
+    def get_serializer_class(self):
+        if self.action in ['create', 'update', 'partial_update']:
+            return PressureTestExecutionCreateSerializer
+        return PressureTestExecutionSerializer
+    
+    @api_exception_handler
+    @action(detail=True, methods=['get'])
+    def results(self, request, pk=None):
+        """获取详细结果（分页）"""
+        execution = self.get_object()
+        
+        if not execution.raw_results:
+            return Response({'results': [], 'count': 0})
+        
+        # 分页参数
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 100))
+        
+        all_results = execution.raw_results
+        total = len(all_results)
+        
+        # 分页
+        start = (page - 1) * page_size
+        end = start + page_size
+        paginated_results = all_results[start:end]
+        
+        return Response({
+            'results': paginated_results,
+            'count': total,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': (total + page_size - 1) // page_size
+        })

@@ -1,7 +1,10 @@
 """
 UI测试应用的Admin配置
 """
+from __future__ import annotations
+from typing import Any
 from django.contrib import admin
+from django.http import HttpRequest
 from .models import (
     UITestScript,
     UITestExecution,
@@ -41,5 +44,5 @@ class UITestExecutionAdmin(admin.ModelAdmin):
     readonly_fields = ['script', 'executed_by', 'status', 'started_at', 'completed_at',
                        'duration', 'result_summary', 'error_message', 'screenshots', 'execution_log', 'created_at']
     
-    def has_add_permission(self, request):
-        return False  # 执行记录只能通过API创建
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False

@@ -119,6 +119,10 @@ const ExecutionLogModal = ({
   // 格式化响应体
   const formatResponseBody = () => {
     if (!responseBody) return null;
+    // 如果已经是对象，直接 stringify
+    if (typeof responseBody === 'object') {
+      return JSON.stringify(responseBody, null, 2);
+    }
     try {
       const parsed = JSON.parse(responseBody);
       return JSON.stringify(parsed, null, 2);

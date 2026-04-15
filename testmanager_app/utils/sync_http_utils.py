@@ -15,6 +15,49 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+def _parse_headers(headers: Any) -> Dict[str, str]:
+    """
+    解析请求头 - 只支持 JSON 字符串和字典格式
+    
+    Args:
+        headers: 请求头数据（JSON字符串或字典）
+    
+    Returns:
+        Dict[str, str]: 解析后的请求头字典
+    
+    Raises:
+        ValueError: 如果格式不正确
+    """
+    if not headers:
+        return {}
+    
+    if isinstance(headers, dict):
+        return headers
+    
+    if isinstance(headers, str):
+        headers_str = headers.strip()
+        if not headers_str:
+            return {}
+        
+        if headers_str.startswith('{'):
+            try:
+                parsed = json.loads(headers_str)
+                if isinstance(parsed, dict):
+                    return parsed
+                else:
+                    logger.warning(f"[Sync] Headers 解析结果不是字典: {type(parsed)}")
+                    return {}
+            except json.JSONDecodeError as e:
+                logger.error(f"[Sync] Headers JSON 解析失败: {e}")
+                return {}
+        
+        logger.warning(f"[Sync] Headers 不是 JSON 格式，请使用标准 JSON 格式")
+        return {}
+    
+    logger.warning(f"[Sync] Headers 类型不支持: {type(headers)}")
+    return {}
+
+
 def execute_request_direct(api_request: Any, user: Any = None) -> Dict[str, Any]:
     """
     纯同步执行单个API请求 - 不涉及任何异步/event loop
@@ -58,7 +101,7 @@ def execute_request_direct(api_request: Any, user: Any = None) -> Dict[str, Any]
         with httpx.Client(timeout=api_request_data.get('timeout', 30)) as client:
             method = api_request_data.get('method', 'GET').upper()
             url = api_request_data.get('url', '')
-            headers = api_request_data.get('headers', {})
+            headers = _parse_headers(api_request_data.get('headers', {}))
             
             from shared.utils.url_validator import validate_request_url
             url = validate_request_url(url)
@@ -204,13 +247,25 @@ def _validate_assertion_sync(
         elif comparison_operator == 'not_contains':
             passed = str(expected_value) not in str(actual_value)
         elif comparison_operator == 'greater_than':
-            passed = float(actual_value) > float(expected_value)
+            if actual_value is not None and expected_value is not None:
+                passed = float(actual_value) > float(expected_value)
+            else:
+                passed = False
         elif comparison_operator == 'less_than':
-            passed = float(actual_value) < float(expected_value)
+            if actual_value is not None and expected_value is not None:
+                passed = float(actual_value) < float(expected_value)
+            else:
+                passed = False
         elif comparison_operator == 'greater_than_or_equal':
-            passed = float(actual_value) >= float(expected_value)
+            if actual_value is not None and expected_value is not None:
+                passed = float(actual_value) >= float(expected_value)
+            else:
+                passed = False
         elif comparison_operator == 'less_than_or_equal':
-            passed = float(actual_value) <= float(expected_value)
+            if actual_value is not None and expected_value is not None:
+                passed = float(actual_value) <= float(expected_value)
+            else:
+                passed = False
         elif comparison_operator == 'regex_match':
             import re
             passed = bool(re.match(str(expected_value), str(actual_value)))

@@ -16,7 +16,7 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, Union, Generator
 from datetime import datetime
 from dataclasses import dataclass, field
 import contextlib
@@ -25,10 +25,10 @@ logger = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
-def _file_lock(filepath: Path):
+def _file_lock(filepath: Path) -> Generator[None, None, None]:
     """跨平台文件锁"""
     lock_path = filepath.with_suffix(filepath.suffix + '.lock')
-    lock_fd = None
+    lock_fd: Any = None
     try:
         if os.name == 'nt':
             import msvcrt
@@ -37,7 +37,7 @@ def _file_lock(filepath: Path):
         else:
             import fcntl
             lock_fd = open(lock_path, 'w')
-            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)
+            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)  # type: ignore[attr-defined]
         yield
     except (IOError, OSError) as e:
         logger.warning(f"Failed to acquire file lock: {e}")
@@ -50,7 +50,7 @@ def _file_lock(filepath: Path):
                     msvcrt.locking(lock_fd.fileno(), msvcrt.LK_UNLCK, 1)
                 else:
                     import fcntl
-                    fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
+                    fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)  # type: ignore[attr-defined]
                 lock_fd.close()
             except Exception:
                 pass
@@ -216,7 +216,7 @@ class IncrementalStore:
         timestamp: str,
         length: int,
         tokens: int
-    ):
+    ) -> None:
         """增量更新索引"""
         try:
             index_path = self._get_index_path(user_id, session_id)
@@ -290,7 +290,7 @@ class IncrementalStore:
             logger.warning(f"Failed to load index: {e}")
             return SessionIndex(session_id=session_id)
     
-    def _save_index(self, index: SessionIndex, user_id: str):
+    def _save_index(self, index: SessionIndex, user_id: str) -> None:
         """保存索引"""
         index_path = self._get_index_path(user_id, index.session_id)
         index_path.parent.mkdir(parents=True, exist_ok=True)
@@ -359,7 +359,7 @@ class IncrementalStore:
         """获取会话索引"""
         return self._load_index(session_id, user_id)
     
-    def reset_append_fragments(self, session_id: str, user_id: str):
+    def reset_append_fragments(self, session_id: str, user_id: str) -> None:
         """重置追加碎片计数"""
         index = self._load_index(session_id, user_id)
         index.append_fragments = 0

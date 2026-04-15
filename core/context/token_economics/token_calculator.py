@@ -15,7 +15,7 @@ Reference: docs/2026/04/01/DESIGN_CONTEXT_TOKEN_ECONOMICS.md
 
 import re
 import logging
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List, Union
 from dataclasses import dataclass
 from enum import Enum
 
@@ -171,7 +171,7 @@ class TokenCalculator:
     DEFAULT_MODEL = "gpt-4"
     DEFAULT_ENCODING = "cl100k_base"
     
-    def __init__(self, model_name: str = DEFAULT_MODEL):
+    def __init__(self, model_name: str = DEFAULT_MODEL) -> None:
         """
         初始化 Token 计算器
         
@@ -180,7 +180,7 @@ class TokenCalculator:
         """
         self.model_name = model_name.lower()
         self.config = self._get_model_config(self.model_name)
-        self.encoding = None
+        self.encoding: Union[Any, None] = None
         
         if self.config.calculation_method == CalculationMethod.TIKTOKEN:
             self._init_tiktoken()
@@ -206,7 +206,7 @@ class TokenCalculator:
         
         return MODEL_CONFIGS[self.DEFAULT_MODEL]
     
-    def _init_tiktoken(self):
+    def _init_tiktoken(self) -> None:
         """初始化 tiktoken 编码器"""
         try:
             import tiktoken
@@ -317,7 +317,7 @@ class TokenCalculator:
         
         return overhead + role_tokens + content_tokens
     
-    def count_messages_tokens(self, messages: list) -> int:
+    def count_messages_tokens(self, messages: List[Dict[str, Any]]) -> int:
         """
         计算消息列表的总 Token 数量
         

@@ -4,7 +4,7 @@ Test Management Models
 This module contains test case, test execution, and test flow models.
 """
 
-from typing import Any
+from typing import Any, Dict
 from django.db import models
 from django.contrib.auth.models import User
 from django.db.models import Q, Count, Manager, QuerySet
@@ -69,17 +69,17 @@ class TestCase(models.Model):
 class TestExecutionQuerySet(QuerySet['TestExecution']):
     """测试执行记录的自定义 QuerySet"""
 
-    def by_project(self, project: Any) -> QuerySet['TestExecution']:
+    def by_project(self, project: Any) -> 'TestExecutionQuerySet':
         """按项目过滤"""
         return self.filter(
             Q(test_case__project=project) | Q(api_request__project=project) | Q(collection_execution__collection__project=project)
         )
 
-    def by_date_range(self, start_date: Any, end_date: Any) -> QuerySet['TestExecution']:
+    def by_date_range(self, start_date: Any, end_date: Any) -> 'TestExecutionQuerySet':
         """按时间范围过滤"""
         return self.filter(executed_at__range=[start_date, end_date])
 
-    def aggregate_stats(self):
+    def aggregate_stats(self) -> Dict[str, Any]:
         """聚合统计执行数据"""
         return self.aggregate(
             total_executions=Count('id'),
@@ -103,7 +103,8 @@ class TestExecutionManager(Manager['TestExecution']):
         return self.get_queryset().by_project(project)
 
     def by_project_and_date_range(self, project: Any, start_date: Any, end_date: Any) -> QuerySet['TestExecution']:
-        return self.get_queryset().by_project(project).by_date_range(start_date, end_date)  # type: ignore[attr-defined]
+        qs = self.get_queryset()
+        return qs.by_project(project).by_date_range(start_date, end_date)
 
 
 class TestExecution(models.Model):
@@ -215,15 +216,15 @@ class TestExecution(models.Model):
     
     def __str__(self) -> str:
         if self.test_type == 'api' and self.api_request:
-            return f"{self.api_request.name} - {self.get_status_display()}"  # type: ignore[attr-defined]
+            return f"{self.api_request.name} - {self.get_status_display()}"
         elif self.test_type == 'api' and self.collection_execution:
-            return f"{self.collection_execution.collection.name} - {self.get_status_display()}"  # type: ignore[attr-defined]
+            return f"{self.collection_execution.collection.name} - {self.get_status_display()}"
         elif self.test_type == 'api':
-            return f"API测试 - {self.get_status_display()}"  # type: ignore[attr-defined]
+            return f"API测试 - {self.get_status_display()}"
         elif self.test_case:
-            return f"{self.test_case.title} - {self.get_status_display()}"  # type: ignore[attr-defined]
+            return f"{self.test_case.title} - {self.get_status_display()}"
         else:
-            return f"测试执行 - {self.get_status_display()}"  # type: ignore[attr-defined]
+            return f"测试执行 - {self.get_status_display()}"
 
 
 class TestFlow(models.Model):
@@ -316,7 +317,7 @@ class TestFlowExecution(models.Model):
         ]
     
     def __str__(self) -> str:
-        return f"{self.test_flow.name} - {self.get_status_display()}"  # type: ignore[attr-defined]
+        return f"{self.test_flow.name} - {self.get_status_display()}"
     
     @property
     def duration(self) -> float | None:
@@ -326,16 +327,16 @@ class TestFlowExecution(models.Model):
         return None
     
     @property
-    def nodes_executed(self):
+    def nodes_executed(self) -> int:
         """Number of nodes executed (from metrics)"""
-        return self.metrics.get('nodes_executed', 0)
+        return self.metrics.get('nodes_executed', 0) if self.metrics else 0
     
     @property
-    def successful_nodes(self):
+    def successful_nodes(self) -> int:
         """Number of successful nodes (from metrics)"""
-        return self.metrics.get('successful_nodes', 0)
+        return self.metrics.get('successful_nodes', 0) if self.metrics else 0
     
     @property
-    def failed_nodes(self):
+    def failed_nodes(self) -> int:
         """Number of failed nodes (from metrics)"""
-        return self.metrics.get('failed_nodes', 0)
+        return self.metrics.get('failed_nodes', 0) if self.metrics else 0

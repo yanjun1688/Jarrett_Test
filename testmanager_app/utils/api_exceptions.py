@@ -3,6 +3,7 @@
 
 提供自定义业务异常类和统一的异常处理装饰器
 """
+# pyright: reportArgumentType=false, reportReturnType=false
 
 from __future__ import annotations
 

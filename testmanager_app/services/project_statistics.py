@@ -3,11 +3,14 @@
 提供项目相关的统计计算功能
 """
 
+from __future__ import annotations
+
+from typing import Dict, Any, Optional
 from django.db.models import Count, Q
 from core.models import Project, TestCase, TestExecution
 
 
-def get_project_statistics(project_id):
+def get_project_statistics(project_id: int) -> Optional[Dict[str, Any]]:
     """
     获取项目统计信息（包含功能测试和API测试）
 
@@ -29,7 +32,7 @@ def get_project_statistics(project_id):
     total_testcases = TestCase.objects.filter(project=project).count()
 
     # 使用自定义 QuerySet 方法统一聚合统计
-    stats = TestExecution.objects.by_project(project).aggregate_stats()
+    stats = TestExecution.objects.by_project(project).aggregate_stats()  # type: ignore[attr-defined]
 
     # 提取统计数据
     total_executions = stats.get('total_executions', 0)
@@ -66,7 +69,7 @@ def get_project_statistics(project_id):
         skipped=Count('id', filter=Q(status='skipped')),
     )
 
-    data = {
+    data: Dict[str, Any] = {
         'project_id': project.id,
         'project_name': project.name,
         'total_testcases': total_testcases,

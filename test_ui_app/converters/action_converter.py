@@ -21,19 +21,22 @@ class StepsToActionsConverter:
         Returns:
             List[Dict]: actions列表
         """
-        actions = []
+        actions: List[Dict[str, Any]] = []
         
         for idx, step in enumerate(steps, start=1):
-            # 处理模型对象或字典
+            action_type: Any = None
+            action_params: Dict[str, Any] = {}
+            description: str = ''
+            element_locator: Any = None
+            is_enabled: bool = True
+            
             if hasattr(step, 'action_type'):
-                # Django模型对象
                 action_type = step.action_type
                 action_params = step.action_params or {}
                 description = step.description or ''
                 element_locator = step.element_locator
                 is_enabled = getattr(step, 'is_enabled', True)
             elif isinstance(step, dict):
-                # 字典格式
                 action_type = step.get('action_type')
                 action_params = step.get('action_params', {})
                 description = step.get('description', '')
@@ -46,7 +49,6 @@ class StepsToActionsConverter:
             if not is_enabled:
                 continue
             
-            # 构建action
             action = {
                 'id': f'action_{idx}',
                 'order': idx,
@@ -55,24 +57,19 @@ class StepsToActionsConverter:
                 'description': description
             }
             
-            # 处理element_locator
             if element_locator:
                 if hasattr(element_locator, 'locator_type'):
-                    # Django模型对象
                     action['selector'] = {
                         'type': element_locator.locator_type,
                         'value': element_locator.locator_value
                     }
                 elif isinstance(element_locator, dict):
-                    # 字典格式
                     action['selector'] = {
                         'type': element_locator.get('locator_type'),
                         'value': element_locator.get('locator_value')
                     }
             
-            # 特殊处理：navigate类型的action
             if action_type == 'navigate' and 'url' in action_params:
-                # navigate不需要selector
                 if 'selector' in action:
                     del action['selector']
             
@@ -81,7 +78,7 @@ class StepsToActionsConverter:
         return actions
     
     @staticmethod
-    def convert_from_recording(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def convert_from_recording(steps: List[Any]) -> List[Dict[str, Any]]:
         """
         转换录制步骤为actions格式（专用于录制场景）
         
@@ -109,7 +106,7 @@ class StepsToActionsConverter:
         Returns:
             List[Dict]: actions列表
         """
-        actions = []
+        actions: List[Dict[str, Any]] = []
         
         for idx, step in enumerate(steps, start=1):
             if not isinstance(step, dict):
@@ -125,7 +122,6 @@ class StepsToActionsConverter:
             description = step.get('description', '')
             element_locator = step.get('element_locator')
             
-            # 构建action
             action = {
                 'id': f'action_{idx}',
                 'order': idx,
@@ -134,7 +130,6 @@ class StepsToActionsConverter:
                 'description': description
             }
             
-            # 处理element_locator
             if element_locator and isinstance(element_locator, dict):
                 locator_type = element_locator.get('locator_type')
                 locator_value = element_locator.get('locator_value')
@@ -145,9 +140,7 @@ class StepsToActionsConverter:
                         'value': locator_value
                     }
             
-            # 特殊处理：navigate类型的action
             if action_type == 'navigate' and 'url' in action_params:
-                # navigate不需要selector
                 if 'selector' in action:
                     del action['selector']
             
@@ -176,10 +169,7 @@ def convert_to_actions(source_data: Any, source_type: str) -> List[Dict[str, Any
         converter = StepsToActionsConverter()
         return converter.convert(source_data)
     elif source_type == 'actions':
-        # actions格式已经符合要求，直接返回（但需要验证和清理）
         converter = StepsToActionsConverter()
-        # 使用convert_from_recording方法，它支持actions格式
         return converter.convert_from_recording(source_data)
     else:
         raise ValueError(f"不支持的source_type: {source_type}，仅支持: 'steps', 'actions'")
-

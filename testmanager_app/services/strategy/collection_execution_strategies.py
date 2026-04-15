@@ -2,6 +2,10 @@
 集合执行策略模块
 提供请求集合的三种执行策略，统一接口和行为
 
+DEPRECATED: 2026-04-15
+该模块已废弃，请使用 pressure_test_engine.py 替代
+保留原因：兼容现有代码，观察期后删除
+
 设计原则：
 - 策略模式：不同执行模式使用不同策略类
 - 接口统一：所有策略实现相同的接口，返回统一格式的结果
@@ -9,6 +13,7 @@
 - 开闭原则：新增执行模式只需添加新策略类，无需修改核心代码
 """
 
+import warnings
 import asyncio
 import json  # 修复：添加json解析支持
 import logging
@@ -24,6 +29,14 @@ from testmanager_app.utils.template_renderer import TemplateRenderer  # 修复�
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+# 模块级废弃警告
+warnings.warn(
+    "collection_execution_strategies module is deprecated. "
+    "Use pressure_test_engine instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 
 # 辅助函数：异步创建TestExecution记录

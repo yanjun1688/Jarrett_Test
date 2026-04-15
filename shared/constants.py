@@ -350,7 +350,7 @@ class IntentType:
         ]
     
     @classmethod
-    def all_intents(cls) -> list:
+    def all_intents(cls) -> list[str]:
         """返回所有意图类型"""
         return [
             cls.CHAT,

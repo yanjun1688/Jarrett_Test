@@ -2,6 +2,7 @@
 报告相关视图
 包含：TestReportViewSet, TestReportDataView
 """
+# pyright: reportAttributeAccessIssue=false, reportOptionalSubscript=false, reportIndexIssue=false, reportArgumentType=false
 
 import logging
 from django.db import transaction

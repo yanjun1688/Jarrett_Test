@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class QueryTestScriptsTool(BaseTool):
     """查询测试脚本列表（支持API和UI两种类型）"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="query_test_scripts",
             description="查询测试脚本列表。根据脚本名称查找 API 测试脚本或 UI 测试脚本。\n\n"
@@ -53,7 +53,7 @@ class QueryTestScriptsTool(BaseTool):
     def _get_required_parameters(self) -> List[str]:
         return ["script_name"]
     
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs: Any) -> ToolResult:
         """
         查询测试脚本
         
@@ -80,68 +80,68 @@ class QueryTestScriptsTool(BaseTool):
         
         try:
             @sync_to_async
-            def query_scripts():
+            def query_scripts() -> List[Dict[str, Any]]:
                 from testmanager_app.models import TestScript
                 from test_ui_app.models import UITestScript
                 from core.models import Project
                 
-                project_id = None
+                project_id: Optional[int] = None
                 if project_name:
                     try:
                         project = Project.objects.get(name=project_name)
-                        project_id = project.id  # type: ignore[attr-defined]
-                        logger.info(f"[QueryTestScripts] 找到项目: id={project_id}, name='{project.name}'")  # type: ignore[attr-defined]
+                        project_id = project.id
+                        logger.info(f"[QueryTestScripts] 找到项目: id={project_id}, name='{project.name}'")
                     except Project.DoesNotExist:
                         logger.warning(f"[QueryTestScripts] 项目不存在: '{project_name}'")
                         return []
                 
-                results = []
+                results: List[Dict[str, Any]] = []
                 
                 # 查询 API 测试脚本（TestScript）
                 if test_type in ["api", "all"]:
-                    api_filters = {'is_active': True, 'name': script_name}
+                    api_filters: Dict[str, Any] = {'is_active': True, 'name': script_name}
                     if project_id:
                         api_filters['project'] = project_id
                     
                     logger.info(f"[QueryTestScripts] 查询 API 脚本, 条件: {api_filters}")
                     api_scripts = TestScript.objects.filter(**api_filters).select_related('project', 'created_by')
                     
-                    for script in api_scripts:
-                        logger.info(f"[QueryTestScripts] 找到 API 脚本: id={script.id}, name='{script.name}', type='{script.script_type}'")  # type: ignore[attr-defined]
+                    for api_script in api_scripts:
+                        logger.info(f"[QueryTestScripts] 找到 API 脚本: id={api_script.id}, name='{api_script.name}', type='{api_script.script_type}'")
                         results.append({
-                            'id': script.id,  # type: ignore[attr-defined]
-                            'name': script.name,  # type: ignore[attr-defined]
+                            'id': api_script.id,
+                            'name': api_script.name,
                             'test_type': 'api',
-                            'script_type': script.script_type,  # type: ignore[attr-defined]
-                            'project_id': script.project.id if script.project else None,  # type: ignore[attr-defined]
-                            'project_name': script.project.name if script.project else None,  # type: ignore[attr-defined]
-                            'description': script.description,
-                            'created_by': script.created_by.username if script.created_by else None,
-                            'created_at': script.created_at.strftime('%Y-%m-%d %H:%M:%S') if script.created_at else None,
+                            'script_type': api_script.script_type,
+                            'project_id': api_script.project.id if api_script.project else None,
+                            'project_name': api_script.project.name if api_script.project else None,
+                            'description': api_script.description,
+                            'created_by': api_script.created_by.username if api_script.created_by else None,
+                            'created_at': api_script.created_at.strftime('%Y-%m-%d %H:%M:%S') if api_script.created_at else None,
                         })
                 
                 # 查询 UI 测试脚本（UITestScript）
                 if test_type in ["ui", "all"]:
-                    ui_filters = {'is_active': True, 'name': script_name}
+                    ui_filters: Dict[str, Any] = {'is_active': True, 'name': script_name}
                     if project_id:
                         ui_filters['project'] = project_id
                     
                     logger.info(f"[QueryTestScripts] 查询 UI 脚本, 条件: {ui_filters}")
                     ui_scripts = UITestScript.objects.filter(**ui_filters).select_related('project', 'created_by')
                     
-                    for script in ui_scripts:
-                        logger.info(f"[QueryTestScripts] 找到 UI 脚本: id={script.id}, name='{script.name}', browser='{script.browser_type}'")  # type: ignore[attr-defined]
+                    for ui_script in ui_scripts:
+                        logger.info(f"[QueryTestScripts] 找到 UI 脚本: id={ui_script.id}, name='{ui_script.name}', browser='{ui_script.browser_type}'")
                         results.append({
-                            'id': script.id,  # type: ignore[attr-defined]
-                            'name': script.name,  # type: ignore[attr-defined]
+                            'id': ui_script.id,
+                            'name': ui_script.name,
                             'test_type': 'ui',
                             'script_type': 'playwright',
-                            'browser_type': script.browser_type,  # type: ignore[attr-defined]
-                            'project_id': script.project.id if script.project else None,  # type: ignore[attr-defined]
-                            'project_name': script.project.name if script.project else None,
-                            'description': script.description,
-                            'created_by': script.created_by.username if script.created_by else None,
-                            'created_at': script.created_at.strftime('%Y-%m-%d %H:%M:%S') if script.created_at else None,
+                            'browser_type': ui_script.browser_type,
+                            'project_id': ui_script.project.id if ui_script.project else None,
+                            'project_name': ui_script.project.name if ui_script.project else None,
+                            'description': ui_script.description,
+                            'created_by': ui_script.created_by.username if ui_script.created_by else None,
+                            'created_at': ui_script.created_at.strftime('%Y-%m-%d %H:%M:%S') if ui_script.created_at else None,
                         })
                 
                 logger.info(f"[QueryTestScripts] 总计找到 {len(results)} 个脚本")

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useDeferredValue } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Drawer, Input, Button, Select, message, Space, Divider, Tag, Spin, Tooltip, List, Popconfirm, Avatar } from 'antd';
 import {
   SendOutlined,
@@ -39,7 +39,6 @@ const ChatBotDrawer = ({
 }) => {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState(initialMessage);
-  const inputTextDeferred = useDeferredValue(inputText);
   const [loading, setLoading] = useState(false);
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState(null);
@@ -631,7 +630,7 @@ return (
           {/* 输入区域 */}
           <div className="input-container">
             <TextArea
-              value={inputTextDeferred}
+              value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onPressEnter={(e) => {
                 if (!e.shiftKey) {

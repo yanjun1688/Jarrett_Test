@@ -3,6 +3,7 @@
 支持变量提取、模板替换、setup/teardown
 """
 
+from typing import Any, Dict, List, Optional
 import yaml
 import json
 import re
@@ -19,12 +20,12 @@ logger = logging.getLogger(__name__)
 class TestChainExecutor:
     """测试链路执行器"""
 
-    def __init__(self, base_context=None):
+    def __init__(self, base_context: Optional[Dict[str, Any]] = None) -> None:
         self.context = base_context or {}
-        self.logs = []
-        self.session = None
+        self.logs: List[str] = []
+        self.session: Optional[httpx.AsyncClient] = None
 
-    def log(self, message):
+    def log(self, message: str) -> None:
         """记录日志"""
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"[{timestamp}] {message}"
@@ -34,7 +35,7 @@ class TestChainExecutor:
     
     
 
-    def render_template(self, template):
+    def render_template(self, template: Any) -> Any:
         """
         渲染模板字符串，替换 {{variable}} 为实际值（使用统一模板引擎）
 
@@ -57,7 +58,7 @@ class TestChainExecutor:
             self.log(f"模板渲染失败: {str(e)}")
             return template
 
-    def extract_variables(self, response, extract_rules):
+    def extract_variables(self, response: httpx.Response, extract_rules: List[Dict[str, Any]]) -> None:
         """
         从响应中提取变量
 

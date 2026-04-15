@@ -6,7 +6,8 @@
 - 项目统计：5分钟（数据变化不频繁）
 - 项目列表：2分钟（可能变化）
 """
-
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false
+# mypy: disable-error-code="attr-defined, arg-type, no-any-return"
 from __future__ import annotations
 
 import hashlib

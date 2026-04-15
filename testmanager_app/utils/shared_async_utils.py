@@ -22,6 +22,42 @@ from asgiref.sync import sync_to_async, async_to_sync
 logger = logging.getLogger(__name__)
 
 
+def _parse_headers(headers: Any) -> Dict[str, str]:
+    """
+    解析请求头 - 只支持 JSON 字符串和字典格式
+    
+    Args:
+        headers: 请求头数据（JSON字符串或字典）
+    
+    Returns:
+        Dict[str, str]: 解析后的请求头字典
+    """
+    if not headers:
+        return {}
+    
+    if isinstance(headers, dict):
+        return headers
+    
+    if isinstance(headers, str):
+        headers_str = headers.strip()
+        if not headers_str:
+            return {}
+        
+        if headers_str.startswith('{'):
+            try:
+                parsed = json.loads(headers_str)
+                if isinstance(parsed, dict):
+                    return parsed
+                else:
+                    return {}
+            except json.JSONDecodeError:
+                return {}
+        
+        return {}
+    
+    return {}
+
+
 def _is_in_async_context() -> bool:
     """
     检测当前是否在异步上下文中
@@ -130,7 +166,7 @@ async def execute_single_request_async(api_request: Any, user: Any = None) -> Di
             # 准备请求参数
             method = api_request_data.get('method', 'GET').upper()
             url = api_request_data.get('url', '')
-            headers = api_request_data.get('headers', {})
+            headers = _parse_headers(api_request_data.get('headers', {}))
             body = api_request_data.get('body', None)
 
             # SSRF 防护：验证目标 URL
@@ -282,13 +318,25 @@ async def validate_assertion_async(
         elif comparison_operator == 'not_contains':
             passed = str(expected_value) not in str(actual_value)
         elif comparison_operator == 'greater_than':
-            passed = float(actual_value) > float(expected_value)
+            if actual_value is not None and expected_value is not None:
+                passed = float(actual_value) > float(expected_value)
+            else:
+                passed = False
         elif comparison_operator == 'less_than':
-            passed = float(actual_value) < float(expected_value)
+            if actual_value is not None and expected_value is not None:
+                passed = float(actual_value) < float(expected_value)
+            else:
+                passed = False
         elif comparison_operator == 'greater_than_or_equal':
-            passed = float(actual_value) >= float(expected_value)
+            if actual_value is not None and expected_value is not None:
+                passed = float(actual_value) >= float(expected_value)
+            else:
+                passed = False
         elif comparison_operator == 'less_than_or_equal':
-            passed = float(actual_value) <= float(expected_value)
+            if actual_value is not None and expected_value is not None:
+                passed = float(actual_value) <= float(expected_value)
+            else:
+                passed = False
         elif comparison_operator == 'regex_match':
             import re
             passed = bool(re.match(str(expected_value), str(actual_value)))
@@ -424,9 +472,15 @@ def validate_assertion_common(
         elif comparison_operator == 'not_contains':
             passed = str(expected_value) not in str(actual_value)
         elif comparison_operator == 'greater_than':
-            passed = float(actual_value) > float(expected_value)
+            if actual_value is not None and expected_value is not None:
+                passed = float(actual_value) > float(expected_value)
+            else:
+                passed = False
         elif comparison_operator == 'less_than':
-            passed = float(actual_value) < float(expected_value)
+            if actual_value is not None and expected_value is not None:
+                passed = float(actual_value) < float(expected_value)
+            else:
+                passed = False
         else:
             passed = actual_value == expected_value
 

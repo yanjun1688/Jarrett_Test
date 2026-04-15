@@ -2,6 +2,7 @@
 脚本执行策略模块
 提供不同脚本类型的执行策略实现，遵循策略模式和开闭原则
 """
+# pyright: reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
 
 import logging
 from abc import ABC, abstractmethod
@@ -138,10 +139,10 @@ class ScriptExecutionStrategyFactory:
     遵循工厂模式和单例模式（策略实例复用）
     """
 
-    _strategies = None  # 策略缓存，避免重复创建实例
+    _strategies: list[ExecutionStrategyInterface] | None = None  # 策略缓存，避免重复创建实例
 
     @classmethod
-    def _initialize_strategies(cls):
+    def _initialize_strategies(cls) -> None:
         """初始化所有策略实例"""
         if cls._strategies is None:
             cls._strategies = [
@@ -167,6 +168,7 @@ class ScriptExecutionStrategyFactory:
         cls._initialize_strategies()
 
         # 按注册顺序查找第一个可以执行该脚本的策略
+        assert cls._strategies is not None
         for strategy in cls._strategies:
             if strategy.can_execute(script):
                 logger.debug(f"找到策略: {strategy.__class__.__name__} 用于 script_id={script.id}")
@@ -177,7 +179,7 @@ class ScriptExecutionStrategyFactory:
         raise StrategyNotFoundError(f"No strategy found for script type: {script.script_type}")
 
     @classmethod
-    def register_strategy(cls, strategy: ExecutionStrategyInterface):
+    def register_strategy(cls, strategy: ExecutionStrategyInterface) -> None:
         """
         注册新的策略
 
@@ -186,12 +188,14 @@ class ScriptExecutionStrategyFactory:
         """
         cls._initialize_strategies()
 
+        assert cls._strategies is not None
         # 插入到列表前面（优先级高于默认策略）
         cls._strategies.insert(0, strategy)
         logger.info(f"注册新策略: {strategy.__class__.__name__}")
 
     @classmethod
-    def get_registered_strategies(cls) -> list:
+    def get_registered_strategies(cls) -> list[ExecutionStrategyInterface]:
         """获取所有已注册的策略"""
         cls._initialize_strategies()
+        assert cls._strategies is not None
         return cls._strategies.copy()

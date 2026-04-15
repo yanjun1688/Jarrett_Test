@@ -8,7 +8,10 @@ from __future__ import annotations
 import httpx
 import json
 import logging
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, TypedDict, overload
+
+from httpx._types import RequestContent
+
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -42,8 +45,7 @@ def make_http_request(
         url = validate_request_url(url)
 
         with httpx.Client(timeout=timeout, verify=verify_ssl) as client:
-            # 准备请求参数
-            request_kwargs = {
+            request_kwargs: Dict[str, Any] = {
                 'method': method.upper(),
                 'url': url,
                 'headers': headers or {}
@@ -128,7 +130,7 @@ def parse_headers(headers_str: str) -> Dict[str, str]:
     Returns:
         解析后的header字典
     """
-    headers = {}
+    headers: Dict[str, str] = {}
     if not headers_str:
         return headers
     

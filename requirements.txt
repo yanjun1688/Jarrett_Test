@@ -36,3 +36,6 @@ tiktoken==0.8.0
 openai==1.55.0
 zhipuai>=1.0.4
 rule-engine>=4.5.0
+locust>=2.20.0
+gevent>=23.0.0
+pyzmq>=25.0.0

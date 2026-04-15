@@ -1,19 +1,40 @@
 import React from 'react';
-import { Collapse, Tag, Divider, Typography, Space } from 'antd';
-import {
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-  FileTextOutlined,
-  ToolOutlined,
-  BulbOutlined
-} from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
-import ExecutionPieChart from './ExecutionPieChart';
 import './ChatBotMessageRenderer.css';
 
-const { Text } = Typography;
+const parseMCPTextContent = (text) => {
+  if (!text || typeof text !== 'string') return text;
+  
+  if (!text.includes('TextContent(')) return text;
+  
+  const textMatches = [];
+  const regex = /TextContent\([^)]*text=['"]([^'"]+)['"]/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    textMatches.push(match[1]);
+  }
+  
+  if (textMatches.length > 0) {
+    return textMatches.join('\n\n');
+  }
+  
+  const jsonMatch = text.match(/\[?\s*\{[^{}]*"type"\s*:\s*"text"[^{}]*"text"\s*:\s*"([^"]+)"[^{}]*\}\s*\]?/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0].replace(/'/g, '"'));
+      if (Array.isArray(parsed)) {
+        return parsed.map(item => item.text || '').join('\n\n');
+      }
+      return parsed.text || text;
+    } catch (e) {
+      return text;
+    }
+  }
+  
+  return text;
+};
 
 const ChatBotMessageRenderer = ({ content }) => {
   if (!content) return null;
@@ -21,31 +42,31 @@ const ChatBotMessageRenderer = ({ content }) => {
   let markdownText = '';
   
   if (typeof content === 'string') {
-    markdownText = content;
+    markdownText = parseMCPTextContent(content);
   } else if (content.type === 'progress') {
     const { logs, processing, result } = content;
     
-    let progressMd = processing ? '### 🔄 AI 正在处理\n\n' : '### ✅ 处理完成\n\n';
+    let progressMd = processing ? '### AI 正在处理\n\n' : '### 处理完成\n\n';
     
     if (logs && logs.length > 0) {
       logs.forEach(log => {
-        if (log.type === 'info') progressMd += `> ℹ️ ${log.message}\n\n`;
-        else if (log.type === 'intent') progressMd += `> 💡 意图: ${log.intent || '未知'}${log.confidence ? ` (${(log.confidence * 100).toFixed(0)}%)` : ''}\n\n`;
-        else if (log.type === 'tool') progressMd += `> 🔧 工具: ${log.tool || '未知'}${log.step ? ` - ${log.step}` : ''}\n\n`;
-        else if (log.type === 'success') progressMd += `> ✅ ${log.message}\n\n`;
-        else if (log.type === 'error') progressMd += `> ❌ ${log.message}\n\n`;
+        if (log.type === 'info') progressMd += `> ${log.message}\n\n`;
+        else if (log.type === 'intent') progressMd += `> 意图: ${log.intent || '未知'}${log.confidence ? ` (${(log.confidence * 100).toFixed(0)}%)` : ''}\n\n`;
+        else if (log.type === 'tool') progressMd += `> 工具: ${log.tool || '未知'}${log.step ? ` - ${log.step}` : ''}\n\n`;
+        else if (log.type === 'success') progressMd += `> ${log.message}\n\n`;
+        else if (log.type === 'error') progressMd += `> ${log.message}\n\n`;
         else if (log.message) progressMd += `> ${log.message}\n\n`;
       });
     }
     
     if (result) {
       if (result.message || result.response) {
-        progressMd += '---\n\n' + (result.message || result.response);
+        progressMd += '---\n\n' + parseMCPTextContent(result.message || result.response);
       } else if (result.tool_result) {
         const toolResult = result.tool_result;
         const resultText = typeof toolResult === 'string' 
-          ? toolResult 
-          : (toolResult?.data?.result || JSON.stringify(toolResult, null, 2));
+          ? parseMCPTextContent(toolResult) 
+          : (toolResult?.data?.result ? parseMCPTextContent(toolResult.data.result) : JSON.stringify(toolResult, null, 2));
         progressMd += '---\n\n' + resultText;
       }
     }
@@ -62,12 +83,12 @@ const ChatBotMessageRenderer = ({ content }) => {
       model
     } = content;
     
-    let md = message || response || '';
+    let md = parseMCPTextContent(message || response || '');
     
     if (tool_result) {
       const toolResultText = typeof tool_result === 'string' 
-        ? tool_result 
-        : (tool_result?.data?.result || JSON.stringify(tool_result, null, 2));
+        ? parseMCPTextContent(tool_result) 
+        : (tool_result?.data?.result ? parseMCPTextContent(tool_result.data.result) : JSON.stringify(tool_result, null, 2));
       if (toolResultText) {
         md += '\n\n---\n\n' + toolResultText;
       }

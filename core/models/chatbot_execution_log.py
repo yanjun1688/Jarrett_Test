@@ -4,6 +4,9 @@ ChatBot Execution Log Models
 Stores execution logs for ChatBot-triggered operations (skill execution, API tests, UI tests).
 """
 
+from __future__ import annotations
+from typing import Any, Dict
+
 from django.db import models
 from django.contrib.auth.models import User
 
@@ -40,17 +43,19 @@ class ChatBotExecutionLog(models.Model):
             models.Index(fields=['log_type', '-created_at']),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"[{self.log_type}] {self.title} - {self.created_at}"
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
+        status = self.details.get('status', 'unknown') if self.details else 'unknown'
         return {
-            'id': self.id,  # type: ignore[attr-defined]
+            'id': self.id,
             'conversation_id': self.conversation_id,
             'log_type': self.log_type,
             'title': self.title,
             'message': self.message,
+            'status': status,
             'details': self.details,
-            'execution_id': self.execution_id,  # type: ignore[attr-defined]
+            'execution_id': self.execution_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }

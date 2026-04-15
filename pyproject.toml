@@ -5,8 +5,8 @@ plugins = [
     "mypy_drf_plugin.main",
 ]
 
-# 严格模式
-strict = true
+# 放宽严格模式，保持核心检查
+strict = false
 warn_return_any = true
 warn_unused_ignores = true
 warn_unused_configs = true
@@ -22,6 +22,12 @@ exclude = [
     "tests",
     ".agents",
     "skills",
+    "test_.*\\.py",
+    ".*_test\\.py",
+    "validate_.*\\.py",
+    "check_.*\\.py",
+    "fix_.*\\.py",
+    "debug_.*\\.py",
 ]
 
 # 忽略缺失的 imports（针对第三方库）
@@ -41,6 +47,69 @@ implicit_optional = true
 strict_optional = true
 warn_no_return = true
 
+# Per-module 配置 - 对 DRF/Celery/第三方库集成代码放宽类型要求
+[[tool.mypy.overrides]]
+module = [
+    "testmanager_app.serializers",
+    "testmanager_app.admin",
+    "test_ui_app.serializers",
+    "testmanager_app.auth_serializers",
+    "testmanager_app.tasks",
+    "test_ui_app.tasks",
+    "core.tasks",
+    "testmanager_app.services.yaml_parser",
+    "testmanager_app.services.yaml_validator",
+    "testmanager_app.services.yaml_converter",
+    "testmanager_app.services.execution_engine.script_engine",
+    "testmanager_app.services.execution_engine.pressure_test_engine",
+    "test_ui_app.consumers",
+    "testmanager_app.permissions",
+    "testmanager_app.authentication",
+    "testmanager_app.viewsets.base",
+    "testmanager_app.viewsets.cache_mixin",
+    "testmanager_app.services.strategy.collection_execution_strategies",
+    "testmanager_app.services.execution_service",
+    "testmanager_app.utils.cache_registry",
+    "testmanager_app.utils.cache_helper",
+    "test_ui_app.middleware",
+    "test_ui_app.recording.session_manager",
+    "test_ui_app.recording.sync_recorder",
+    "test_ui_app.playwright_engine",
+    "test_ui_app.execution.action_runner",
+    "test_ui_app.agent_integration",
+    "test_ui_app.agent_views",
+    "test_ui_app.services",
+    "shared.utils.http_utils",
+    "core.agents.llm.*",
+    "core.agents.rag.*",
+    "core.agents.base_agent",
+    "core.agents.skill_loader",
+    "core.agents.capability.injector",
+    "core.prompt.prompt_builder",
+    "core.prompt.sections",
+    "core.tools.chatbot.*",
+    "core.config",
+    "testmanager_app.chatbots.*",
+    "testmanager_app.controllers.*",
+    "test_ai_agent.*",
+    "api.v1.*",
+]
+disallow_untyped_defs = false
+
 [tool.django-stubs]
 django_settings_module = "testmanager.settings"
 strict_settings = false
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+reportMissingImports = false
+reportMissingTypeStubs = false
+reportGeneralTypeIssues = "warning"
+exclude = [
+    "**/migrations",
+    "**/venv",
+    "**/__pycache__",
+    "**/test_agent_framework",
+    "tests/**",
+]

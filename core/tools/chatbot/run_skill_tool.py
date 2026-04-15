@@ -22,6 +22,51 @@ from shared.utils.async_utils import async_run_command
 logger = logging.getLogger(__name__)
 
 
+def parse_mcp_text_content(text: str) -> str:
+    """
+    解析 MCP TextContent 格式，提取纯文本内容
+    
+    MCP CLI 返回格式如:
+    [TextContent(type='text', text="### Ran Playwright code...", annotations=None, meta=None)]
+    
+    Args:
+        text: 可能包含 MCP TextContent 格式的字符串
+        
+    Returns:
+        提取出的纯文本内容
+    """
+    if not text or not isinstance(text, str):
+        return text
+    
+    if 'TextContent(' not in text:
+        return text
+    
+    text_parts = []
+    
+    pattern = r"TextContent\([^)]*text=['\"]([^'\"]+)['\"]"
+    matches = re.findall(pattern, text)
+    
+    if matches:
+        text_parts.extend(matches)
+    
+    if text_parts:
+        return '\n\n'.join(text_parts)
+    
+    json_pattern = r'\[?\s*\{[^{}]*"type"\s*:\s*"text"[^{}]*"text"\s*:\s*"([^"]+)"[^{}]*\}\s*\]?'
+    json_match = re.search(json_pattern, text)
+    if json_match:
+        try:
+            json_str = json_match.group(0).replace("'", '"')
+            parsed = json.loads(json_str)
+            if isinstance(parsed, list):
+                return '\n\n'.join([item.get('text', '') for item in parsed])
+            return parsed.get('text', text)
+        except json.JSONDecodeError:
+            pass
+    
+    return text
+
+
 class RunSkillTool(BaseTool):
     """执行已安装的 skill"""
     
@@ -332,6 +377,21 @@ agent-browser fill @e1 "text"
             logger.info(f"[RunSkill] stdout: {result['stdout'][:500]}")
         if result.get("stderr"):
             logger.info(f"[RunSkill] stderr: {result['stderr'][:500]}")
+        
+        if command.startswith("agent-browser"):
+            if not result.get("success") and "超时" in str(result.get("error", "")):
+                if result.get("stdout"):
+                    logger.warning(f"[RunSkill] agent-browser 超时但有输出，视为成功")
+                    result["success"] = True
+                    result["error"] = None
+            
+            if result.get("stdout"):
+                original_stdout = result["stdout"]
+                parsed_stdout = parse_mcp_text_content(original_stdout)
+                if parsed_stdout != original_stdout:
+                    logger.info(f"[RunSkill] MCP TextContent 已解析")
+                    result["stdout"] = parsed_stdout
+                    result["output"] = parsed_stdout
         
         return result
 

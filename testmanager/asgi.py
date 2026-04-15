@@ -5,6 +5,10 @@ It exposes the ASGI callable as a module-level variable named ``application``.
 
 For more information on this file, see
 https://docs.djangoproject.com/en/5.2/howto/deployment/asgi/
+
+MCP Lifespan 管理：
+- 应用启动时初始化 MCP Server 连接
+- 应用关闭时清理连接
 """
 
 from __future__ import annotations
@@ -15,7 +19,6 @@ import asyncio
 from typing import Any
 
 if sys.platform == 'win32':
-    # 显式设置 ProactorEventLoopPolicy，确保 Playwright 在 Daphne 下能正常工作
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
     print("显式设置 WindowsProactorEventLoopPolicy (from asgi.py)")
 
@@ -24,21 +27,73 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "testmanager.settings")
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 
-# 初始化Django应用（必须在导入路由和中间件之前完成）
-# 这是关键：必须在导入任何Django模型之前初始化Django应用
+
 django_asgi_app: Any = get_asgi_application()
 
-# 在Django应用初始化后再导入路由配置和中间件（这些可能导入Django模型）
 from channels.auth import AuthMiddlewareStack
 from test_ui_app.middleware import TokenAuthMiddlewareStack
 import test_ui_app.routing
 
-application: ProtocolTypeRouter = ProtocolTypeRouter({
-    "http": django_asgi_app,
-    # WebSocket 路由目前为空，录制器已切换为同步 REST 模式
-    "websocket": TokenAuthMiddlewareStack(
-        URLRouter(
-            test_ui_app.routing.websocket_urlpatterns
-        )
-    ),
-})
+
+class MCPLifespanMiddleware:
+    """
+    MCP Lifespan 中间件
+    
+    处理 ASGI lifespan 事件，在应用启动/关闭时管理 MCP 连接
+    """
+    
+    def __init__(self, app):
+        self.app = app
+        self._mcp_initialized = False
+    
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "lifespan":
+            await self._handle_lifespan(scope, receive, send)
+        else:
+            await self.app(scope, receive, send)
+    
+    async def _handle_lifespan(self, scope, receive, send):
+        message = await receive()
+        
+        if message["type"] == "lifespan.startup":
+            try:
+                from core.agents.capability.mcp_lifespan import (
+                    global_mcp_manager,
+                    load_servers_from_settings
+                )
+                
+                load_servers_from_settings()
+                await global_mcp_manager.initialize()
+                self._mcp_initialized = True
+                
+                await send({"type": "lifespan.startup.complete"})
+                
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"[ASGI] MCP startup failed: {e}", exc_info=True)
+                await send({"type": "lifespan.startup.failed", "message": str(e)})
+        
+        elif message["type"] == "lifespan.shutdown":
+            try:
+                if self._mcp_initialized:
+                    from core.agents.capability.mcp_lifespan import global_mcp_manager
+                    await global_mcp_manager.shutdown()
+                
+                await send({"type": "lifespan.shutdown.complete"})
+                
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"[ASGI] MCP shutdown failed: {e}", exc_info=True)
+                await send({"type": "lifespan.shutdown.failed", "message": str(e)})
+
+
+application = MCPLifespanMiddleware(
+    ProtocolTypeRouter({
+        "http": django_asgi_app,
+        "websocket": TokenAuthMiddlewareStack(
+            URLRouter(
+                test_ui_app.routing.websocket_urlpatterns
+            )
+        ),
+    })
+)

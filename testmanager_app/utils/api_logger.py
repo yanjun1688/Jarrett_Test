@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import functools
-from typing import Any, Optional, TypeVar, Callable, Dict, Union
+from typing import Any, Optional, TypeVar, Callable, Dict, Union, cast
 from datetime import datetime
 from django.utils import timezone
 
@@ -152,7 +152,7 @@ def log_api_request(func: F) -> F:
     def wrapper(self: Any, request: Any, *args: Any, **kwargs: Any) -> Any:
         with RequestLogger(func.__name__, request):
             return func(self, request, *args, **kwargs)
-    return wrapper
+    return cast(F, wrapper)
 
 
 def log_async_api_request(func: F) -> F:
@@ -161,7 +161,4 @@ def log_async_api_request(func: F) -> F:
     async def wrapper(self: Any, request: Any, *args: Any, **kwargs: Any) -> Any:
         with RequestLogger(func.__name__, request):
             return await func(self, request, *args, **kwargs)
-    return wrapper
-        with RequestLogger(func.__name__, request):
-            return await func(self, request, *args, **kwargs)
-    return wrapper
+    return cast(F, wrapper)

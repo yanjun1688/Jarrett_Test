@@ -22,7 +22,7 @@ class CapabilityInjector:
     
     MAX_CAPABILITY_TOKENS = 2000
     
-    def __init__(self, registry=None, cache=None, token_calc=None):
+    def __init__(self, registry: Optional[Any] = None, cache: Optional[CapabilityCache] = None, token_calc: Optional[Any] = None) -> None:
         self.registry = registry or global_capability_registry
         self.cache = cache or CapabilityCache()
         self.token_calc = token_calc

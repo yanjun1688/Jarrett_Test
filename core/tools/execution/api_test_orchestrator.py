@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class APITestOrchestratorTool(BaseTool):
     """API test orchestrator that combines HTTP client and validation"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="api_test_orchestrator",
             description="Orchestrates API testing by combining HTTP requests and validation",
@@ -129,11 +129,11 @@ class APITestOrchestratorTool(BaseTool):
             }
         }
     
-    def _get_required_parameters(self) -> list:
+    def _get_required_parameters(self) -> List[str]:
         """Get required parameters"""
         return ["url", "method"]
     
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs: Any) -> ToolResult:
         """
         Execute API test with validation
         
@@ -322,7 +322,7 @@ class APITestOrchestratorTool(BaseTool):
         variable_defs: Dict[str, str]
     ) -> Dict[str, Any]:
         """Extract variables from response using JSON path"""
-        extracted = {}
+        extracted: Dict[str, Any] = {}
         response_body = response_data.get('body')
         
         if not response_body or not isinstance(response_body, dict):

@@ -123,7 +123,7 @@ db_password = os.getenv('DB_PASSWORD', '').strip()
 if db_password:
     db_config['PASSWORD'] = db_password
 
-db_config['CONN_MAX_AGE'] = 60
+db_config['CONN_MAX_AGE'] = 60  # type: ignore[assignment]
 
 DATABASES = {
     'default': db_config
@@ -385,9 +385,22 @@ CONTEXT_ROOT_DIR = Path(os.getenv("CONTEXT_ROOT_DIR", str(BASE_DIR / "context_da
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
-    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# MCP Server 配置
+MCP_SERVERS = {
+    "playwright": {
+        "transport": "stdio",
+        "command": "npx",
+        "args": ["-y", "@playwright/mcp@latest"],
+        "auto_reconnect": True,
+        "health_check_interval": 60,
+        "max_reconnect_attempts": 3,
+        "reconnect_delay": 5,
+    },
+}

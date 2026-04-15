@@ -23,6 +23,44 @@ import ExecutionLogModal from './ExecutionLogModal';
 const { Title } = Typography;
 const { Option } = Select;
 
+/**
+ * 解析并校验 headers 输入 - 只接受标准 JSON 格式
+ * @param {string} input - 用户输入的 headers
+ * @returns {object} - 解析后的 headers 对象
+ * @throws {Error} - 如果不是标准 JSON 格式
+ */
+function parseHeadersInput(input) {
+  if (!input || typeof input !== 'string') return {};
+  
+  const trimmed = input.trim();
+  if (!trimmed) return {};
+  
+  // 只接受 JSON 格式
+  if (!trimmed.startsWith('{')) {
+    throw new Error('请求头格式错误：请使用标准 JSON 格式，例如 {"Content-Type": "application/json"}');
+  }
+  
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      // 校验每个键值都是字符串
+      for (const [key, value] of Object.entries(parsed)) {
+        if (typeof key !== 'string' || typeof value !== 'string') {
+          throw new Error('请求头格式错误：键和值都必须是字符串');
+        }
+      }
+      return parsed;
+    } else {
+      throw new Error('请求头格式错误：必须是 JSON 对象格式');
+    }
+  } catch (e) {
+    if (e.message.includes('请求头格式错误')) {
+      throw e;
+    }
+    throw new Error('请求头格式错误：JSON 解析失败，请检查格式是否正确');
+  }
+}
+
 const initialState = {
   requests: [],
   projects: [],
@@ -115,15 +153,7 @@ function ApiRequestTester() {
 
   const onFinish = async (values) => {
     try {
-      let headers = {};
-      if (values.headers) {
-        values.headers.split('\n').forEach(line => {
-          const [key, value] = line.split(':').map(str => str.trim());
-          if (key && value) {
-            headers[key] = value;
-          }
-        });
-      }
+      const headers = parseHeadersInput(values.headers);
 
       await apiClient.post('/api-requests/', {
         name: values.name,
@@ -158,15 +188,7 @@ function ApiRequestTester() {
     if (!editingRequest) return;
 
     try {
-      let headers = {};
-      if (values.headers) {
-        values.headers.split('\n').forEach(line => {
-          const [key, value] = line.split(':').map(str => str.trim());
-          if (key && value) {
-            headers[key] = value;
-          }
-        });
-      }
+      const headers = parseHeadersInput(values.headers);
 
       await apiClient.patch(`/api-requests/${editingRequest.id}/`, {
         name: values.name,
@@ -539,8 +561,8 @@ function ApiRequestTester() {
               ))}
             </Select>
           </Form.Item>
-          <Form.Item name="headers" label="请求头">
-            <Input.TextArea rows={4} placeholder="Content-Type: application/json\nAuthorization: Bearer token" />
+          <Form.Item name="headers" label="请求头（JSON格式）">
+            <Input.TextArea rows={4} placeholder='{"Content-Type": "application/json", "Authorization": "Bearer token"}' />
           </Form.Item>
           <Form.Item name="body" label="请求体">
             <Input.TextArea rows={4} placeholder='{"key": "value"}' />
@@ -743,8 +765,8 @@ function ApiRequestTester() {
               ))}
             </Select>
           </Form.Item>
-          <Form.Item name="headers" label="请求头">
-            <Input.TextArea rows={4} placeholder="Content-Type: application/json\nAuthorization: Bearer token" />
+          <Form.Item name="headers" label="请求头（JSON格式）">
+            <Input.TextArea rows={4} placeholder='{"Content-Type": "application/json", "Authorization": "Bearer token"}' />
           </Form.Item>
           <Form.Item name="body" label="请求体">
             <Input.TextArea rows={4} placeholder='{"key": "value"}' />

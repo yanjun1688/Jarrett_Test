@@ -11,6 +11,7 @@ Chatbot Agent - Native Function Calling 架构
         → 如果有 tool_calls → 执行 tool → 返回结果
         → 如果没有 tool_calls → 直接返回 LLM 的文本回复
 """
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from pathlib import Path
@@ -65,8 +66,8 @@ class ChatbotAgent(BaseAgent):
 
         self.llm_service = llm_service
         self.knowledge_rag_agent = knowledge_rag_agent
-        self._internal_logs = []
-        self._execution_logger = None
+        self._internal_logs: List[Dict[str, Any]] = []
+        self._execution_logger: Optional[Any] = None
 
         self.tool_orchestrator = tool_orchestrator if tool_orchestrator is not None else ToolOrchestrator()
 
@@ -86,11 +87,6 @@ class ChatbotAgent(BaseAgent):
         self.capability_registry = global_capability_registry
         self.capability_injector = global_capability_injector
         
-        # 初始化 MCP Client
-        from core.agents.capability.mcp_client import MCPClient
-        self.mcp_client = MCPClient(capability_registry=self.capability_registry)
-        self._mcp_initialized = False
-
         self._register_chatbot_tools()
         self._register_capabilities()
         self._register_skills()
@@ -101,7 +97,6 @@ class ChatbotAgent(BaseAgent):
         """Initialize the agent"""
         logger.info("Initializing ChatbotAgent")
         
-        # 幂等性检查：如果已初始化，跳过
         if self._state.get("status") == "ready":
             logger.info("ChatbotAgent already initialized, skipping")
             return
@@ -109,25 +104,26 @@ class ChatbotAgent(BaseAgent):
         if hasattr(self.llm_service, 'initialize'):
             await self.llm_service.initialize()
         
-        # 启动 Playwright MCP Server（仅第一次）
-        if not self._mcp_initialized:
-            playwright_config = {
-                "transport": "stdio",
-                "command": "npx",
-                "args": ["-y", "@playwright/mcp@latest"],
-                "env": {}
-            }
-            
-            connected = await self.mcp_client.connect("playwright", playwright_config)
-            
-            if connected:
-                tools = await self.mcp_client.get_tools("playwright")
-                self._mcp_tools = tools
-                logger.info(f"Playwright MCP Server 已连接，提供 {len(tools)} 个工具")
-                self._mcp_initialized = True
-            else:
-                logger.warning("Playwright MCP Server 启动失败，浏览器功能不可用")
-                self._mcp_tools = []
+        from core.agents.capability.mcp_lifespan import global_mcp_manager, load_servers_from_settings
+        
+        # 如果 MCP Manager 未初始化，尝试初始化（兼容 runserver 和直接运行场景）
+        if not global_mcp_manager._initialized:
+            logger.info("[ChatbotAgent] MCP Manager 未初始化，尝试初始化...")
+            try:
+                load_servers_from_settings()
+                await global_mcp_manager.initialize()
+                logger.info("[ChatbotAgent] MCP Manager 初始化完成")
+            except Exception as e:
+                logger.warning(f"[ChatbotAgent] MCP Manager 初始化失败: {e}")
+        
+        if global_mcp_manager.is_connected("playwright"):
+            self._mcp_tools = global_mcp_manager.get_tools("playwright")
+            self._mcp_initialized = True
+            logger.info(f"[ChatbotAgent] Playwright MCP 已连接（应用级），提供 {len(self._mcp_tools)} 个工具")
+        else:
+            self._mcp_tools = []
+            self._mcp_initialized = False
+            logger.warning("[ChatbotAgent] Playwright MCP 未连接，浏览器功能可能不可用")
 
         self.update_state("ready")
         logger.info("ChatbotAgent initialization complete")
@@ -259,7 +255,7 @@ class ChatbotAgent(BaseAgent):
             
             # Skill 描述优化（添加适用场景提示）
             skill_descriptions = {
-                "agent-browser": "浏览器自动化 Skill。适用于复杂浏览器操作、多步任务。注意：逐步被 MCP 替代，仅用于特殊场景。",
+                "agent-browser": "浏览器自动化（备选方案）。当 MCP 浏览器工具未连接或执行失败时自动使用。MCP 工具优先级更高，此 Skill 作为 fallback。",
                 "cmd-executor": "命令执行 Skill。适用于保存文件、下载内容、执行本地命令。",
                 "testcase-generator": "测试用例生成 Skill。适用于生成测试用例、测试点分析。",
             }
@@ -422,7 +418,7 @@ class ChatbotAgent(BaseAgent):
         if tool_calls:
             logger.info(f"[ChatBot] LLM 决定调用 {len(tool_calls)} 个工具")
             tool_names = [self._extract_tool_call_info(tc)['name'] for tc in tool_calls]
-            response = await self._handle_tool_calls(tool_calls, message)
+            response = await self._handle_tool_calls(tool_calls, message, user_id=user_id)
         else:
             response_text = result.get("response", "")
             logger.info(f"[ChatBot] LLM 直接回复，长度: {len(response_text)} 字符")
@@ -488,7 +484,7 @@ class ChatbotAgent(BaseAgent):
         
         return {'name': func_name, 'arguments': func_args if isinstance(func_args, dict) else {}}
 
-    async def _handle_tool_calls(self, tool_calls, message: str) -> Dict[str, Any]:
+    async def _handle_tool_calls(self, tool_calls, message: str, user_id: Optional[int] = None) -> Dict[str, Any]:
         """
         处理 LLM 返回的 tool_calls。
 
@@ -498,6 +494,7 @@ class ChatbotAgent(BaseAgent):
         Args:
             tool_calls: LLM 返回的 tool_calls 列表
             message: 用户原始消息
+            user_id: 用户ID（用于创建执行记录）
 
         Returns:
             Response dictionary with text, tool_used, tool_result
@@ -524,19 +521,49 @@ class ChatbotAgent(BaseAgent):
                 server_name = parts[1]
                 tool_name = parts[2]
                 
-                result = await self.mcp_client.call_tool(server_name, tool_name, func_args)
-                all_results.append({
-                    "tool": func_name, 
-                    "result": {"success": True, "data": result}
-                })
-                logger.info(f"[ToolExec] MCP 工具执行成功: {func_name}")
-                continue
+                from core.agents.capability.mcp_lifespan import global_mcp_manager
+                
+                try:
+                    result = await global_mcp_manager.call_tool(server_name, tool_name, func_args)
+                    all_results.append({
+                        "tool": func_name, 
+                        "result": {"success": True, "data": result}
+                    })
+                    logger.info(f"[ToolExec] MCP 工具执行成功: {func_name}")
+                    continue
+                except Exception as mcp_error:
+                    logger.warning(f"[ToolExec] MCP 工具执行失败: {mcp_error}，尝试 fallback 到 skill")
+                    
+                    if server_name == "playwright":
+                        logger.info(f"[ToolExec] Fallback: 使用 agent-browser skill")
+                        fallback_args = {"skill_name": "agent-browser", "user_input": message}
+                        if user_id:
+                            fallback_args['user_id'] = user_id
+                        
+                        try:
+                            tool_result = await self.tool_orchestrator.execute(
+                                "run_skill",
+                                execution_logger=self._execution_logger,
+                                **fallback_args
+                            )
+                            all_results.append({"tool": "run_skill__agent_browser (fallback)", "result": tool_result})
+                            logger.info(f"[ToolExec] Fallback 成功")
+                            continue
+                        except Exception as fallback_error:
+                            logger.error(f"[ToolExec] Fallback 也失败: {fallback_error}")
+                            all_results.append({"tool": func_name, "result": {"success": False, "error": f"MCP 失败: {mcp_error}, Fallback 也失败: {fallback_error}"}})
+                            continue
+                    
+                    all_results.append({"tool": func_name, "result": {"success": False, "error": str(mcp_error)}})
+                    continue
             
             else:
                 actual_tool = func_name
                 actual_args = func_args
 
             try:
+                if user_id and 'user_id' not in actual_args:
+                    actual_args['user_id'] = user_id
                 tool_result = await self.tool_orchestrator.execute(
                     actual_tool, 
                     execution_logger=self._execution_logger,
@@ -570,27 +597,40 @@ class ChatbotAgent(BaseAgent):
                             parts.append(f"建议: {data['suggestion']}")
                         text = "\n\n".join(parts)
                     # 处理 execute_test 返回的执行结果
-                    elif "logs" in data and "script_name" in data:
+                    elif "execution_id" in data or ("logs" in data and "script_name" in data):
                         parts = []
                         status_icon = "✅" if data.get("success") else "❌"
-                        parts.append(f"{status_icon} 测试脚本执行完成: **{data.get('script_name')}**")
+                        
+                        execution_id = data.get("execution_id")
+                        if execution_id:
+                            parts.append(f"{status_icon} 测试脚本执行完成: **{data.get('script_name')}**")
+                            parts.append(f"- 执行记录ID: `{execution_id}`")
+                        else:
+                            parts.append(f"{status_icon} 测试脚本执行完成: **{data.get('script_name')}**")
+                        
                         parts.append(f"- 脚本类型: `{data.get('script_type', 'unknown')}`")
-                        parts.append(f"- 执行结果: {'**成功**' if data.get('success') else '**失败**'}")
+                        status_text = data.get("status", "success" if data.get("success") else "failed")
+                        parts.append(f"- 执行状态: `{status_text}`")
+                        
+                        if data.get("message"):
+                            parts.append(f"- {data.get('message')}")
                         
                         results = data.get("results", [])
                         if results:
                             passed = sum(1 for r in results if r.get("success"))
                             failed = len(results) - passed
                             parts.append(f"- 步骤统计: 共 {len(results)} 步, 通过 {passed}, 失败 {failed}")
+                        elif data.get("passed_count") and data.get("failed_count"):
+                            parts.append(f"- 步骤统计: 通过 {data.get('passed_count')}, 失败 {data.get('failed_count')}")
                         
                         logs = data.get("logs", "")
                         if logs:
-                            logs_preview = logs[:3000] if len(logs) > 3000 else logs
+                            logs_preview = logs[:2000] if len(logs) > 2000 else logs
                             parts.append(f"\n**执行日志:**")
                             parts.append(f"```")
                             parts.append(logs_preview)
                             parts.append(f"```")
-                            if len(logs) > 3000:
+                            if len(logs) > 2000:
                                 parts.append(f"\n_（日志已截取，完整长度: {len(logs)} 字符）_")
                         
                         if data.get("error"):
@@ -783,20 +823,20 @@ class ChatbotAgent(BaseAgent):
         return None
 
     async def cleanup_mcp(self) -> None:
-        """只清理 MCP 连接，保留 agent 其他状态用于下次请求复用"""
-        if self._mcp_initialized:
-            try:
-                await self.mcp_client.disconnect("playwright")
-                self._mcp_initialized = False
-                logger.info("MCP connection cleaned up")
-            except Exception as e:
-                logger.warning(f"MCP cleanup failed: {e}")
+        """
+        MCP 连接清理（应用级管理，不再由 Agent 管理）
+        
+        此方法现在只重置 Agent 内部状态，不真正断开连接。
+        连接由 ASGI lifespan 管理，应用关闭时统一清理。
+        """
+        self._mcp_initialized = False
+        logger.info("[ChatbotAgent] MCP 状态已重置（连接由应用级管理）")
 
     async def cleanup(self) -> None:
         """Cleanup agent resources"""
         logger.info("Cleaning up ChatbotAgent")
 
-        await self.cleanup_mcp()
+        self._mcp_initialized = False
 
         if hasattr(self.llm_service, 'cleanup'):
             await self.llm_service.cleanup()

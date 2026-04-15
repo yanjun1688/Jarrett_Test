@@ -2,7 +2,12 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 from rest_framework import serializers
 from core.models import Project, Module, TestCase, TestExecution
-from testmanager_app.models import TestReport, TestScript, ScriptExecution, ApiRequest, ApiAssertion, RequestCollection, CollectionExecution, FeatureTestCase, CollectionRequest
+from testmanager_app.models import (
+    TestReport, TestScript, ScriptExecution, ApiRequest, ApiAssertion,
+    RequestCollection, CollectionExecution, FeatureTestCase, CollectionRequest,
+    PressureTestConfig, PressureTestExecution,
+    AdvancedPressureTestConfig, AdvancedPressureTestExecution
+)
 from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import timedelta
@@ -185,7 +190,8 @@ class ApiRequestSerializer(serializers.ModelSerializer):
 class ApiRequestCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ApiRequest
-        fields = ['name', 'description', 'url', 'method', 'headers', 'body', 'project']
+        fields = ['id', 'name', 'description', 'url', 'method', 'headers', 'body', 'project']
+        read_only_fields = ['id']
 
 
 class ApiAssertionSerializer(serializers.ModelSerializer):
@@ -261,7 +267,7 @@ class RequestCollectionSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_request_count(self, obj: RequestCollection) -> int:
-        return obj.collection_requests.count()  # type: ignore[attr-defined]
+        return obj.collection_requests.count()
 
 
 class RequestCollectionCreateSerializer(serializers.ModelSerializer):
@@ -302,7 +308,7 @@ class RequestCollectionCreateSerializer(serializers.ModelSerializer):
 
         instance = super().update(instance, validated_data)
 
-        instance.collection_requests.all().delete()  # type: ignore[attr-defined]
+        instance.collection_requests.all().delete()
 
         if collection_requests_data:
             self._create_collection_requests(instance, collection_requests_data)
@@ -465,3 +471,267 @@ class AgentExecutionSerializer(serializers.ModelSerializer):
         model = AgentExecution
         fields = '__all__'
         read_only_fields = ['id', 'started_at', 'ended_at']
+
+
+# ============================================================================
+# 压测配置序列化器 (Pressure Test)
+# ============================================================================
+
+class PressureTestConfigSerializer(serializers.ModelSerializer):
+    """压测配置序列化器（查询）"""
+    api_request_name = serializers.CharField(source='api_request.name', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
+    pressure_mode_display = serializers.CharField(source='get_pressure_mode_display', read_only=True)
+    
+    class Meta:
+        model = PressureTestConfig
+        fields = [
+            'id', 'name', 'description', 'project', 'project_name',
+            'api_request', 'api_request_name', 
+            'pressure_mode', 'pressure_mode_display',
+            'request_count',           # 瞬时
+            'rate_per_second',         # 持续
+            'duration_seconds',        # 持续
+            'batch_size',              # 分批
+            'batch_interval',          # 分批
+            'max_concurrent',
+            'monitor_server', 'ssh_config',
+            'created_by', 'created_by_name', 'created_at', 'updated_at'
+        ]
+
+
+class PressureTestConfigCreateSerializer(serializers.ModelSerializer):
+    """压测配置创建/更新序列化器"""
+    
+    class Meta:
+        model = PressureTestConfig
+        fields = [
+            'id', 'name', 'description', 'project', 'api_request',
+            'pressure_mode', 'request_count', 'rate_per_second',
+            'duration_seconds', 'batch_size', 'batch_interval',
+            'max_concurrent', 'monitor_server', 'ssh_config'
+        ]
+        read_only_fields = ['id']
+    
+    def validate(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """根据模式验证必填参数"""
+        mode = data.get('pressure_mode')
+        
+        if mode == 'instant':
+            if not data.get('request_count'):
+                raise serializers.ValidationError(
+                    {'request_count': '瞬时并发模式需要设置请求次数'}
+                )
+        elif mode == 'sustained':
+            if not data.get('rate_per_second'):
+                raise serializers.ValidationError(
+                    {'rate_per_second': '持续并发模式需要设置每秒请求数'}
+                )
+            if not data.get('duration_seconds'):
+                raise serializers.ValidationError(
+                    {'duration_seconds': '持续并发模式需要设置持续秒数'}
+                )
+        elif mode == 'batch':
+            if not data.get('batch_size'):
+                raise serializers.ValidationError(
+                    {'batch_size': '分批并发模式需要设置每批数量'}
+                )
+            if not data.get('batch_interval'):
+                raise serializers.ValidationError(
+                    {'batch_interval': '分批并发模式需要设置批次间隔'}
+                )
+        
+        # 验证最大并发
+        if data.get('max_concurrent', 100) > 1000:
+            raise serializers.ValidationError(
+                {'max_concurrent': '最大并发数不能超过1000'}
+            )
+        
+        return data
+
+
+class PressureTestExecutionSerializer(serializers.ModelSerializer):
+    """压测执行记录序列化器"""
+    config_name = serializers.CharField(source='config.name', read_only=True)
+    executor_name = serializers.CharField(source='executor.username', read_only=True)
+    
+    class Meta:
+        model = PressureTestExecution
+        fields = [
+            'id', 'config', 'config_name', 'executor', 'executor_name',
+            'status', 'started_at', 'finished_at', 'duration_seconds',
+            'total_requests', 'success_count', 'failed_count', 'error_rate',
+            'min_response_time', 'max_response_time', 'avg_response_time',
+            'p50_response_time', 'p90_response_time', 'p95_response_time', 'p99_response_time',
+            'throughput', 'peak_concurrent', 'server_metrics'
+        ]
+
+
+class PressureTestExecutionCreateSerializer(serializers.ModelSerializer):
+    """压测执行记录创建序列化器"""
+    
+    class Meta:
+        model = PressureTestExecution
+        fields = ['config']
+
+
+class PressureTestExecuteResponseSerializer(serializers.Serializer):
+    """压测执行响应序列化器"""
+    execution_id = serializers.IntegerField()
+    websocket_url = serializers.CharField()
+    message = serializers.CharField()
+
+
+class AdvancedPressureTestConfigSerializer(serializers.ModelSerializer):
+    """高级压测配置序列化器"""
+    
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    scenario_steps_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = AdvancedPressureTestConfig
+        fields = [
+            'id', 'name', 'description', 'project', 'project_name',
+            'created_by', 'created_by_username', 'created_at', 'updated_at',
+            'scenario', 'scenario_steps_count',
+            'host', 'user_count', 'spawn_rate', 'duration_seconds',
+            'use_distributed', 'worker_count',
+            'web_ui_port', 'enable_web_ui',
+            'tags', 'exclude_tags'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'created_by']
+    
+    def get_scenario_steps_count(self, obj: AdvancedPressureTestConfig) -> int:
+        """获取场景步骤数量"""
+        scenario = obj.scenario or {}
+        steps = scenario.get('steps', [])
+        return len(steps)
+
+
+class AdvancedPressureTestConfigCreateSerializer(serializers.ModelSerializer):
+    """高级压测配置创建序列化器"""
+    
+    class Meta:
+        model = AdvancedPressureTestConfig
+        fields = [
+            'name', 'description', 'project',
+            'scenario', 'host', 'user_count', 'spawn_rate', 'duration_seconds',
+            'use_distributed', 'worker_count',
+            'web_ui_port', 'enable_web_ui',
+            'tags', 'exclude_tags'
+        ]
+    
+    def validate_scenario(self, value: Dict) -> Dict:
+        """验证场景配置"""
+        if not value:
+            raise serializers.ValidationError('场景配置不能为空')
+        
+        steps = value.get('steps', [])
+        if not steps:
+            raise serializers.ValidationError('场景步骤不能为空')
+        
+        for idx, step in enumerate(steps):
+            if not step.get('name'):
+                raise serializers.ValidationError(f'步骤{idx+1}的名称不能为空')
+            if not step.get('api_request_id'):
+                raise serializers.ValidationError(f'步骤{idx+1}的API请求不能为空')
+        
+        return value
+    
+    def validate(self, data: Dict) -> Dict:
+        """验证配置"""
+        if data.get('use_distributed') and data.get('worker_count', 1) < 1:
+            raise serializers.ValidationError(
+                '启用分布式时Worker数量必须大于0'
+            )
+        
+        return data
+
+
+class AdvancedPressureTestExecutionSerializer(serializers.ModelSerializer):
+    """高级压测执行记录序列化器"""
+    
+    config_name = serializers.CharField(source='config.name', read_only=True)
+    executor_username = serializers.CharField(source='executor.username', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    web_ui_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = AdvancedPressureTestExecution
+        fields = [
+            'id', 'config', 'config_name', 'executor', 'executor_username',
+            'status', 'status_display',
+            'started_at', 'finished_at', 'duration_seconds',
+            'total_requests', 'success_count', 'failed_count', 'error_rate',
+            'min_response_time', 'max_response_time', 'avg_response_time',
+            'p50_response_time', 'p90_response_time', 'p95_response_time', 'p99_response_time',
+            'throughput', 'current_users', 'peak_users',
+            'worker_count', 'worker_status',
+            'web_ui_url'
+        ]
+        read_only_fields = [
+            'started_at', 'finished_at', 'duration_seconds',
+            'total_requests', 'success_count', 'failed_count', 'error_rate',
+            'min_response_time', 'max_response_time', 'avg_response_time',
+            'p50_response_time', 'p90_response_time', 'p95_response_time', 'p99_response_time',
+            'throughput', 'current_users', 'peak_users',
+            'worker_count', 'worker_status'
+        ]
+    
+    def get_web_ui_url(self, obj: AdvancedPressureTestExecution) -> Optional[str]:
+        """获取Web UI访问地址"""
+        if obj.status == 'running' and obj.config.enable_web_ui:
+            return f"http://localhost:{obj.config.web_ui_port}"
+        return None
+
+
+class AdvancedPressureTestExecutionDetailSerializer(AdvancedPressureTestExecutionSerializer):
+    """高级压测执行记录详情序列化器"""
+    
+    report_html = serializers.CharField(read_only=True)
+    raw_results = serializers.JSONField(read_only=True)
+    error_log = serializers.CharField(read_only=True)
+    
+    class Meta(AdvancedPressureTestExecutionSerializer.Meta):
+        fields = AdvancedPressureTestExecutionSerializer.Meta.fields + [
+            'report_html', 'raw_results', 'error_log'
+        ]
+
+
+class AdvancedPressureTestExecuteResponseSerializer(serializers.Serializer):
+    """高级压测执行响应序列化器"""
+    execution_id = serializers.IntegerField()
+    websocket_url = serializers.CharField()
+    web_ui_url = serializers.CharField(required=False, allow_null=True)
+    message = serializers.CharField()
+
+
+class AdvancedPressureTestRealtimeStatsSerializer(serializers.Serializer):
+    """高级压测实时统计序列化器"""
+    current_users = serializers.IntegerField()
+    total_requests = serializers.IntegerField()
+    success_count = serializers.IntegerField()
+    failed_count = serializers.IntegerField()
+    rps = serializers.FloatField()
+    fail_ratio = serializers.FloatField()
+    avg_response_time = serializers.FloatField()
+    min_response_time = serializers.FloatField()
+    max_response_time = serializers.FloatField()
+    peak_users = serializers.IntegerField()
+
+
+class AdvancedPressureTestResultSerializer(serializers.Serializer):
+    """高级压测单次结果序列化器"""
+    name = serializers.CharField()
+    request_type = serializers.CharField()
+    response_time_ms = serializers.FloatField()
+    response_length = serializers.IntegerField()
+    success = serializers.BooleanField()
+    error_message = serializers.CharField(required=False, allow_blank=True)
+    timestamp = serializers.DateTimeField()
+    context = serializers.SerializerMethodField()
+    
+    def get_context(self, obj: Any) -> Dict[str, Any]:
+        return getattr(obj, 'context', {})

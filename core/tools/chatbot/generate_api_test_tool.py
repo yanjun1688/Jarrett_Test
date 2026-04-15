@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class GenerateAPITestTool(BaseTool):
     """根据用户描述生成 API 测试用例"""
     
-    def __init__(self, llm_service=None):
+    def __init__(self, llm_service: Optional[Any] = None) -> None:
         super().__init__(
             name="generate_api_test",
             description="生成 API/接口测试脚本。当用户需要测试 REST API、HTTP 接口时调用。",
@@ -43,7 +43,7 @@ class GenerateAPITestTool(BaseTool):
     def _get_required_parameters(self) -> List[str]:
         return ["endpoint", "method"]
     
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs: Any) -> ToolResult:
         """
         生成 API 测试用例
         
@@ -156,7 +156,8 @@ HTTP 方法: {method}
             json_match = re.search(r'\{[\s\S]*\}', response)
             if json_match:
                 json_str = json_match.group()
-                return json.loads(json_str)
+                parsed: Dict[str, Any] = json.loads(json_str)
+                return parsed
             
             return {"test_cases": []}
             

@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import time
 from functools import wraps
-from typing import Optional, Callable, Any, TypeVar
+from typing import Optional, Callable, Any, TypeVar, Union
 from ..exceptions import ConfigurationError
 
 F = TypeVar('F', bound=Callable[..., Any])
@@ -27,7 +27,7 @@ def setup_logging(
     """
     log_level = getattr(logging, level.upper(), logging.INFO)
     
-    handlers = []
+    handlers: list[logging.Handler] = []
     
     # 控制台处理器
     console_handler = logging.StreamHandler()
@@ -105,27 +105,27 @@ class StructuredLogger:
     def __init__(self, name: str):
         self.logger = get_logger(name)
     
-    def debug(self, message: str, **kwargs):
+    def debug(self, message: str, **kwargs: Any) -> None:
         """记录DEBUG级别日志"""
         self._log(logging.DEBUG, message, **kwargs)
     
-    def info(self, message: str, **kwargs):
+    def info(self, message: str, **kwargs: Any) -> None:
         """记录INFO级别日志"""
         self._log(logging.INFO, message, **kwargs)
     
-    def warning(self, message: str, **kwargs):
+    def warning(self, message: str, **kwargs: Any) -> None:
         """记录WARNING级别日志"""
         self._log(logging.WARNING, message, **kwargs)
     
-    def error(self, message: str, **kwargs):
+    def error(self, message: str, **kwargs: Any) -> None:
         """记录ERROR级别日志"""
         self._log(logging.ERROR, message, **kwargs)
     
-    def critical(self, message: str, **kwargs):
+    def critical(self, message: str, **kwargs: Any) -> None:
         """记录CRITICAL级别日志"""
         self._log(logging.CRITICAL, message, **kwargs)
     
-    def _log(self, level: int, message: str, **kwargs):
+    def _log(self, level: int, message: str, **kwargs: Any) -> None:
         """内部日志记录方法"""
         if kwargs:
             # 构建结构化消息
@@ -142,10 +142,10 @@ class StructuredLogger:
             self.logger.log(level, message)
 
 
-def log_api_call(func: Callable):
+def log_api_call(func: Callable[..., Any]) -> Callable[..., Any]:
     """记录API调用的装饰器"""
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         logger = get_logger(func.__module__)
         
         # 提取请求信息
@@ -179,10 +179,10 @@ def log_api_call(func: Callable):
     return wrapper
 
 
-def log_database_query(func: Callable):
+def log_database_query(func: Callable[..., Any]) -> Callable[..., Any]:
     """记录数据库查询的装饰器"""
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         logger = get_logger(func.__module__)
         
         # 提取查询信息
@@ -213,11 +213,11 @@ def log_database_query(func: Callable):
     return wrapper
 
 
-def log_external_service_call(service_name: str):
+def log_external_service_call(service_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """记录外部服务调用的装饰器工厂"""
-    def decorator(func: Callable):
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             logger = get_logger(func.__module__)
             
             logger.info(f"调用外部服务: {service_name}")

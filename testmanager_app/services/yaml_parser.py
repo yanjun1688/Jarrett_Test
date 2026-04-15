@@ -106,8 +106,8 @@ class YamlParser:
         Returns:
             (is_valid, errors, warnings)
         """
-        errors = []
-        warnings = []
+        errors: List[Dict[str, Any]] = []
+        warnings: List[Dict[str, Any]] = []
         
         try:
             config = yaml.safe_load(yaml_content)

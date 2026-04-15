@@ -1,6 +1,7 @@
 """
 动作执行器 - 基于PlaywrightEngine，只处理actions格式
 """
+# pyright: reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
 import logging
 from typing import List, Dict, Any, Optional
 from urllib.parse import urlparse

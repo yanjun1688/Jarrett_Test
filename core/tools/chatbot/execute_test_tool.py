@@ -69,6 +69,10 @@ class ExecuteTestTool(BaseTool):
             "base_url": {
                 "type": "string",
                 "description": "API 基础 URL（可选）"
+            },
+            "user_id": {
+                "type": "integer",
+                "description": "用户ID（系统自动注入，用于创建执行记录）"
             }
         }
     
@@ -87,9 +91,10 @@ class ExecuteTestTool(BaseTool):
             test_type: 测试类型 (api/ui)
             test_data: 测试数据
             base_url: API 基础 URL
+            user_id: 用户ID（用于创建执行记录）
             
         Returns:
-            执行结果
+            执行结果（包含 execution_id）
         """
         test_script_id = kwargs.get("test_script_id")
         script_name = kwargs.get("script_name")
@@ -98,9 +103,10 @@ class ExecuteTestTool(BaseTool):
         test_type = kwargs.get("test_type")
         test_data = kwargs.get("test_data")
         base_url = kwargs.get("base_url", "")
+        user_id = kwargs.get("user_id")
         execution_logger = kwargs.get("_execution_logger")
         
-        logger.info(f"[ExecuteTest] 收到执行请求: test_script_id={test_script_id}, script_name='{script_name}', project_name='{project_name}', test_id={test_id}")
+        logger.info(f"[ExecuteTest] 收到执行请求: test_script_id={test_script_id}, script_name='{script_name}', project_name='{project_name}', test_id={test_id}, user_id={user_id}")
         
         if execution_logger:
             log_type = 'api_test' if (test_script_id or script_name or test_type == "api") else 'ui_test'
@@ -109,33 +115,36 @@ class ExecuteTestTool(BaseTool):
         # 优先级1: 直接使用 test_script_id 执行
         if test_script_id:
             logger.info(f"[ExecuteTest] 使用 test_script_id={test_script_id} 直接执行")
-            result = await self._execute_test_script(test_script_id)
+            result = await self._execute_test_script(test_script_id, user_id=user_id)
             if execution_logger:
                 await sync_to_async(execution_logger.finish)({
                     'status': 'success' if result.success else 'error',
-                    'test_script_id': test_script_id
+                    'test_script_id': test_script_id,
+                    'execution_id': result.data.get('execution_id') if result.data else None
                 })
             return result
         
         # 优先级2: 使用 script_name 单步执行（自动查找）
         if script_name:
             logger.info(f"[ExecuteTest] 使用 script_name='{script_name}' 单步查找执行")
-            result = await self._execute_by_script_name_direct(script_name, project_name)
+            result = await self._execute_by_script_name_direct(script_name, project_name, user_id=user_id)
             if execution_logger:
                 await sync_to_async(execution_logger.finish)({
                     'status': 'success' if result.success else 'error',
-                    'script_name': script_name
+                    'script_name': script_name,
+                    'execution_id': result.data.get('execution_id') if result.data else None
                 })
             return result
         
         # 优先级3: 使用 test_id 执行 UI 测试
         if test_id:
             logger.info(f"[ExecuteTest] 使用 test_id={test_id} 执行 UI 测试")
-            result = await self._execute_by_id(test_id)
+            result = await self._execute_by_id(test_id, user_id=user_id)
             if execution_logger:
                 await sync_to_async(execution_logger.finish)({
                     'status': 'success' if result.success else 'error',
-                    'test_id': test_id
+                    'test_id': test_id,
+                    'execution_id': result.data.get('execution_id') if result.data else None
                 })
             return result
         
@@ -206,14 +215,20 @@ class ExecuteTestTool(BaseTool):
                 error=f"Execution error: {str(e)}"
             )
     
-    async def _execute_by_script_name_direct(self, script_name: str, project_name: Optional[str] = None) -> ToolResult:
-        """通过脚本名称单步查找并执行（用户说\"执行XXX脚本\"时的自动处理）"""
+    async def _execute_by_script_name_direct(self, script_name: str, project_name: Optional[str] = None, user_id: Optional[int] = None) -> ToolResult:
+        """
+        通过脚本名称单步查找并执行（用户说\"执行XXX脚本\"时的自动处理）
+        
+        改造：先创建执行记录，执行后更新状态，返回 execution_id
+        """
+        from django.utils import timezone
+        
         logger.info(f"[ExecuteDirect] 开始单步执行: script_name='{script_name}', project_name='{project_name}'")
         
         try:
             @sync_to_async
             def find_and_execute():
-                from testmanager_app.models import TestScript
+                from testmanager_app.models import TestScript, ScriptExecution
                 from core.models import Project
                 from testmanager_app.services.execution_engine.script_engine import TestChainExecutor
                 
@@ -222,45 +237,73 @@ class ExecuteTestTool(BaseTool):
                 if project_name:
                     try:
                         project = Project.objects.get(name=project_name)
-                        filters['project'] = project.id  # type: ignore[attr-defined]
-                        logger.info(f"[ExecuteDirect] 限定项目: id={project.id}, name='{project.name}'")  # type: ignore[attr-defined]
+                        filters['project'] = project.id
+                        logger.info(f"[ExecuteDirect] 限定项目: id={project.id}, name='{project.name}'")
                     except Project.DoesNotExist:
                         logger.warning(f"[ExecuteDirect] 项目不存在: '{project_name}'")
-                        return None, {"error": f"项目不存在: '{project_name}'"}
+                        return None, None, {"error": f"项目不存在: '{project_name}'"}
                 
                 logger.info(f"[ExecuteDirect] 查询条件: {filters}")
                 scripts = TestScript.objects.filter(**filters).select_related('project')
                 
                 if not scripts.exists():
                     logger.warning(f"[ExecuteDirect] 未找到脚本: name='{script_name}'")
-                    return None, {"error": f"未找到测试脚本: '{script_name}'"}
+                    return None, None, {"error": f"未找到测试脚本: '{script_name}'"}
                 
                 if scripts.count() > 1:
                     logger.warning(f"[ExecuteDirect] 找到多个同名脚本: count={scripts.count()}")
-                    script_list = [{"id": s.id, "project": s.project.name if s.project else None} for s in scripts]  # type: ignore[attr-defined,union-attr]
-                    return None, {"error": f"找到多个同名脚本，请指定项目或使用 query_test_scripts 查询", "scripts": script_list}
+                    script_list = [{"id": s.id, "project": s.project.name if s.project else None} for s in scripts]
+                    return None, None, {"error": f"找到多个同名脚本，请指定项目或使用 query_test_scripts 查询", "scripts": script_list}
                 
                 script = scripts.first()
                 if script is None:
                     logger.warning(f"[ExecuteDirect] 脚本查询结果为空")
-                    return None, {"error": "脚本查询结果为空"}
+                    return None, None, {"error": "脚本查询结果为空"}
                 
-                logger.info(f"[ExecuteDirect] 找到脚本: id={script.id}, name='{script.name}', type='{script.script_type}'")  # type: ignore[attr-defined]
+                logger.info(f"[ExecuteDirect] 找到脚本: id={script.id}, name='{script.name}', type='{script.script_type}'")
+                
+                execution = ScriptExecution.objects.create(
+                    script=script,
+                    executor_id=user_id,
+                    status='pending'
+                )
+                logger.info(f"[ExecuteDirect] 创建执行记录: execution_id={execution.id}")
+                
+                execution.status = 'running'
+                execution.started_at = timezone.now()
+                execution.save(update_fields=['status', 'started_at'])
                 
                 engine = TestChainExecutor()
                 logger.info(f"[ExecuteDirect] 开始执行脚本...")
                 
-                if script.script_type == 'yaml':  # type: ignore[union-attr]
-                    result = engine.execute_yaml_script(script.content)  # type: ignore[union-attr]
-                elif script.script_type == 'api':  # type: ignore[union-attr]
-                    result = engine.execute_api_script(script.content)  # type: ignore[union-attr]
+                if script.script_type == 'yaml':
+                    result = engine.execute_yaml_script(script.content)
+                elif script.script_type == 'api':
+                    result = engine.execute_api_script(script.content)
                 else:
-                    result = engine.execute_json_script(script.content)  # type: ignore[union-attr]
+                    result = engine.execute_json_script(script.content)
                 
-                logger.info(f"[ExecuteDirect] 执行完成: success={result.get('success', False)}")
-                return script, result
+                success = result.get('success', False)
+                logger.info(f"[ExecuteDirect] 执行完成: success={success}")
+                
+                logs = result.get('logs', [])
+                if isinstance(logs, list):
+                    logs_str = '\n'.join(logs)
+                else:
+                    logs_str = str(logs)
+                
+                execution.status = 'success' if success else 'failed'
+                execution.finished_at = timezone.now()
+                execution.output = logs_str[:10000] if logs_str else ''
+                if not success and result.get('error'):
+                    execution.error_message = result.get('error')
+                execution.save()
+                
+                logger.info(f"[ExecuteDirect] 执行记录已更新: execution_id={execution.id}, status={execution.status}")
+                
+                return script, execution, result
             
-            script, result = await find_and_execute()
+            script, execution, result = await find_and_execute()
             
             if script is None:
                 return ToolResult(
@@ -273,26 +316,31 @@ class ExecuteTestTool(BaseTool):
             if isinstance(logs, list):
                 logs_str = '\n'.join(logs)
             else:
-                logs_str = logs
+                logs_str = str(logs)
             
-            logger.info(f"[ExecuteDirect] 返回结果: script_name='{script.name}', success={result.get('success')}, logs_length={len(logs_str)}")  # type: ignore[attr-defined]
+            status_text = '成功' if result.get('success', False) else '失败'
+            
+            logger.info(f"[ExecuteDirect] 返回结果: script_name='{script.name}', success={result.get('success')}, logs_length={len(logs_str)}")
             
             return ToolResult(
                 success=bool(result.get('success', False)),
                 data={
-                    "script_id": script.id,  # type: ignore[attr-defined]
-                    "script_name": script.name,  # type: ignore[attr-defined]
-                    "script_type": script.script_type,  # type: ignore[attr-defined]
+                    "execution_id": execution.id,
+                    "script_id": script.id,
+                    "script_name": script.name,
+                    "script_type": script.script_type,
                     "success": result.get('success', False),
-                    "logs": logs_str,
-                    "context": result.get('context', {}),
+                    "status": execution.status,
+                    "logs": logs_str[:2000] if logs_str else '',
                     "results": result.get('results', []),
-                    "error": result.get('error', '')
+                    "error": result.get('error', ''),
+                    "message": f"API测试脚本执行完成(execution_id={execution.id})，状态: {status_text}"
                 },
                 metadata={
                     "script_name": script_name,
                     "project_name": project_name,
-                    "found_script_id": script.id  # type: ignore[attr-defined]
+                    "execution_id": execution.id,
+                    "found_script_id": script.id
                 }
             )
             
@@ -304,19 +352,36 @@ class ExecuteTestTool(BaseTool):
                 error=f"执行失败: {str(e)}"
             )
     
-    async def _execute_test_script(self, test_script_id: int) -> ToolResult:
-        """通过ID执行TestScript（API测试脚本）"""
-        logger.info(f"[ExecuteTestScript] 开始执行测试脚本: test_script_id={test_script_id}")
+    async def _execute_test_script(self, test_script_id: int, user_id: Optional[int] = None) -> ToolResult:
+        """
+        通过ID执行TestScript（API测试脚本）
+        
+        改造：先创建执行记录，执行后更新状态，返回 execution_id
+        """
+        from django.utils import timezone
+        
+        logger.info(f"[ExecuteTestScript] 开始执行API测试脚本: test_script_id={test_script_id}")
         
         try:
             @sync_to_async
-            def _execute_sync():
-                from testmanager_app.models import TestScript
+            def _create_execute_and_update():
+                from testmanager_app.models import TestScript, ScriptExecution
                 from testmanager_app.services.execution_engine.script_engine import TestChainExecutor
                 
                 logger.info(f"[ExecuteTestScript] 正在查询脚本: id={test_script_id}")
                 script = TestScript.objects.get(id=test_script_id, is_active=True)
-                logger.info(f"[ExecuteTestScript] 找到脚本: id={script.id}, name='{script.name}', type='{script.script_type}', project_id={script.project.id if script.project else None}")  # type: ignore[attr-defined]
+                logger.info(f"[ExecuteTestScript] 找到脚本: id={script.id}, name='{script.name}', type='{script.script_type}'")
+                
+                execution = ScriptExecution.objects.create(
+                    script=script,
+                    executor_id=user_id,
+                    status='pending'
+                )
+                logger.info(f"[ExecuteTestScript] 创建执行记录: execution_id={execution.id}")
+                
+                execution.status = 'running'
+                execution.started_at = timezone.now()
+                execution.save(update_fields=['status', 'started_at'])
                 
                 engine = TestChainExecutor()
                 logger.info(f"[ExecuteTestScript] 创建执行引擎，开始执行...")
@@ -334,51 +399,52 @@ class ExecuteTestTool(BaseTool):
                 success = result.get('success', False)
                 logger.info(f"[ExecuteTestScript] 执行完成: success={success}, logs_count={len(result.get('logs', []))}")
                 
-                return script, result
+                logs = result.get('logs', [])
+                if isinstance(logs, list):
+                    logs_str = '\n'.join(logs)
+                else:
+                    logs_str = str(logs)
+                
+                execution.status = 'success' if success else 'failed'
+                execution.finished_at = timezone.now()
+                execution.output = logs_str[:10000] if logs_str else ''
+                if not success and result.get('error'):
+                    execution.error_message = result.get('error')
+                execution.save()
+                
+                logger.info(f"[ExecuteTestScript] 执行记录已更新: execution_id={execution.id}, status={execution.status}")
+                
+                return script, execution, result, logs_str
             
-            script, result = await _execute_sync()
-            
-            logs = result.get('logs', [])
-            if isinstance(logs, list):
-                logs_str = '\n'.join(logs)
-            else:
-                logs_str = logs
-            
-            logger.info(f"[ExecuteTestScript] 返回结果: script_name='{script.name}', success={result.get('success', False)}, logs_length={len(logs_str)}")
-            
-            if result.get('success', False):
-                logger.info(f"[ExecuteTestScript] ✅ 执行成功! 脚本 '{script.name}' 所有断言通过")
-            else:
-                logger.warning(f"[ExecuteTestScript] ❌ 执行失败! 脚本 '{script.name}' 有断言未通过或执行出错")
-                if result.get('error'):
-                    logger.warning(f"[ExecuteTestScript] 错误信息: {result.get('error')}")
-            
-            if logs_str:
-                logger.info(f"[ExecuteTestScript] 执行日志(前500字符):\n{logs_str[:500]}")
+            script, execution, result, logs_str = await _create_execute_and_update()
             
             results_summary = result.get('results', [])
             if results_summary:
                 passed_count = sum(1 for r in results_summary if r.get('success'))
                 failed_count = len(results_summary) - passed_count
                 logger.info(f"[ExecuteTestScript] 步骤统计: 总计={len(results_summary)}, 通过={passed_count}, 失败={failed_count}")
-                for i, step_result in enumerate(results_summary):
-                    status = '✅ 通过' if step_result.get('success') else '❌ 失败'
-                    logger.info(f"[ExecuteTestScript] 步骤 {i+1}: {status}, status_code={step_result.get('status_code')}")
+            
+            status_text = '成功' if result.get('success', False) else '失败'
             
             return ToolResult(
                 success=result.get('success', False),
                 data={
+                    "execution_id": execution.id,
                     "script_id": test_script_id,
                     "script_name": script.name,
                     "script_type": script.script_type,
                     "success": result.get('success', False),
-                    "logs": logs_str,
-                    "context": result.get('context', {}),
+                    "status": execution.status,
+                    "logs": logs_str[:2000] if logs_str else '',
                     "results": result.get('results', []),
-                    "error": result.get('error', '')
+                    "passed_count": passed_count if results_summary else 0,
+                    "failed_count": failed_count if results_summary else 0,
+                    "error": result.get('error', ''),
+                    "message": f"API测试脚本执行完成(execution_id={execution.id})，状态: {status_text}"
                 },
                 metadata={
                     "test_script_id": test_script_id,
+                    "execution_id": execution.id,
                     "script_name": script.name,
                     "script_type": script.script_type
                 }
@@ -391,7 +457,7 @@ class ExecuteTestTool(BaseTool):
                 return ToolResult(
                     success=False,
                     data={},
-                    error=f"测试脚本不存在: ID={test_script_id}"
+                    error=f"API测试脚本不存在: ID={test_script_id}"
                 )
             logger.error(f"[ExecuteTestScript] 执行失败: {error_msg}", exc_info=True)
             return ToolResult(
@@ -400,38 +466,71 @@ class ExecuteTestTool(BaseTool):
                 error=f"执行失败: {error_msg}"
             )
     
-    async def _execute_by_id(self, test_id: int, script_name: Optional[str] = None) -> ToolResult:
-        """通过ID执行UI测试脚本"""
+    async def _execute_by_id(self, test_id: int, script_name: Optional[str] = None, user_id: Optional[int] = None) -> ToolResult:
+        """
+        通过ID执行UI测试脚本
+        
+        改造：先创建执行记录，返回 execution_id，让用户可查询执行状态
+        """
+        from django.utils import timezone
+        
         try:
             @sync_to_async
-            def _execute_sync():
-                from test_ui_app.models import UITestScript
+            def _create_and_execute():
+                from test_ui_app.models import UITestScript, UITestExecution
                 from test_ui_app.services import UITestService
                 
                 script = UITestScript.objects.get(id=test_id)
+                
+                execution = UITestExecution.objects.create(
+                    script=script,
+                    executed_by_id=user_id,
+                    status='pending'
+                )
+                logger.info(f"[ExecuteUI] 创建执行记录: execution_id={execution.id}, script={script.name}")
+                
                 service = UITestService()
-                return script, service.execute_script_sync(script_id=script.id)  # type: ignore[attr-defined]
+                result = service.execute_script_with_execution(
+                    script_id=script.id,
+                    execution_id=execution.id,
+                    user_id=user_id
+                )
+                
+                return script, execution, result
             
-            script, result = await _execute_sync()
+            script, execution, result = await _create_and_execute()
             
             if result.get("success"):
                 return ToolResult(
                     success=True,
                     data={
+                        "execution_id": execution.id,
                         "script_name": script_name or script.name,
+                        "script_id": test_id,
                         "task_id": result.get("task_id"),
-                        "message": "测试任务已提交执行"
+                        "status": "pending",
+                        "message": f"UI测试任务已提交(execution_id={execution.id})，可在「UI测试管理」页面查看执行状态和日志"
                     },
                     metadata={
                         "test_id": test_id,
+                        "execution_id": execution.id,
                         "script_name": script_name or script.name
                     }
                 )
             else:
+                error_msg = result.get("error", "提交任务失败")
+                @sync_to_async
+                def _update_failed():
+                    execution.status = 'failed'
+                    execution.error_message = error_msg
+                    execution.completed_at = timezone.now()
+                    execution.save()
+                await _update_failed()
+                
                 return ToolResult(
                     success=False,
-                    data={},
-                    error=result.get("error", "执行失败")
+                    data={"execution_id": execution.id},
+                    error=f"执行失败(execution_id={execution.id}): {error_msg}"
                 )
                 
         except Exception as e:
@@ -440,9 +539,9 @@ class ExecuteTestTool(BaseTool):
                 return ToolResult(
                     success=False,
                     data={},
-                    error=f"测试脚本不存在: ID={test_id}"
+                    error=f"UI测试脚本不存在: ID={test_id}"
                 )
-            logger.error(f"Execute by ID failed: {e}")
+            logger.error(f"[ExecuteUI] 执行失败: {e}")
             return ToolResult(
                 success=False,
                 data={},
@@ -491,11 +590,11 @@ class ExecuteTestTool(BaseTool):
                 try:
                     script = UITestScript.objects.get(name=script_basename)
                     service = UITestService()
-                    return script, service.execute_script_sync(script_id=script.id)  # type: ignore[attr-defined]
+                    return script, service.execute_script_sync(script_id=script.id)
                 except UITestScript.DoesNotExist:
                     script = UITestScript.objects.get(name=script_name)
                     service = UITestService()
-                    return script, service.execute_script_sync(script_id=script.id)  # type: ignore[attr-defined]
+                    return script, service.execute_script_sync(script_id=script.id)
             
             script, result = await find_and_execute()
             

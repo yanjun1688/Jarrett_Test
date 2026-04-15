@@ -13,7 +13,7 @@ Reference: docs/2026/04/01/DESIGN_CONTEXT_TOKEN_ECONOMICS.md
 import hashlib
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, Set
 from datetime import datetime
 
 from core.context.markdown_store import MarkdownContextStore
@@ -368,11 +368,10 @@ class TokenEconomicsContextStore(MarkdownContextStore):
             messages[0].get("content", "")[:200].encode("utf-8")
         ).hexdigest()[:12]
         
-        if cached and cached[1] == first_hash and cached[0] <= len(messages):  # type: ignore[operator,index]
-            # 头部没变，只是尾部新增了消息 -> 增量处理
-            prev_count = cached[0]  # type: ignore[index]
-            topics = set(cached[2])  # type: ignore[index]
-            entities = set(cached[3])  # type: ignore[index]
+        if cached and cached[1] == first_hash and cached[0] <= len(messages):
+            prev_count = cached[0]
+            topics = set(cached[2])
+            entities = set(cached[3])
             
             if prev_count == len(messages):
                 # 完全没变，直接命中
@@ -433,9 +432,9 @@ class TokenEconomicsContextStore(MarkdownContextStore):
     def _extract_warm_features(
         self,
         messages: List[Dict[str, Any]],
-        topics: set,
-        entities: set
-    ):
+        topics: Set[str],
+        entities: Set[str]
+    ) -> None:
         """从消息中提取温区特征（topics, entities）"""
         import re
         for msg in messages:
@@ -447,8 +446,8 @@ class TokenEconomicsContextStore(MarkdownContextStore):
     
     def _format_warm_summary(
         self,
-        topics: set,
-        entities: set,
+        topics: Set[str],
+        entities: Set[str],
         messages: List[Dict[str, Any]]
     ) -> str:
         """格式化温区摘要文本"""
@@ -494,17 +493,15 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         session_cache = self._summary_cache.get(session_id, {})
         cached = session_cache.get("cold")
         
-        # cached 格式: (processed_count, user_count, assistant_count, first_user_content)
-        if cached and cached[0] <= len(messages):  # type: ignore[operator]
-            prev_count = cached[0]  # type: ignore[index]
+        if cached and cached[0] <= len(messages):
+            prev_count = cached[0]
             
             if prev_count == len(messages):
-                # 完全没变
                 self._cache_stats["cold_hits"] += 1
                 total = self._cache_stats["cold_hits"] + self._cache_stats["cold_misses"]
                 hit_rate = self._cache_stats["cold_hits"] / total if total > 0 else 0
                 summary = self._format_cold_summary(
-                    len(messages), cached[1], cached[2], cached[3]  # type: ignore[arg-type,index]
+                    len(messages), cached[1], cached[2], cached[3]
                 )
                 logger.info(
                     f"[ContextStore] [CACHE HIT] 冷区摘要完全命中 "
@@ -513,14 +510,13 @@ class TokenEconomicsContextStore(MarkdownContextStore):
                 )
                 return summary
             
-            # 增量：只统计新增消息
             new_messages = messages[prev_count:]
             new_user = sum(1 for m in new_messages if m.get("role") == "user")
             new_assistant = sum(1 for m in new_messages if m.get("role") == "assistant")
             
-            user_count = cached[1] + new_user  # type: ignore[operator,index]
-            assistant_count = cached[2] + new_assistant  # type: ignore[operator,index]
-            first_user_content = cached[3]  # type: ignore[index]
+            user_count = cached[1] + new_user
+            assistant_count = cached[2] + new_assistant
+            first_user_content = cached[3]
             
             self._cache_stats["cold_hits"] += 1
             total = self._cache_stats["cold_hits"] + self._cache_stats["cold_misses"]

@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import Any, Dict, cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -121,8 +121,9 @@ class LoginView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
-        username = serializer.validated_data['username']
-        password = serializer.validated_data['password']
+        validated_data = cast(Dict[str, Any], serializer.validated_data)
+        username = validated_data['username']
+        password = validated_data['password']
         
         user = authenticate(username=username, password=password)
         
@@ -139,7 +140,7 @@ class LoginView(APIView):
         return Response({
             'token': auth_token.key,
             'user': {
-                'user_id': user.id,
+                'user_id': user.pk,
                 'username': user.username,
                 'token_expires_at': auth_token.expires_at.isoformat() if auth_token.expires_at else None,
             }
@@ -186,9 +187,12 @@ class RefreshTokenView(APIView):
             
             logger.info(f"Token refreshed for user: {request.user.username}")
             
+            expires_at_val = request.auth.expires_at
+            expires_at_str = expires_at_val.isoformat() if expires_at_val else ''
+            
             return Response({
                 'token': request.auth.key,
-                'expires_at': request.auth.expires_at.isoformat(),
+                'expires_at': expires_at_str,
                 'message': 'Token successfully refreshed'
             }, status=status.HTTP_200_OK)
         

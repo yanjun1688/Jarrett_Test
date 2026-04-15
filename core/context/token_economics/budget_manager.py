@@ -6,7 +6,7 @@ Token 预算管理器
 Reference: docs/2026/04/01/DESIGN_CONTEXT_TOKEN_ECONOMICS.md
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 from enum import Enum
 import logging
@@ -42,9 +42,9 @@ class BudgetStatus:
     utilization: float
     status: BudgetStatusType
     recommendations: List[str] = field(default_factory=list)
-    tier_breakdown: dict = field(default_factory=dict)
+    tier_breakdown: Dict[str, int] = field(default_factory=dict)
     
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
             "total_budget": self.total_budget,
@@ -170,7 +170,7 @@ class TokenBudgetManager:
         self,
         hot_zone_size: int = 10,
         warm_zone_size: int = 40
-    ) -> dict:
+    ) -> Dict[str, Any]:
         """
         获取各层的预算分配
         

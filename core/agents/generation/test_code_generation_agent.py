@@ -54,6 +54,49 @@ class TestCodeGenerationAgent(BaseAgent):
         
         logger.info("TestCodeGenerationAgent initialized")
     
+    async def initialize(self) -> None:
+        """
+        初始化Agent
+        
+        加载必要的资源和配置
+        """
+        logger.info(f"TestCodeGenerationAgent {self.agent_id} initialized")
+    
+    async def execute(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行Agent的主要功能
+        
+        Args:
+            input_data: 输入数据，包含test_case等信息
+            
+        Returns:
+            执行结果
+        """
+        test_case = input_data.get('test_case')
+        if not test_case:
+            raise ValidationError("test_case is required in input_data")
+        
+        framework = input_data.get('framework', 'pytest')
+        language = input_data.get('language', 'python')
+        project_path = input_data.get('project_path')
+        
+        return await self.generate_test_code(
+            test_case=test_case,
+            framework=framework,
+            language=language,
+            project_path=project_path
+        )
+    
+    async def cleanup(self) -> None:
+        """
+        清理资源
+        
+        释放Agent持有的资源
+        """
+        self.llm_service = None
+        self.rag_retriever = None
+        logger.info(f"TestCodeGenerationAgent {self.agent_id} cleaned up")
+    
     def _create_llm_copy(self) -> Optional[Any]:
         """
         Create a copy of LLM service for parallel execution
@@ -256,18 +299,20 @@ class TestCodeGenerationAgent(BaseAgent):
                 )
                 tasks.append(task)
             
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            results_raw = await asyncio.gather(*tasks, return_exceptions=True)
             
             # Handle exceptions
-            for i, result in enumerate(results):
+            for i, result in enumerate(results_raw):
                 if isinstance(result, Exception):
                     logger.error(f"Failed to generate test for case {i}: {str(result)}")
-                    results[i] = {
+                    results.append({
                         'code': None,
                         'test_case': test_cases[i],
                         'error': str(result),
                         'success': False
-                    }
+                    })
+                else:
+                    results.append(result)
         else:
             # Sequential generation
             for i, test_case in enumerate(test_cases):
@@ -415,7 +460,7 @@ class TestCodeGenerationAgent(BaseAgent):
                 # Check if line looks like code (starts with import, def, class, etc.)
                 if (line.strip().startswith(('import ', 'from ', 'def ', 'class ', 'it(', 'describe(', 'test(')) or
                     (language == 'python' and line.strip().startswith('@')) or
-                    (language == 'javascript' and line.strip().startswith('const ', 'let ', 'var ', 'function '))):
+                    (language == 'javascript' and line.strip().startswith(('const ', 'let ', 'var ', 'function ')))):
                     in_code = True
                 
                 if in_code:

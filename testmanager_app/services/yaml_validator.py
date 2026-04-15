@@ -123,7 +123,7 @@ class YamlValidator:
     def _validate_step_structure(self, step: Dict, step_index: int) -> None:
         """验证单个步骤的结构"""
         if not isinstance(step, dict):
-            self.validation_errors.append({
+            self.validation_errors.append({  # type: ignore[unreachable]
                 'level': 'error',
                 'type': 'invalid_type',
                 'message': f'steps[{step_index}]必须是字典类型',
@@ -173,7 +173,7 @@ class YamlValidator:
     def _validate_variables(self, config: Dict) -> None:
         """验证模板变量语法"""
         # 收集所有定义的环境变量
-        defined_vars = set()
+        defined_vars: set[str] = set()
         if 'env_vars' in config and isinstance(config['env_vars'], dict):
             defined_vars.update(config['env_vars'].keys())
 
@@ -197,7 +197,7 @@ class YamlValidator:
     def _check_variables_in_step(self, step: Dict, step_idx: int, defined_vars: set) -> None:
         """检查步骤中的变量"""
         if not isinstance(step, dict):
-            return
+            return  # type: ignore[unreachable]
         request = step.get('request', {})
 
         # 检查URL
@@ -232,7 +232,7 @@ class YamlValidator:
     def _check_variables_in_string(self, text: str, location: str, defined_vars: set) -> None:
         """检查字符串中的变量语法"""
         if not isinstance(text, str):
-            return
+            return  # type: ignore[unreachable]
 
         if '{{' in text:
             # 检查是否匹配
@@ -300,12 +300,12 @@ class YamlValidator:
     def _extract_undefined_variables(self, config: Dict) -> Dict[str, List[str]]:
         """提取未定义的变量"""
         # 收集所有定义的变量
-        defined_vars = set()
+        defined_vars: set[str] = set()
         if 'env_vars' in config and isinstance(config['env_vars'], dict):
             defined_vars.update(config['env_vars'].keys())
 
         # 提取所有使用的变量
-        used_vars = {}
+        used_vars: dict[str, list[str]] = {}
         self._collect_used_variables(config, used_vars)
 
         # 找出未定义的变量
@@ -339,7 +339,7 @@ class YamlValidator:
     def _collect_from_string(self, text: str, location: str, variables: Dict[str, List[str]]) -> None:
         """从字符串收集变量"""
         if not isinstance(text, str):
-            return
+            return  # type: ignore[unreachable]
 
         for var in self._extract_variables_from_string(text):
             var_name = var.strip()

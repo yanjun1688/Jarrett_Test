@@ -108,7 +108,7 @@ class CacheOptimizer:
             return ""
         return hashlib.sha256(text.encode()).hexdigest()[:16]
     
-    def set_static_prefix(self, prefix: str):
+    def set_static_prefix(self, prefix: str) -> None:
         """设置静态前缀"""
         self.static_prefix = prefix
         self.prefix_hash = self._calculate_hash(prefix)
@@ -153,7 +153,7 @@ class CacheOptimizer:
         self,
         tokens_saved: int,
         is_hit: bool
-    ):
+    ) -> None:
         """
         记录缓存命中情况
         
@@ -225,8 +225,8 @@ class CacheOptimizer:
     def optimize_static_prefix(
         self,
         full_prefix: str,
-        max_tokens: int = None,
-        token_calculator=None
+        max_tokens: Optional[int] = None,
+        token_calculator: Optional[Any] = None
     ) -> str:
         """
         优化静态前缀（截断到合适大小）
@@ -280,7 +280,7 @@ class CacheOptimizer:
         
         return static_tokens >= self.config.min_prefix_tokens_for_cache
     
-    def reset_stats(self):
+    def reset_stats(self) -> None:
         """重置统计"""
         self.stats = CacheStats(prefix_hash=self.prefix_hash)
         logger.info("Cache stats reset")
@@ -296,8 +296,8 @@ class CacheFriendlyPromptBuilder:
     def __init__(
         self,
         cache_optimizer: CacheOptimizer,
-        token_calculator=None
-    ):
+        token_calculator: Optional[Any] = None
+    ) -> None:
         self.cache_optimizer = cache_optimizer
         self.token_calculator = token_calculator
     

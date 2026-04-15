@@ -16,79 +16,10 @@ from typing import Optional, Dict, Any
 
 from core.agents.planning.test_planning_agent import TestPlanningAgent
 from core.flow.flow_ir import FlowIR
-from core.flow.test_node_registry import global_node_registry
 from shared.exceptions import ValidationError, PlanningError
 from shared.utils.validation import validate_required_fields
 
 logger = logging.getLogger(__name__)
-
-
-class GetAvailableNodeTypesView(APIView):
-    """
-    Get available node types for test planning
-    GET /api/v1/planning/node-types
-    """
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request: Request) -> Response:
-        """Get available node types"""
-        try:
-            category = request.query_params.get('category')
-            include_details = request.query_params.get('include_details', 'false').lower() == 'true'
-            
-            # Get node types from registry
-            node_types = global_node_registry.get_all_node_types()  # type: ignore[attr-defined]
-            
-            # Filter by category if specified
-            if category:
-                node_types = {
-                    name: info 
-                    for name, info in node_types.items() 
-                    if info.get('category') == category
-                }
-            
-            # Format response
-            formatted_types = []
-            for node_name, node_info in node_types.items():
-                node_data = {
-                    'name': node_name,
-                    'category': node_info.get('category', 'general'),
-                    'description': node_info.get('description', ''),
-                    'version': node_info.get('version', '1.0.0')
-                }
-                
-                if include_details:
-                    node_data.update({
-                        'config_schema': node_info.get('config_schema', {}),
-                        'input_schema': node_info.get('input_schema', {}),
-                        'output_schema': node_info.get('output_schema', {}),
-                        'dependencies': node_info.get('dependencies', []),
-                        'tags': node_info.get('tags', [])
-                    })
-                
-                formatted_types.append(node_data)
-            
-            # Group by category
-            categories = {}
-            for node_type in formatted_types:
-                category = node_type['category']
-                if category not in categories:
-                    categories[category] = []
-                categories[category].append(node_type)
-            
-            return Response({
-                'success': True,
-                'node_types': formatted_types,
-                'categories': categories,
-                'total_count': len(formatted_types)
-            })
-            
-        except Exception as e:
-            logger.error(f"Error getting node types: {str(e)}", exc_info=True)
-            return Response(
-                {'error': 'Internal server error'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
 
 
 class PlanTestView(APIView):
@@ -103,17 +34,17 @@ class PlanTestView(APIView):
         logger.info(f"[PLANNING] Plan test request from user: {request.user}")
         
         try:
-            data = request.data  # type: ignore[var-assign]
-            description = data.get('description')  # type: ignore[attr-defined]
-            project_id = data.get('project_id')  # type: ignore[attr-defined]
-            test_type = data.get('test_type', 'auto')  # type: ignore[attr-defined]
-            additional_context = data.get('additional_context', {})  # type: ignore[attr-defined]
-            use_rag = data.get('use_rag', True)  # type: ignore[attr-defined]
-            validate = data.get('validate', True)  # type: ignore[attr-defined]
-            complexity = data.get('complexity', 'medium')  # type: ignore[attr-defined]  # low, medium, high
+            data = request.data
+            description = data.get('description')
+            project_id = data.get('project_id')
+            test_type = data.get('test_type', 'auto')
+            additional_context = data.get('additional_context', {})
+            use_rag = data.get('use_rag', True)
+            validate = data.get('validate', True)
+            complexity = data.get('complexity', 'medium')  # low, medium, high
             
             # Validate required fields
-            validate_required_fields(data, ['description'])  # type: ignore[arg-type]
+            validate_required_fields(data, ['description'])
             
             if not description or not description.strip():
                 return Response(
@@ -127,9 +58,9 @@ class PlanTestView(APIView):
             # Direct async execution
             result = await self._async_plan(
                 description=str(description) if description else "",
-                project_id=int(project_id) if project_id else None,  # type: ignore[arg-type]
+                project_id=int(project_id) if project_id else None,
                 test_type=str(test_type),
-                additional_context=dict(additional_context) if isinstance(additional_context, dict) else {},  # type: ignore[arg-type]
+                additional_context=dict(additional_context) if isinstance(additional_context, dict) else {},
                 use_rag=bool(use_rag),
                 validate=bool(validate),
                 complexity=str(complexity),
@@ -270,14 +201,14 @@ class RefinePlanView(APIView):
         logger.info(f"[PLANNING] Refine plan request from user: {request.user}")
         
         try:
-            data = request.data  # type: ignore[var-assign]
-            flow_ir = data.get('flow_ir')  # type: ignore[attr-defined]
-            feedback = data.get('feedback')  # type: ignore[attr-defined]
-            refinement_type = data.get('refinement_type', 'general')  # type: ignore[attr-defined]
-            constraints = data.get('constraints', {})  # type: ignore[attr-defined]
+            data = request.data
+            flow_ir = data.get('flow_ir')
+            feedback = data.get('feedback')
+            refinement_type = data.get('refinement_type', 'general')
+            constraints = data.get('constraints', {})
             
             # Validate required fields
-            validate_required_fields(data, ['flow_ir', 'feedback'])  # type: ignore[arg-type]
+            validate_required_fields(data, ['flow_ir', 'feedback'])
             
             if not isinstance(flow_ir, dict):
                 return Response(
@@ -298,7 +229,7 @@ class RefinePlanView(APIView):
                 flow_ir=flow_ir,
                 feedback=str(feedback) if feedback else "",
                 refinement_type=str(refinement_type),
-                constraints=dict(constraints) if isinstance(constraints, dict) else {},  # type: ignore[arg-type]
+                constraints=dict(constraints) if isinstance(constraints, dict) else {},
                 user=request.user
             )
             

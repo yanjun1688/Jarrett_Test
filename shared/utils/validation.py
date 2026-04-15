@@ -216,59 +216,6 @@ def validate_and_raise(data: Dict[str, Any], rules: Dict[str, Dict[str, Any]]) -
         raise ValidationError("验证失败", details={"errors": errors})
 
 
-def validate_flow_ir(flow_ir_data: Dict[str, Any]) -> None:
-    """验证FlowIR数据结构
-    
-    Args:
-        flow_ir_data: FlowIR数据字典
-        
-    Raises:
-        ValidationError: 如果FlowIR无效
-    """
-    if not isinstance(flow_ir_data, dict):
-        raise ValidationError("FlowIR必须是字典类型")
-    
-    # 检查必需字段
-    required_fields = ['nodes', 'edges', 'metadata']
-    missing_fields = validate_required_fields(flow_ir_data, required_fields)
-    if missing_fields:
-        raise ValidationError(f"FlowIR缺少必需字段: {', '.join(missing_fields)}")
-    
-    # 验证nodes
-    nodes = flow_ir_data.get('nodes', {})
-    if not isinstance(nodes, dict):
-        raise ValidationError("nodes必须是字典类型")
-    
-    for node_id, node_data in nodes.items():
-        if not isinstance(node_data, dict):
-            raise ValidationError(f"节点 {node_id} 必须是字典类型")
-        
-        # 检查节点必需字段
-        node_required = ['type', 'config']
-        node_missing = validate_required_fields(node_data, node_required)
-        if node_missing:
-            raise ValidationError(f"节点 {node_id} 缺少字段: {', '.join(node_missing)}")
-    
-    # 验证edges
-    edges = flow_ir_data.get('edges', [])
-    if not isinstance(edges, list):
-        raise ValidationError("edges必须是列表类型")
-    
-    for edge in edges:
-        if not isinstance(edge, dict):
-            raise ValidationError("边必须是字典类型")
-        
-        edge_required = ['source', 'target']
-        edge_missing = validate_required_fields(edge, edge_required)
-        if edge_missing:
-            raise ValidationError(f"边缺少字段: {', '.join(edge_missing)}")
-    
-    # 验证metadata
-    metadata = flow_ir_data.get('metadata', {})
-    if not isinstance(metadata, dict):
-        raise ValidationError("metadata必须是字典类型")
-
-
 def validate_page_structure(elements: List[Dict[str, Any]]) -> None:
     """验证页面结构元素
     

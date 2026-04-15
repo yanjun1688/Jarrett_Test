@@ -14,7 +14,7 @@ Reference: docs/context_markdown_storage_design_v2.md
 import os
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union, Generator
 from datetime import datetime
 from dataclasses import dataclass, field
 import re
@@ -25,25 +25,23 @@ logger = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
-def _file_lock(filepath: Path):
+def _file_lock(filepath: Path) -> Generator[None, None, None]:
     """
     跨平台文件锁（支持多进程）
     
     使用系统级文件锁，确保多进程环境下的并发安全
     """
     lock_path = filepath.with_suffix(filepath.suffix + '.lock')
-    lock_fd = None
+    lock_fd: Any = None
     try:
         if os.name == 'nt':
             import msvcrt
             lock_fd = open(lock_path, 'w')
-            # 使用阻塞锁（LK_LOCK）而非非阻塞锁（LK_NBLCK），
-            # 确保并发时排队等待而非直接失败
             msvcrt.locking(lock_fd.fileno(), msvcrt.LK_LOCK, 1)
         else:
             import fcntl
             lock_fd = open(lock_path, 'w')
-            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)
+            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)  # type: ignore[attr-defined]
         yield
     except (IOError, OSError) as e:
         logger.warning(f"Failed to acquire file lock for {filepath}: {e}")
@@ -56,7 +54,7 @@ def _file_lock(filepath: Path):
                     msvcrt.locking(lock_fd.fileno(), msvcrt.LK_UNLCK, 1)
                 else:
                     import fcntl
-                    fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
+                    fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)  # type: ignore[attr-defined]
                 lock_fd.close()
             except Exception:
                 pass
@@ -607,21 +605,21 @@ class MarkdownContextStore:
             if in_frontmatter:
                 if ":" in line:
                     key, value = line.split(":", 1)
-                    value = value.strip().strip('"')
-                    # 尝试解析为数字
+                    value_str = value.strip().strip('"')
+                    parsed_value: Union[str, int, float] = value_str
                     try:
-                        value = int(value)
+                        parsed_value = int(value_str)
                     except ValueError:
                         try:
-                            value = float(value)
+                            parsed_value = float(value_str)
                         except ValueError:
                             pass
-                    metadata[key.strip()] = value
+                    metadata[key.strip()] = parsed_value
         
         # 解析消息
-        messages = []
-        current_msg = None
-        current_content = []
+        messages: List[Dict[str, Any]] = []
+        current_msg: Optional[Dict[str, Any]] = None
+        current_content: List[str] = []
         
         for i, line in enumerate(lines[frontmatter_end + 1:], start=frontmatter_end + 1):
             # 消息开始标记
@@ -683,15 +681,15 @@ class MarkdownContextStore:
                 context_state[key.strip()] = self._parse_yaml_value(value.strip())
         
         return SessionContext(
-            session_id=metadata.get("session_id", ""),
-            user_id=metadata.get("user_id", ""),
-            project_id=metadata.get("project_id"),
-            title=metadata.get("title", ""),
+            session_id=str(metadata.get("session_id", "")),
+            user_id=str(metadata.get("user_id", "")),
+            project_id=str(metadata.get("project_id")) if metadata.get("project_id") else None,
+            title=str(metadata.get("title", "")),
             messages=messages,
             context_state=context_state,
             metadata=metadata,
-            created_at=metadata.get("created_at", ""),
-            updated_at=metadata.get("updated_at", "")
+            created_at=str(metadata.get("created_at", "")),
+            updated_at=str(metadata.get("updated_at", ""))
         )
     
     def _parse_yaml_value(self, value: str) -> Any:

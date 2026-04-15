@@ -4,87 +4,13 @@ Tool Orchestrator - Manages tool execution
 This module handles the orchestration of tool execution, including
 tool registration, parameter validation, and result aggregation.
 """
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 import logging
 import asyncio
 
-from core.tools.base_tool import BaseTool, ToolResult, ToolRegistry
+from core.tools.base_tool import BaseTool, ToolResult, ToolRegistry, LazyLoadingRegistry
 
 logger = logging.getLogger(__name__)
-
-
-class LazyLoadingRegistry:
-    """
-    懒加载的 ToolRegistry
-    只在需要时才加载工具，避免初始化时的性能开销
-    """
-    
-    def __init__(self):
-        self._tools: Dict[str, BaseTool] = {}
-        self._loaded = False
-        self.logger = logging.getLogger("tool.lazy_registry")
-    
-    def _ensure_loaded(self):
-        """确保工具已加载（懒加载）"""
-        if not self._loaded:
-            self.logger.debug("Lazy loading tools...")
-            # 这里可以添加核心工具的加载
-            # 但目前保持空，按需添加工具
-            self._loaded = True
-    
-    def register(self, tool: BaseTool, name: Optional[str] = None) -> None:
-        """注册工具"""
-        # 如果提供了名称，则使用提供的名称，否则使用工具自身的名称
-        if name:
-            tool_name = name
-        elif hasattr(tool, 'name') and getattr(tool, 'name', None):
-            tool_name = getattr(tool, 'name')
-        else:
-            # 对于没有明确名称的对象，如mock，我们可以为其设置特定名称，或使用默认方式
-            # 这里我们处理一种常见情况：将mock的name设置为通用名称
-            tool_name = str(tool)
-        
-        # 使用工具的名称作为键注册
-        self._tools[tool_name] = tool
-        self.logger.info(f"Tool '{tool_name}' registered")
-    
-    def get(self, name: str) -> Optional[BaseTool]:
-        """获取工具"""
-        self._ensure_loaded()
-        return self._tools.get(name)
-    
-    def list(self) -> List[Dict[str, Any]]:
-        """列出所有已注册工具"""
-        self._ensure_loaded()
-        return [
-            {
-                'name': name,
-                'description': getattr(tool, 'description', 'No description'),
-                'version': getattr(tool, 'version', '1.0.0'),
-                'schema': tool.get_schema() if hasattr(tool, 'get_schema') else {}
-            }
-            for name, tool in self._tools.items()
-        ]
-    
-    async def execute(self, tool_name: str, **kwargs) -> ToolResult:
-        """执行工具"""
-        self._ensure_loaded()
-        tool = self.get(tool_name)
-        if not tool:
-            return ToolResult(
-                success=False,
-                data={},
-                error=f"Tool '{tool_name}' not found"
-            )
-        return await tool.execute_with_validation(**kwargs)
-    
-    def get_statistics(self) -> Dict[str, Any]:
-        """获取统计信息"""
-        self._ensure_loaded()
-        return {
-            'total_tools': len(self._tools),
-            'loaded': self._loaded
-        }
 
 
 class ToolOrchestrator:
@@ -98,14 +24,13 @@ class ToolOrchestrator:
     - Aggregates tool results
     """
     
-    def __init__(self, registry: Optional[ToolRegistry] = None):
+    def __init__(self, registry: Optional[Union[ToolRegistry, LazyLoadingRegistry]] = None) -> None:
         """
         Initialize Tool Orchestrator
         优化：只注册必要的核心工具，避免自动扫描大量技能
         """
         if registry is None:
-            # 使用懒加载Registry，避免初始化时进行扫描
-            self.registry = LazyLoadingRegistry()  # 现在我们稍后创建这个类
+            self.registry: Union[ToolRegistry, LazyLoadingRegistry] = LazyLoadingRegistry()
         else:
             self.registry = registry
         self.logger = logging.getLogger(__name__)
@@ -113,8 +38,8 @@ class ToolOrchestrator:
     async def execute(
         self,
         tool_name: str,
-        execution_logger=None,
-        **kwargs
+        execution_logger: Optional[Any] = None,
+        **kwargs: Any
     ) -> Dict[str, Any]:
         """
         Execute a tool by name
@@ -215,7 +140,7 @@ class ToolOrchestrator:
         failed = 0
         total_time = 0.0
         
-        output = {
+        output: Dict[str, Any] = {
             "results": [],
             "summary": {}
         }
@@ -277,7 +202,7 @@ class ToolOrchestrator:
         Returns:
             True if successful, False otherwise
         """
-        if tool_name in self.registry._tools:
+        if hasattr(self.registry, '_tools') and tool_name in self.registry._tools:
             del self.registry._tools[tool_name]
             self.logger.info(f"Tool unregistered: {tool_name}")
             return True
@@ -391,7 +316,7 @@ class ToolOrchestrator:
         """
         return self.registry.get_statistics()
     
-    async def execute_tool(self, tool_name: str, **kwargs) -> Dict[str, Any]:
+    async def execute_tool(self, tool_name: str, **kwargs: Any) -> Dict[str, Any]:
         """
         Alias for execute() - Execute a tool by name
         

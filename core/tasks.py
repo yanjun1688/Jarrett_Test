@@ -4,6 +4,8 @@ Celery Tasks for Knowledge Base
 Handles async sync of documents to ChromaDB.
 """
 import logging
+import re
+from typing import List
 from celery import shared_task
 from django.utils import timezone
 from django.core.exceptions import ObjectDoesNotExist
@@ -11,6 +13,40 @@ from django.core.exceptions import ObjectDoesNotExist
 from core.models.knowledge import KnowledgeDocument, KnowledgeBase
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_keywords(doc) -> List[str]:
+    keywords = []
+    
+    title = doc.metadata.get('title', '')
+    if title:
+        keywords.append(title)
+    
+    existing_keywords = doc.metadata.get('keywords', [])
+    if existing_keywords:
+        keywords.extend(existing_keywords)
+    
+    tags = doc.metadata.get('tags', [])
+    if tags:
+        keywords.extend(tags)
+    
+    name = doc.metadata.get('name', '')
+    if name:
+        keywords.append(name)
+    
+    content_sample = doc.content[:500] if doc.content else ''
+    api_patterns = re.findall(r'API[_\-\w]*', content_sample)
+    keywords.extend(api_patterns[:3])
+    
+    unique_keywords = []
+    seen = set()
+    for kw in keywords:
+        kw_lower = kw.lower()
+        if kw_lower not in seen and kw:
+            seen.add(kw_lower)
+            unique_keywords.append(kw)
+    
+    return unique_keywords[:10]
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -38,19 +74,21 @@ def sync_document_to_chroma(self, document_id: int):
             'knowledge_base__project'
         ).get(id=document_id)
         
-        project_id = doc.knowledge_base.project_id  # type: ignore[attr-defined]
+        project_id = doc.knowledge_base.project_id
         
         retriever = KnowledgeRetriever()
         
         chroma_id = doc.chroma_id
-        chroma_id_prefix = f"doc_{doc.id}_"  # type: ignore[attr-defined]
+        chroma_id_prefix = f"doc_{doc.id}_"
         
         metadata = doc.metadata.copy()
+        keywords = _extract_keywords(doc)
         metadata.update({
             'doc_type': doc.document_type,
             'knowledge_base_id': doc.knowledge_base.id,
             'knowledge_base_name': doc.knowledge_base.name,
             'project_id': project_id,
+            'keywords': ','.join(keywords),
         })
         
         retriever.add_document(
@@ -90,7 +128,7 @@ def delete_document_chunks_from_chroma(chroma_id_prefix: str, knowledge_base_id:
     from core.agents.rag.knowledge_retriever import KnowledgeRetriever
     try:
         kb = KnowledgeBase.objects.select_related('project').get(id=knowledge_base_id)
-        project_id = kb.project_id  # type: ignore[attr-defined]
+        project_id = kb.project_id
         
         retriever = KnowledgeRetriever()
         deleted_count = retriever.delete_document_chunks(chroma_id_prefix)
@@ -121,7 +159,7 @@ def sync_test_case_to_knowledge(test_case_id: int, knowledge_base_id: int):
             sync_status='pending'
         )
         
-        sync_document_to_chroma(doc.id)  # type: ignore[attr-defined]
+        sync_document_to_chroma(doc.id)
         
     except Exception as e:
         logger.error(f"Failed to sync test case {test_case_id}: {e}")

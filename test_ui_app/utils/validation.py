@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Tuple
+from typing import TYPE_CHECKING, Any, Tuple, cast
 
 from .validators.script_validator import ScriptValidator, ValidationError
 
@@ -24,10 +24,11 @@ def validate_script_actions(script: UITestScript) -> Tuple[bool, str | None]:
     if not actions:
         return False, "script actions is empty"
     
-    return validator.validate(
+    result: Tuple[bool, str | None] = validator.validate(
         actions=actions,
         browser_type=script.browser_type,
         viewport_width=script.viewport_width,
         viewport_height=script.viewport_height,
         timeout=script.timeout
     )
+    return result

@@ -59,9 +59,9 @@ class InstallSkillTool(BaseTool):
         try:
             from testmanager_app.tasks import install_skill_task
             
-            task = install_skill_task.delay(skill_id, skill_name)  # type: ignore[union-attr]
+            task = install_skill_task.delay(skill_id, skill_name)
             
-            logger.info(f"[InstallSkill] Celery 任务已创建: task_id={task.id}")  # type: ignore[attr-defined]
+            logger.info(f"[InstallSkill] Celery 任务已创建: task_id={task.id}")
             
             return ToolResult(
                 success=True,

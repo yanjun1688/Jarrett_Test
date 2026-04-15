@@ -42,23 +42,41 @@ out/
 htmlcov/
 .pytest_cache/
 pytest_cache/
+coverage.json
+.coveragerc
 
 # Django
 *.mo
 *.pot
 *.sqlite3
 db.sqlite3
-media/
 staticfiles/
+
+# Media 运行时数据（不跟踪）
+media/
+media/agent_knowledge/
+media/embeddings_cache/
+media/ui_test_screenshots/
+media/ui_test_work/
 
 # IDE / Editor
 .vscode/
 .idea/
 .cursor/
-.claude/
 *.swp
 *.swo
 *~
+
+# AI Agent 配置目录
+.agent/
+.agents/
+.claude/
+.cline/
+.kiro/
+
+# MCP / Tools
+.playwright-mcp/
+.mypy_cache/
 
 # Operating System
 .DS_Store
@@ -83,6 +101,7 @@ frontend/download-*/
 # Local scripts (not needed in repo)
 verify_recorder.py
 restart_server.ps1
+check_coverage.py
 
 # Backups
 *.bak
@@ -92,41 +111,33 @@ backups/
 # Documentation (keep README.md only)
 *.md
 !README.md
+docs/
 
 # Test directories
 testmanager_app/tests/
 testmanager_app/test_scripts/
 tests/
 
-# Coverage files
-.coveragerc
-coverage.json
-*.cover
-
-# LSP config
-pyrightconfig.json
-
 # Temporary data directories
 context_data/
-data/
+data/test_*/
 ocsd/
-
-# Documentation (except README)
-docs/
-
-# Scripts directory (temporary)
-scripts/
-
-# Coverage reports
-coverage.json
-
-# Temporary output
-test_output.txt
-test_results.txt
-nul
 
 # Debug files
 debug_*.py
 
 # MCP builder temp
 =mcp-builder/
+agent-browser.json
+
+# Pyright config
+pyrightconfig.json
+pyright_errors.json
+
+# Test files
+test_*.py
+!tests/
+validate_*.py
+
+# Data directory
+data/

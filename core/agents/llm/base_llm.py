@@ -39,7 +39,7 @@ class LLMConfig:
     # 额外参数
     extra_params: Optional[Dict[str, Any]] = None
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.extra_params is None:
             self.extra_params = {}
 
@@ -47,7 +47,7 @@ class LLMConfig:
 class BaseLLMService:
     """基础LLM服务类"""
     
-    def __init__(self, config: Optional[LLMConfig] = None, provider: Optional[LLMProvider] = None):
+    def __init__(self, config: Optional[LLMConfig] = None, provider: Optional[LLMProvider] = None) -> None:
         """
         初始化LLM服务
         
@@ -101,7 +101,7 @@ class BaseLLMService:
             max_tokens=max_tokens
         )
     
-    def _initialize_client(self):
+    def _initialize_client(self) -> None:
         """初始化LLM客户端（子类实现）"""
         raise NotImplementedError("Subclasses must implement _initialize_client")
     
@@ -165,7 +165,7 @@ class BaseLLMService:
 
         return messages
 
-    def _extract_standard_response(self, response) -> str:
+    def _extract_standard_response(self, response: Any) -> str:
         """
         从 OpenAI 格式的响应中提取内容
 
@@ -191,7 +191,7 @@ class BaseLLMService:
                 }, ensure_ascii=False)
         return str(response)
 
-    def _extract_standard_usage(self, response) -> Optional[Dict[str, int]]:
+    def _extract_standard_usage(self, response: Any) -> Optional[Dict[str, int]]:
         """
         从响应中提取 usage 信息
 
@@ -209,7 +209,7 @@ class BaseLLMService:
             }
         return None
 
-    def _extract_standard_finish_reason(self, response) -> str:
+    def _extract_standard_finish_reason(self, response: Any) -> str:
         """
         从响应中提取 finish_reason
 
@@ -701,8 +701,8 @@ def create_llm_service(
 
         config = LLMConfig(
             provider=provider_enum,
-            model_name=model_name or "",  # type: ignore[arg-type]
-            api_key=api_key or "",  # type: ignore[arg-type]
+            model_name=model_name or "",
+            api_key=api_key or "",
             **kwargs
         )
         return service_class(config)

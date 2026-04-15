@@ -4,6 +4,7 @@
 
 用户运行 start_recording() 后，程序将阻塞，直到浏览器关闭。
 """
+# pyright: reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
 from __future__ import annotations
 import json
 import logging

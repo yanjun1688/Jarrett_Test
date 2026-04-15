@@ -49,18 +49,8 @@ class SkillSpec:
     execution_config: Dict[str, Any] = field(default_factory=dict)
     extra_config: Dict[str, Any] = field(default_factory=dict)
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """初始化後期處理"""
-        if self.tags is None:
-            self.tags = []
-        if self.parameters is None:
-            self.parameters = {}
-        if self.requires is None:
-            self.requires = []
-        if self.execution_config is None:
-            self.execution_config = {}
-        if self.extra_config is None:
-            self.extra_config = {}
             
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SkillSpec":
@@ -103,7 +93,7 @@ class Skill:
     封装技能的执行逻辑和参数验证
     """
     
-    def __init__(self, spec: SkillSpec, executor: Callable):
+    def __init__(self, spec: SkillSpec, executor: Callable[..., Any]) -> None:
         """
         初始化技能实例
         
@@ -113,7 +103,7 @@ class Skill:
         """
         self.spec = spec
         self.executor = executor
-        self.last_execution_time = None
+        self.last_execution_time: Optional[float] = None
         self.execution_count = 0
         self.error_count = 0
         self.version = spec.version
@@ -255,7 +245,7 @@ class Skill:
             "converted_parameters": converted_parameters
         }
     
-    def _validate_parameter(self, name: str, value: Any, definition: Dict[str, Any]) -> tuple:
+    def _validate_parameter(self, name: str, value: Any, definition: Dict[str, Any]) -> tuple[Any, List[str]]:
         """
         验证单个参数
         
@@ -379,7 +369,7 @@ class SkillLoader:
         Returns:
             找到的技能名称列表
         """
-        skills_found = []
+        skills_found: List[str] = []
         
         if not self.skill_dir.exists():
             logger.warning(f"技能目录不存在: {self.skill_dir}")
@@ -577,7 +567,7 @@ class SkillLoader:
             return True
         return category in self.enabled_categories
     
-    def _load_executor(self, spec: SkillSpec, config: Dict[str, Any]) -> Optional[Callable]:
+    def _load_executor(self, spec: SkillSpec, config: Dict[str, Any]) -> Optional[Callable[..., Any]]:
         """
         根据技能配置加载执行器
         
@@ -606,14 +596,14 @@ class SkillLoader:
             logger.error(f"加载执行器失败: {e}", exc_info=True)
             return None
     
-    def _load_python_executor(self, config: Dict[str, Any]) -> Callable:
+    def _load_python_executor(self, config: Dict[str, Any]) -> Callable[..., Any]:
         """加载Python函数执行器"""
         entrypoint = config["execution"].get("entrypoint")
         if not entrypoint:
             raise ValueError("Python executor需要指定entrypoint")
         
         if entrypoint == "generate_api_test":
-            async def api_test_executor(params: Dict[str, Any]):
+            async def api_test_executor(params: Dict[str, Any]) -> Dict[str, Any]:
                 api_spec = params.get("api_spec")
                 framework = params.get("framework", "pytest")
                 
@@ -628,13 +618,13 @@ class SkillLoader:
             
             return api_test_executor
         elif entrypoint == "execute_function":
-            async def dummy_executor(params: Dict[str, Any]):
+            async def dummy_executor(params: Dict[str, Any]) -> Dict[str, Any]:
                 return {"success": True, "params": params}
             return dummy_executor
         else:
             raise NotImplementedError(f"不支持的Python执行点: {entrypoint}")
     
-    def _load_module_executor(self, config: Dict[str, Any]) -> Callable:
+    def _load_module_executor(self, config: Dict[str, Any]) -> Callable[..., Any]:
         """加载模块执行器"""
         module_path = config["execution"].get("module")
         if not module_path:
@@ -652,7 +642,7 @@ class SkillLoader:
         except ImportError as e:
             raise ValueError(f"无法导入模块 {module_path}: {e}")
     
-    def _load_builtin_executor(self, config: Dict[str, Any]) -> Callable:
+    def _load_builtin_executor(self, config: Dict[str, Any]) -> Callable[..., Any]:
         """加载内置执行器"""
         entrypoint = config["execution"].get("entrypoint", "default")
         
@@ -669,7 +659,7 @@ class SkillLoader:
             logger.warning(f"内置执行器 '{entrypoint}' 未找到，使用默认执行器")
             return builtin_executors["default"]
     
-    def _create_default_executor(self, config: Dict[str, Any]) -> Callable:
+    def _create_default_executor(self, config: Dict[str, Any]) -> Callable[..., Any]:
         """创建默认执行器（仅返回 skill 信息，不执行实际操作）"""
         async def execute(params: Dict[str, Any]) -> Dict[str, Any]:
             return {
@@ -680,9 +670,9 @@ class SkillLoader:
             }
         return execute
     
-    def _create_test_generation_executor(self, config: Dict[str, Any]) -> Callable:
+    def _create_test_generation_executor(self, config: Dict[str, Any]) -> Callable[..., Any]:
         """创建测试生成执行器"""
-        async def execute(params: Dict[str, Any]):
+        async def execute(params: Dict[str, Any]) -> Dict[str, Any]:
             test_type = params.get("test_type", "functional")
             target = params.get("target", "")
             
@@ -700,9 +690,9 @@ class SkillLoader:
         
         return execute
     
-    def _create_api_test_executor(self, config: Dict[str, Any]) -> Callable:
+    def _create_api_test_executor(self, config: Dict[str, Any]) -> Callable[..., Any]:
         """创建API测试执行器"""
-        async def execute(params: Dict[str, Any]):
+        async def execute(params: Dict[str, Any]) -> Dict[str, Any]:
             # 模拟APITestOrchestrator行为
             api_url = params.get("api_url", "")
             test_spec = params.get("test_spec", {})
@@ -730,7 +720,7 @@ class SkillLoader:
         
         return execute
     
-    async def execute_skill(self, skill_name: str, **kwargs) -> Dict[str, Any]:
+    async def execute_skill(self, skill_name: str, **kwargs: Any) -> Dict[str, Any]:
         """
         执行技能
         

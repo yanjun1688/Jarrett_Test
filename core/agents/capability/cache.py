@@ -1,4 +1,4 @@
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 import time
 import logging
 from threading import Lock
@@ -65,7 +65,7 @@ class CapabilityCache:
             self._cache.clear()
             logger.info("All capability cache cleared")
     
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> Dict[str, Any]:
         with self._lock:
             total = len(self._cache)
             expired = sum(1 for e in self._cache.values() if e.is_expired())

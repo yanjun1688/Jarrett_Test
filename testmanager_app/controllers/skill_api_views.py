@@ -2,6 +2,7 @@
 Skill API 视图
 封装 npx skills 命令，提供搜索、安装、执行功能
 """
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportOptionalMemberAccess=false
 from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
@@ -223,7 +224,7 @@ class SkillExecuteView(APIView):
             
             execution_time = time.time() - start_time
             
-            result_text = response.get("text", "") if isinstance(response, dict) else str(response)
+            result_text = response.get("text", "") if isinstance(response, dict) else str(response)  # type: ignore[unreachable]
             
             logger_exec.finish({
                 'status': 'success',

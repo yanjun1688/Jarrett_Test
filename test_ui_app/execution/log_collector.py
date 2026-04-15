@@ -58,9 +58,11 @@ class LogCollector:
         if self.console_output:
             print("\n" + "=" * 80, flush=True)
             print(f"[UITest] ======== 开始执行UI测试 ========", flush=True)
-            print(f"[UITest] 执行记录ID: {self.execution.id}", flush=True)
+            execution_id = getattr(self.execution, 'id', 0)
+            print(f"[UITest] 执行记录ID: {execution_id}", flush=True)
             print(f"[UITest] 脚本名称: {script.name}", flush=True)
-            print(f"[UITest] 脚本ID: {script.id}", flush=True)
+            script_id = getattr(script, 'id', 0)
+            print(f"[UITest] 脚本ID: {script_id}", flush=True)
             print(f"[UITest] 浏览器类型: {script.browser_type}", flush=True)
             print(f"[UITest] 无头模式: {'是' if script.headless else '否'}", flush=True)
             print(f"[UITest] 视口大小: {script.viewport_width}x{script.viewport_height}", flush=True)
@@ -69,9 +71,9 @@ class LogCollector:
             print("=" * 80 + "\n", flush=True)
 
         self._add_log_line("======== 开始执行UI测试 ========", self.start_time)
-        self._add_log_line(f"执行记录ID: {self.execution.id}", self.start_time)
+        self._add_log_line(f"执行记录ID: {execution_id}", self.start_time)
         self._add_log_line(f"脚本名称: {script.name}", self.start_time)
-        self._add_log_line(f"脚本ID: {script.id}", self.start_time)
+        self._add_log_line(f"脚本ID: {script_id}", self.start_time)
         self._add_log_line(f"浏览器类型: {script.browser_type}", self.start_time)
         self._add_log_line(f"无头模式: {'是' if script.headless else '否'}", self.start_time)
         self._add_log_line(f"视口大小: {script.viewport_width}x{script.viewport_height}", self.start_time)
@@ -80,7 +82,7 @@ class LogCollector:
         self._add_log_line("========================================", self.start_time)
     
     async def collect_action_result(self, action: Dict[str, Any],
-                                   result: Dict[str, Any]):
+                                   result: Dict[str, Any]) -> None:
         """
         采集单个action的执行结果
 

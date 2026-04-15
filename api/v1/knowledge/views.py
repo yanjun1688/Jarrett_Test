@@ -2,18 +2,18 @@
 Knowledge base API views
 """
 from __future__ import annotations
-from typing import Any, Dict
-from rest_framework.request import Request
+
+import logging
+import json
+from typing import Any, Dict, List, Optional, cast
 
 from django.http import JsonResponse
+from rest_framework.request import Request
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-import logging
-import json
-from typing import Optional
 
 from core.agents.rag.knowledge_rag_agent import KnowledgeRAGAgent
 from core.models import Project, KnowledgeBase, KnowledgeDocument
@@ -36,31 +36,27 @@ class QueryKnowledgeView(APIView):
     async def post(self, request: Request) -> Response:
         """Query knowledge base"""
         try:
-            data = request.data  # type: Dict[str, Any]
-            query = data.get('query')  # type: ignore[attr-defined]
-            project_id = data.get('project_id')  # type: ignore[attr-defined]
-            top_k = data.get('top_k', 5)  # type: ignore[attr-defined]
-            document_type = data.get('document_type')  # type: ignore[attr-defined]
-            use_llm = data.get('use_llm', True)  # type: ignore[attr-defined]
-            filters = data.get('filters', {})  # type: ignore[attr-defined]
+            data = request.data
+            query = data.get('query')
+            project_id = data.get('project_id')
+            top_k = int(data.get('top_k', 5))
+            document_type = data.get('document_type')
+            use_llm = bool(data.get('use_llm', True))
             
-            # Validate required fields
             validate_required_fields(data, ['query', 'project_id'])
             
-            if query and not query.strip():
+            if query and not str(query).strip():
                 return Response(
                     {'error': 'Query cannot be empty'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Direct async execution
             result = await self._async_query(
-                query=query,
-                project_id=project_id,
+                query=str(query) if query else '',
+                project_id=int(project_id) if project_id else 0,
                 top_k=top_k,
-                document_type=document_type,
-                use_llm=use_llm,
-                filters=filters
+                document_type=str(document_type) if document_type else None,
+                use_llm=use_llm
             )
             
             return Response(result)
@@ -84,29 +80,20 @@ class QueryKnowledgeView(APIView):
         project_id: int,
         top_k: int,
         document_type: Optional[str],
-        use_llm: bool,
-        filters: dict
-    ) -> dict:
+        use_llm: bool
+    ) -> Dict[str, Any]:
         """Async query knowledge base"""
         try:
-            # Initialize knowledge agent
-            # Note: In production, you would load project-specific configuration
             agent = KnowledgeRAGAgent(
-                llm_service=None,  # Would be injected in production
-                rag_retriever=None,  # Would be injected in production
-                config={
-                    'project_id': project_id,
-                    'timeout': 30
-                }
+                llm_service=None,
+                rag_retriever=None
             )
             
-            # Query knowledge base
             result = await agent.query(
                 query=query,
                 top_k=top_k,
                 document_type=document_type,
-                use_llm=use_llm,
-                filters=filters
+                use_llm=use_llm
             )
             
             return result
@@ -137,29 +124,27 @@ class BuildKnowledgeBaseView(APIView):
     async def post(self, request: Request) -> Response:
         """Build knowledge base"""
         try:
-            data = request.data  # type: Dict[str, Any]
-            project_id = data.get('project_id')  # type: ignore[attr-defined]
-            name = data.get('name')  # type: ignore[attr-defined]
-            description = data.get('description', '')  # type: ignore[attr-defined]
-            source_type = data.get('source_type', 'document')  # type: ignore[attr-defined]
-            source_path = data.get('source_path')  # type: ignore[attr-defined]
+            data = request.data
+            project_id = data.get('project_id')
+            name = data.get('name')
+            description = data.get('description', '')
+            source_type = data.get('source_type', 'document')
+            source_path = data.get('source_path')
             
-            # Validate required fields
             validate_required_fields(data, ['project_id', 'name'])
             
-            if source_type == 'document' and not source_path:
+            if str(source_type) == 'document' and not source_path:
                 return Response(
                     {'error': 'source_path is required for document source type'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Direct async build process
             await self._async_build(
-                project_id=project_id,
-                name=name,
-                description=description,
-                source_type=source_type,
-                source_path=source_path
+                project_id=int(project_id) if project_id else 0,
+                name=str(name) if name else '',
+                description=str(description),
+                source_type=str(source_type),
+                source_path=str(source_path) if source_path else None
             )
             
             return Response({
@@ -195,13 +180,11 @@ class BuildKnowledgeBaseView(APIView):
         try:
             logger.info(f"Starting knowledge base build: {name} for project {project_id}")
             
-            # Get project using async ORM (Django 5.2+)
             try:
                 project = await Project.objects.aget(id=project_id)
             except Project.DoesNotExist:
                 raise ValidationError(f"Project {project_id} does not exist")
             
-            # Create knowledge base record using async ORM
             knowledge_base = await KnowledgeBase.objects.acreate(
                 project=project,
                 name=name,
@@ -209,23 +192,14 @@ class BuildKnowledgeBaseView(APIView):
                 status='building'
             )
             
-            # TODO: In a real implementation, this would:
-            # 1. Process documents based on source_type
-            # 2. Index documents in vector store
-            # 3. Update knowledge base status to 'ready'
-            
-            # Simulate build process (using asyncio directly since we're in async context)
             import asyncio
-            await asyncio.sleep(1)  # Simulate processing
+            await asyncio.sleep(1)
             
-            # Update status to ready using async ORM
-            await KnowledgeBase.objects.filter(id=knowledge_base.id).aupdate(status='ready')  # type: ignore[attr-defined]
-            knowledge_base.status = 'ready'  # type: ignore[attr-defined]
+            await KnowledgeBase.objects.filter(pk=knowledge_base.pk).aupdate(status='ready')
             
-            logger.info(f"Knowledge base build completed: {name} (ID: {knowledge_base.id})")
+            logger.info(f"Knowledge base build completed: {name} (ID: {knowledge_base.pk})")
             
-        except ValidationError as e:
-            logger.warning(f"Validation error in async build: {str(e)}")
+        except ValidationError:
             raise
         except Exception as e:
             logger.error(f"Async build failed: {str(e)}")
@@ -246,10 +220,8 @@ class ListKnowledgeBasesView(APIView):
             page = int(request.query_params.get('page', 1))
             page_size = int(request.query_params.get('page_size', 20))
             
-            # Query knowledge bases
             knowledge_bases = self._get_knowledge_bases(int(project_id) if project_id else None)
             
-            # Apply pagination
             start_idx = (page - 1) * page_size
             end_idx = start_idx + page_size
             paginated_bases = knowledge_bases[start_idx:end_idx]
@@ -272,7 +244,7 @@ class ListKnowledgeBasesView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
-    def _get_knowledge_bases(self, project_id: Optional[int] = None) -> list[dict[str, Any]]:
+    def _get_knowledge_bases(self, project_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get knowledge bases from database"""
         try:
             queryset = KnowledgeBase.objects.all().order_by('-updated_at')
@@ -280,13 +252,13 @@ class ListKnowledgeBasesView(APIView):
             if project_id:
                 queryset = queryset.filter(project_id=project_id)
             
-            bases = []
+            bases: List[Dict[str, Any]] = []
             for kb in queryset:
                 bases.append({
-                    'id': kb.id,
+                    'id': kb.pk,
                     'name': kb.name,
                     'description': kb.description,
-                    'project_id': kb.project_id,
+                    'project_id': kb.project.pk,
                     'project_name': kb.project.name if kb.project else '',
                     'status': kb.status,
                     'document_count': kb.document_count,
@@ -316,7 +288,6 @@ class GetBestPracticesView(APIView):
         try:
             topic = request.query_params.get('topic', 'general')
             top_k = int(request.query_params.get('top_k', 5))
-            include_examples = request.query_params.get('include_examples', 'true').lower() == 'true'
             
             if not topic.strip():
                 return Response(
@@ -324,11 +295,9 @@ class GetBestPracticesView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Direct async execution
             result = await self._async_get_best_practices(
-                topic=topic,
-                top_k=top_k,
-                include_examples=include_examples
+                topic=str(topic),
+                top_k=top_k
             )
             
             return Response(result)
@@ -343,23 +312,18 @@ class GetBestPracticesView(APIView):
     async def _async_get_best_practices(
         self,
         topic: str,
-        top_k: int,
-        include_examples: bool
-    ) -> dict:
+        top_k: int
+    ) -> Dict[str, Any]:
         """Async get best practices"""
         try:
-            # Initialize knowledge agent
             agent = KnowledgeRAGAgent(
-                llm_service=None,  # Would be injected in production
-                rag_retriever=None,  # Would be injected in production
-                config={'timeout': 30}
+                llm_service=None,
+                rag_retriever=None
             )
             
-            # Get best practices
             result = await agent.get_best_practices(
                 topic=topic,
-                top_k=top_k,
-                include_examples=include_examples
+                top_k=top_k
             )
             
             return result
@@ -404,34 +368,36 @@ class UploadDocumentView(APIView):
     
     def _handle_json_upload(self, request: Request) -> Response:
         """Handle JSON body upload"""
-        data = request.data  # type: Dict[str, Any]
-        doc_type = data.get('doc_type')  # type: ignore[attr-defined]  # type: ignore[attr-defined]
-        title = data.get('title')  # type: ignore[attr-defined]  # type: ignore[attr-defined]
-        content = data.get('content')  # type: ignore[attr-defined]  # type: ignore[attr-defined]
-        project_id = data.get('project_id')  # type: ignore[attr-defined]  # type: ignore[attr-defined]
-        metadata = data.get('metadata', {})  # type: ignore[attr-defined]  # type: ignore[attr-defined]
+        data = request.data
+        doc_type = data.get('doc_type')
+        title = data.get('title')
+        content = data.get('content')
+        project_id = data.get('project_id')
+        metadata = cast(Dict[str, Any], data.get('metadata', {}))
         
         validate_required_fields(data, ['doc_type', 'title', 'content', 'project_id'])
         
         return self._process_upload(
-            doc_type=doc_type,
-            title=title,
-            content=content,
-            project_id=project_id,
-            metadata=metadata
+            doc_type=str(doc_type) if doc_type else '',
+            title=str(title) if title else '',
+            content=str(content) if content else '',
+            project_id=int(project_id) if project_id else 0,
+            metadata=cast(Dict[str, Any], metadata)
         )
     
     def _handle_file_upload(self, request: Request) -> Response:
         """Handle file upload"""
-        uploaded_file = request.FILES.get('file')
-        doc_type = request.data.get('doc_type')
-        title = request.data.get('title')
-        project_id = request.data.get('project_id')
-        metadata = {}
+        files = cast(Dict[str, Any], request.FILES)
+        uploaded_file = files.get('file')
+        data = request.data
+        doc_type = data.get('doc_type')
+        title = data.get('title')
+        project_id = data.get('project_id')
+        metadata: Dict[str, Any] = {}
         
-        if 'metadata' in request.data:
+        if 'metadata' in data:
             try:
-                metadata = json.loads(request.data['metadata'])
+                metadata = json.loads(str(data['metadata']))
             except json.JSONDecodeError:
                 metadata = {}
         
@@ -455,10 +421,10 @@ class UploadDocumentView(APIView):
             )
         
         return self._process_upload(
-            doc_type=doc_type,
-            title=title,
+            doc_type=str(doc_type) if doc_type else '',
+            title=str(title) if title else '',
             content=content,
-            project_id=int(project_id),
+            project_id=int(project_id) if project_id else 0,
             metadata=metadata
         )
     
@@ -468,7 +434,7 @@ class UploadDocumentView(APIView):
         title: str,
         content: str,
         project_id: int,
-        metadata: dict
+        metadata: Dict[str, Any]
     ) -> Response:
         """Process document upload"""
         if doc_type not in DocType.ALL:
@@ -488,8 +454,8 @@ class UploadDocumentView(APIView):
         knowledge_base, _ = KnowledgeBase.objects.get_or_create(
             project=project,
             defaults={
-                'name': f'{project.name} Knowledge Base',  # type: ignore[attr-defined]
-                'description': f'Knowledge base for {project.name}',  # type: ignore[attr-defined]
+                'name': f'{project.name} Knowledge Base',
+                'description': f'Knowledge base for {project.name}',
             }
         )
         
@@ -509,7 +475,7 @@ class UploadDocumentView(APIView):
             sync_status='pending'
         )
         
-        sync_document_to_chroma(document.id)
+        sync_document_to_chroma(document.pk)
         
         document.refresh_from_db()
         
@@ -517,7 +483,7 @@ class UploadDocumentView(APIView):
             'success': True,
             'message': 'Document uploaded and synced successfully',
             'document': {
-                'id': document.id,  # type: ignore[attr-defined]
+                'id': document.pk,
                 'doc_type': doc_type,
                 'title': title,
                 'project_id': project_id,
@@ -546,17 +512,18 @@ class ListKnowledgeDocumentsView(APIView):
             if project_id:
                 queryset = queryset.filter(knowledge_base__project_id=project_id)
             if knowledge_base_id:
-                queryset = queryset.filter(knowledge_base_id=knowledge_base_id)
+                kb_id = int(knowledge_base_id)
+                queryset = queryset.filter(knowledge_base_id=kb_id)
             
-            documents = []
+            documents: List[Dict[str, Any]] = []
             for doc in queryset:
                 documents.append({
-                    'id': doc.id,
-                    'title': doc.metadata.get('title', doc.document_type),
+                    'id': doc.pk,
+                    'title': doc.metadata.get('title', doc.document_type) if doc.metadata else doc.document_type,
                     'doc_type': doc.document_type,
-                    'knowledge_base_id': doc.knowledge_base_id,
+                    'knowledge_base_id': doc.knowledge_base.pk,
                     'knowledge_base_name': doc.knowledge_base.name if doc.knowledge_base else '',
-                    'project_id': doc.knowledge_base.project_id if doc.knowledge_base else None,
+                    'project_id': doc.knowledge_base.project.pk if doc.knowledge_base else None,
                     'sync_status': doc.sync_status,
                     'created_at': doc.created_at.isoformat() if doc.created_at else None,
                     'file_path': doc.file_path,
@@ -588,7 +555,6 @@ class DeleteKnowledgeDocumentView(APIView):
         try:
             doc = KnowledgeDocument.objects.select_related('knowledge_base').get(id=pk)
             
-            # Delete from ChromaDB
             try:
                 from core.agents.rag.knowledge_retriever import KnowledgeRetriever
                 retriever = KnowledgeRetriever()
@@ -597,7 +563,6 @@ class DeleteKnowledgeDocumentView(APIView):
             except Exception as e:
                 logger.warning(f"Failed to delete from ChromaDB: {e}")
             
-            # Delete from MySQL
             doc.delete()
             
             return Response({
@@ -635,11 +600,9 @@ class SyncDocumentView(APIView):
             
             from core.tasks import sync_document_to_chroma
             
-            # Set to syncing status first
             doc.sync_status = 'syncing'
             doc.save(update_fields=['sync_status'])
             
-            # Direct synchronous execution
             try:
                 sync_document_to_chroma(pk)
                 doc.refresh_from_db()

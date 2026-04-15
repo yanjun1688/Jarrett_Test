@@ -12,8 +12,9 @@ import {
   RobotOutlined,
   PlayCircleOutlined,
   BranchesOutlined,
-  AppstoreOutlined,
   BookOutlined,
+  ThunderboltOutlined,
+  CloudServerOutlined,
 } from '@ant-design/icons';
 import MemberManager from './components/MemberManager';
 import { Link, Outlet, useLocation } from 'react-router-dom';
@@ -53,9 +54,14 @@ const menuItems = [
   },
 
   {
-    key: '/request-collections',
-    icon: <AppstoreOutlined />,
-    label: <Link to="/request-collections">请求集合</Link>,
+    key: '/pressure-tests',
+    icon: <ThunderboltOutlined />,
+    label: <Link to="/pressure-tests">压测功能</Link>,
+  },
+  {
+    key: '/advanced-pressure-tests',
+    icon: <CloudServerOutlined />,
+    label: <Link to="/advanced-pressure-tests">高级压测(Locust)</Link>,
   },
 
   {

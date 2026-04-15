@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class GenerateUITestTool(BaseTool):
     """根据用户描述生成 UI 自动化测试脚本（Playwright）"""
     
-    def __init__(self, llm_service=None):
+    def __init__(self, llm_service: Optional[Any] = None) -> None:
         super().__init__(
             name="generate_ui_test",
             description="生成 UI/Web 自动化测试脚本。当用户需要测试网页功能、表单、按钮点击等UI交互时调用。",
@@ -42,7 +42,7 @@ class GenerateUITestTool(BaseTool):
     def _get_required_parameters(self) -> List[str]:
         return ["description"]
     
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs: Any) -> ToolResult:
         """
         生成 UI 测试脚本
         

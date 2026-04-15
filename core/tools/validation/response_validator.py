@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class ResponseValidatorTool(BaseTool):
     """Response validation tool for API testing"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="response_validator",
             description="Validate API responses against various rules and schemas",
@@ -92,11 +92,11 @@ class ResponseValidatorTool(BaseTool):
             }
         }
     
-    def _get_required_parameters(self) -> list:
+    def _get_required_parameters(self) -> List[str]:
         """Get required parameters"""
         return ["response_data", "validation_rules"]
     
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs: Any) -> ToolResult:
         """
         Validate response against rules
         

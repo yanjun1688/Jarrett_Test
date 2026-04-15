@@ -4,7 +4,7 @@ UI测试应用的视图
 from __future__ import annotations
 import sys
 import asyncio
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union
 from rest_framework.request import Request
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -313,7 +313,7 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
                             status=status.HTTP_400_BAD_REQUEST
                         )
                     
-                    logger.info(f"录制脚本校验通过: script_id={script.id}, actions数量={len(actions)}")
+                    logger.info(f"录制脚本校验通过: script_id={script.pk}, actions数量={len(actions)}")
                 
                 result_serializer = UITestScriptSerializer(script)
                 return Response(result_serializer.data, status=status.HTTP_201_CREATED)
@@ -337,12 +337,13 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
         """
         开始同步录制，阻塞直到浏览器关闭并直接返回结果。
 
-        注意：本接口只负责“采集步骤”，不直接保存脚本。
+        注意：本接口只负责"采集步骤"，不直接保存脚本。
         录制完成后，前端应调用 quality_check 接口进行质量检查，
         用户确认无问题后，再调用 record/save 接口落库。
         """
-        start_url = request.data.get('start_url', 'https://www.baidu.com')
-        browser_type = request.data.get('browser_type', 'chromium')
+        data = request.data
+        start_url = data.get('start_url', 'https://www.baidu.com')
+        browser_type = data.get('browser_type', 'chromium')
         
         logger.info(f"[SyncRecord] 开始同步录制: url={start_url}")
         
@@ -386,17 +387,18 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
             "timeout": 30000                 # 可选
         }
         """
-        actions = request.data.get('actions')
+        data = request.data
+        actions = data.get('actions')
         if not isinstance(actions, list) or len(actions) == 0:
             return Response(
                 {'error': 'actions 不能为空，并且必须为数组'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        browser_type = request.data.get('browser_type', 'chromium')
-        viewport_width = int(request.data.get('viewport_width', 1280))
-        viewport_height = int(request.data.get('viewport_height', 720))
-        timeout = int(request.data.get('timeout', 30000))
+        browser_type = data.get('browser_type', 'chromium')
+        viewport_width = int(data.get('viewport_width', 1280))
+        viewport_height = int(data.get('viewport_height', 720))
+        timeout = int(data.get('timeout', 30000))
 
         try:
             validator = ScriptValidator()
@@ -511,19 +513,22 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
         - locator: 推荐定位器 {locator_type, locator_value}
         - candidates: 多个候选定位器列表
         """
-        url = request.data.get('url')
+        data = request.data
+        url = data.get('url')
         if not url:
             return Response(
                 {'error': 'url参数缺失'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        x = request.data.get('x')
-        y = request.data.get('y')
-        selector = request.data.get('selector')
-        browser_type = request.data.get('browser_type', 'chromium')
-        viewport_width = int(request.data.get('viewport_width', 1280))
-        viewport_height = int(request.data.get('viewport_height', 720))
+        x_raw = data.get('x')
+        y_raw = data.get('y')
+        x = int(x_raw) if x_raw is not None else None
+        y = int(y_raw) if y_raw is not None else None
+        selector = data.get('selector')
+        browser_type = data.get('browser_type', 'chromium')
+        viewport_width = int(data.get('viewport_width', 1280))
+        viewport_height = int(data.get('viewport_height', 720))
         
         if not x and not y and not selector:
             return Response(
@@ -644,17 +649,20 @@ class ExtractElementsView(APIView):
         - wait_selector: 等待特定选择器 (可选)
         - wait_timeout: 等待超时毫秒 (可选, 默认5000)
         """
-        url = request.data.get('url')
+        data = request.data
+        url = data.get('url')
         if not url:
             return Response(
                 {'error': 'url参数缺失'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        browser_type = request.data.get('browser_type', 'chromium')
-        wait_for_network = request.data.get('wait_for_network', True)
-        wait_selector = request.data.get('wait_selector')
-        wait_timeout = request.data.get('wait_timeout', 5000)
+        browser_type = data.get('browser_type', 'chromium')
+        wait_for_network_raw = data.get('wait_for_network', True)
+        wait_for_network = bool(wait_for_network_raw)
+        wait_selector = data.get('wait_selector')
+        wait_timeout_raw = data.get('wait_timeout', 5000)
+        wait_timeout = int(wait_timeout_raw) if wait_timeout_raw is not None else 5000
 
         try:
             from .services import ElementExtractor

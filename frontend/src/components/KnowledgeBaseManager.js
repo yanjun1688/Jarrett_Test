@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Upload, Modal, Form, Select, Input, Space, message, Tag, Popconfirm, Spin } from 'antd';
-import { UploadOutlined, DeleteOutlined, ReloadOutlined, FileTextOutlined, InboxOutlined, SyncOutlined, CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined } from '@ant-design/icons';
+import { Card, Table, Button, Upload, Modal, Form, Select, Input, Space, message, Tag, Popconfirm } from 'antd';
+import { UploadOutlined, DeleteOutlined, ReloadOutlined, FileTextOutlined, InboxOutlined, SyncOutlined, CheckCircleOutlined, LoadingOutlined } from '@ant-design/icons';
 import { agentAPI } from '../api/agent';
 import { projectsAPI } from '../api/projects';
 
@@ -14,13 +14,6 @@ const DOC_TYPE_OPTIONS = [
   { value: 'api_test', label: '接口测试用例' },
   { value: 'ui_test', label: 'UI测试用例' },
 ];
-
-const SYNC_STATUS_COLORS = {
-  pending: 'orange',
-  syncing: 'blue',
-  synced: 'green',
-  failed: 'red',
-};
 
 const KnowledgeBaseManager = () => {
   const [documents, setDocuments] = useState([]);

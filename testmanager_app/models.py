@@ -116,7 +116,7 @@ class ScriptExecution(models.Model):
         related_name='script_executions',
         verbose_name='测试脚本'
     )
-    executor: models.ForeignKey[User, User] = models.ForeignKey(
+    executor: models.ForeignKey[User | None, User | None] = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         null=True,
@@ -127,9 +127,9 @@ class ScriptExecution(models.Model):
     status: models.CharField[str, str] = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending', verbose_name='执行状态')
     output: models.TextField[str, str] = models.TextField(blank=True, verbose_name='执行输出')
     error_message: models.TextField[str, str] = models.TextField(blank=True, verbose_name='错误信息')
-    started_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(null=True, blank=True, verbose_name='开始时间')
-    finished_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(null=True, blank=True, verbose_name='完成时间')
-    duration: models.DurationField[timedelta, timedelta] = models.DurationField(null=True, blank=True, verbose_name='执行耗时')
+    started_at: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(null=True, blank=True, verbose_name='开始时间')
+    finished_at: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(null=True, blank=True, verbose_name='完成时间')
+    duration: models.DurationField[Optional[timedelta], Optional[timedelta]] = models.DurationField(null=True, blank=True, verbose_name='执行耗时')
     
     class Meta(TypedModelMeta):
         verbose_name = '脚本执行记录'
@@ -138,7 +138,7 @@ class ScriptExecution(models.Model):
         db_table = 'script_execution'
     
     def __str__(self) -> str:
-        return f"{self.script.name} - {self.get_status_display()}"  # type: ignore[attr-defined]
+        return f"{self.script.name} - {self.get_status_display()}"
 
     @property
     def calculated_duration(self) -> Optional[timedelta]:
@@ -174,7 +174,7 @@ class ApiRequest(models.Model):
         related_name='api_requests',
         verbose_name='所属项目'
     )
-    created_by: models.ForeignKey[User, User] = models.ForeignKey(
+    created_by: models.ForeignKey[User | None, User | None] = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         null=True,
@@ -252,19 +252,25 @@ class ApiAssertion(models.Model):
         db_table = 'api_assertion'
     
     def __str__(self) -> str:
-        return f"{self.api_request.name} - {self.get_assertion_type_display()}"  # type: ignore[attr-defined]
+        return f"{self.api_request.name} - {self.get_assertion_type_display()}"
     
     def clean(self) -> None:
         """模型级别的验证：字段路径条件必填"""
         if self.assertion_type in ['response_body_field', 'response_header_field']:
             if not self.field_path or not self.field_path.strip():
                 raise ValidationError({
-                    'field_path': f'当断言类型为"{self.get_assertion_type_display()}"时，字段路径为必填项'  # type: ignore[attr-defined]
+                    'field_path': f'当断言类型为"{self.get_assertion_type_display()}"时，字段路径为必填项'
                 })
 
 
 class RequestCollection(models.Model):
-    """请求集合模型"""
+    """
+    请求集合模型
+    
+    DEPRECATED: 2026-04-15
+    请使用 PressureTestConfig 替代
+    保留原因：兼容现有数据，观察期后删除
+    """
     EXECUTION_MODE_CHOICES: List[tuple[str, str]] = [
         ('sequential', '顺序执行'),
         ('concurrent', '并发执行'),
@@ -280,7 +286,7 @@ class RequestCollection(models.Model):
         verbose_name='所属项目'
     )
     execution_mode: models.CharField[str, str] = models.CharField(max_length=20, choices=EXECUTION_MODE_CHOICES, default='concurrent', verbose_name='执行模式')
-    created_by: models.ForeignKey[User, User] = models.ForeignKey(
+    created_by: models.ForeignKey[User | None, User | None] = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         null=True,
@@ -305,10 +311,26 @@ class RequestCollection(models.Model):
 
     def __str__(self) -> str:
         return self.name
+    
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """保存时输出废弃警告"""
+        import warnings
+        warnings.warn(
+            "RequestCollection is deprecated. Use PressureTestConfig instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        super().save(*args, **kwargs)
 
 
 class CollectionRequest(models.Model):
-    """请求集合与API请求的关联表（支持排序和配置）"""
+    """
+    请求集合与API请求的关联表（支持排序和配置）
+    
+    DEPRECATED: 2026-04-15
+    请使用 PressureTestRequest 替代
+    保留原因：兼容现有数据，观察期后删除
+    """
     REQUEST_TYPE_CHOICES: List[tuple[str, str]] = [
         ('normal', '正常请求'),
         ('setup', 'Setup前置请求'),
@@ -364,7 +386,13 @@ class CollectionRequest(models.Model):
 
 
 class CollectionExecution(models.Model):
-    """集合执行记录模型"""
+    """
+    集合执行记录模型
+    
+    DEPRECATED: 2026-04-15
+    请使用 PressureTestExecution 替代
+    保留原因：兼容现有数据，观察期后删除
+    """
     STATUS_CHOICES: List[tuple[str, str]] = [
         ('pending', '待执行'),
         ('running', '执行中'),
@@ -378,7 +406,7 @@ class CollectionExecution(models.Model):
         related_name='collection_executions',
         verbose_name='请求集合'
     )
-    executor: models.ForeignKey[User, User] = models.ForeignKey(
+    executor: models.ForeignKey[User | None, User | None] = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         null=True,
@@ -391,9 +419,9 @@ class CollectionExecution(models.Model):
     passed_requests: models.IntegerField[int, int] = models.IntegerField(default=0, verbose_name='通过请求数')
     failed_requests: models.IntegerField[int, int] = models.IntegerField(default=0, verbose_name='失败请求数')
     output: models.TextField[str, str] = models.TextField(blank=True, verbose_name='执行输出')
-    started_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(null=True, blank=True, verbose_name='开始时间')
-    finished_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(null=True, blank=True, verbose_name='完成时间')
-    duration: models.DurationField[timedelta, timedelta] = models.DurationField(null=True, blank=True, verbose_name='执行耗时')
+    started_at: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(null=True, blank=True, verbose_name='开始时间')
+    finished_at: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(null=True, blank=True, verbose_name='完成时间')
+    duration: models.DurationField[Optional[timedelta], Optional[timedelta]] = models.DurationField(null=True, blank=True, verbose_name='执行耗时')
     
     class Meta(TypedModelMeta):
         verbose_name = '集合执行记录'
@@ -402,7 +430,7 @@ class CollectionExecution(models.Model):
         db_table = 'collection_execution'
     
     def __str__(self) -> str:
-        return f"{self.collection.name} - {self.get_status_display()}"  # type: ignore[attr-defined]
+        return f"{self.collection.name} - {self.get_status_display()}"
 
     @property
     def calculated_duration(self) -> Optional[timedelta]:
@@ -432,7 +460,7 @@ class FeatureTestCase(models.Model):
         related_name='feature_test_cases',
         verbose_name='所属项目'
     )
-    created_by: models.ForeignKey[User, User] = models.ForeignKey(
+    created_by: models.ForeignKey[User | None, User | None] = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         null=True,
@@ -525,3 +553,510 @@ class AuthToken(models.Model):
             return token
         except AuthToken.DoesNotExist:
             return None
+
+
+class PressureTestConfig(models.Model):
+    """压测配置 - 专用于单接口压力测试
+    
+    支持三种压测模式：
+    - instant: 瞬时并发（同时发起N个请求）
+    - sustained: 持续并发（每秒X个，持续Y秒）
+    - batch: 分批并发（每批N个，间隔T秒）
+    """
+    PRESSURE_MODE_CHOICES: List[tuple[str, str]] = [
+        ('instant', '瞬时并发'),
+        ('sustained', '持续并发'),
+        ('batch', '分批并发'),
+    ]
+
+    # 基础信息
+    name: models.CharField[str, str] = models.CharField(max_length=100, verbose_name='配置名称')
+    description: models.TextField[str, str] = models.TextField(blank=True, verbose_name='配置描述')
+    project: models.ForeignKey[Project, Project] = models.ForeignKey(
+        'core.Project',
+        on_delete=models.CASCADE,
+        related_name='pressure_test_configs',
+        verbose_name='所属项目'
+    )
+    created_by: models.ForeignKey[User | None, User | None] = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pressure_test_configs',
+        verbose_name='创建人'
+    )
+    created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    updated_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+
+    # 关联请求（单选，简化设计）
+    api_request: models.ForeignKey[ApiRequest, ApiRequest] = models.ForeignKey(
+        ApiRequest,
+        on_delete=models.CASCADE,
+        related_name='pressure_test_configs',
+        verbose_name='测试请求'
+    )
+
+    # 压测模式
+    pressure_mode: models.CharField[str, str] = models.CharField(
+        max_length=20,
+        choices=PRESSURE_MODE_CHOICES,
+        verbose_name='压测模式'
+    )
+
+    # 瞬时并发参数
+    request_count: models.IntegerField[int, int] = models.IntegerField(
+        default=100,
+        validators=[MaxValueValidator(1000)],
+        verbose_name='请求次数',
+        help_text='瞬时并发模式：总请求数（最大1000）'
+    )
+
+    # 持续并发参数
+    rate_per_second: models.IntegerField[int, int] = models.IntegerField(
+        default=10,
+        verbose_name='每秒请求数',
+        help_text='持续并发模式：每秒发起的请求数'
+    )
+    duration_seconds: models.IntegerField[int, int] = models.IntegerField(
+        default=60,
+        verbose_name='持续秒数',
+        help_text='持续并发模式：持续执行的秒数'
+    )
+
+    # 分批并发参数
+    batch_size: models.IntegerField[int, int] = models.IntegerField(
+        default=50,
+        verbose_name='每批数量',
+        help_text='分批并发模式：每批发起的请求数'
+    )
+    batch_interval: models.IntegerField[int, int] = models.IntegerField(
+        default=5,
+        verbose_name='批次间隔',
+        help_text='分批并发模式：批次之间的间隔（秒）'
+    )
+
+    # 通用参数
+    max_concurrent: models.IntegerField[int, int] = models.IntegerField(
+        default=100,
+        validators=[MaxValueValidator(1000)],
+        verbose_name='最大并发数',
+        help_text='同时最多发起的请求数（最大1000）'
+    )
+
+    # 可选：服务器监控（P2阶段实现）
+    monitor_server: models.BooleanField[bool, bool] = models.BooleanField(
+        default=False,
+        verbose_name='监控服务器'
+    )
+    ssh_config: models.JSONField[Optional[Dict[str, Any]], Optional[Dict[str, Any]]] = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name='SSH配置',
+        help_text='JSON格式: {"host": "", "port": 22, "username": "", "password": ""}'
+    )
+
+    class Meta(TypedModelMeta):
+        verbose_name = '压测配置'
+        verbose_name_plural = '压测配置'
+        ordering = ['-created_at']
+        db_table = 'pressure_test_config'
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class PressureTestExecution(models.Model):
+    """压测执行记录 - 包含详细聚合指标"""
+    STATUS_CHOICES: List[tuple[str, str]] = [
+        ('pending', '待执行'),
+        ('running', '执行中'),
+        ('completed', '已完成'),
+        ('stopped', '已停止'),
+        ('failed', '失败'),
+    ]
+
+    # 关联关系
+    config: models.ForeignKey[PressureTestConfig, PressureTestConfig] = models.ForeignKey(
+        PressureTestConfig,
+        on_delete=models.CASCADE,
+        related_name='executions',
+        verbose_name='压测配置'
+    )
+    executor: models.ForeignKey[User | None, User | None] = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pressure_test_executions',
+        verbose_name='执行人'
+    )
+
+    # 状态
+    status: models.CharField[str, str] = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        verbose_name='执行状态'
+    )
+
+    # 时间记录
+    started_at: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(null=True, blank=True, verbose_name='开始时间')
+    finished_at: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(null=True, blank=True, verbose_name='完成时间')
+    duration_seconds: models.FloatField[Optional[float], Optional[float]] = models.FloatField(null=True, blank=True, verbose_name='执行耗时（秒）')
+
+    # 基础统计
+    total_requests: models.IntegerField[int, int] = models.IntegerField(default=0, verbose_name='总请求数')
+    success_count: models.IntegerField[int, int] = models.IntegerField(default=0, verbose_name='成功数')
+    failed_count: models.IntegerField[int, int] = models.IntegerField(default=0, verbose_name='失败数')
+    error_rate: models.FloatField[Optional[float], Optional[float]] = models.FloatField(null=True, blank=True, verbose_name='错误率（%）')
+
+    # 响应时间统计（毫秒）
+    min_response_time: models.FloatField[Optional[float], Optional[float]] = models.FloatField(null=True, blank=True, verbose_name='最小响应时间（ms）')
+    max_response_time: models.FloatField[Optional[float], Optional[float]] = models.FloatField(null=True, blank=True, verbose_name='最大响应时间（ms）')
+    avg_response_time: models.FloatField[Optional[float], Optional[float]] = models.FloatField(null=True, blank=True, verbose_name='平均响应时间（ms）')
+    p50_response_time: models.FloatField[Optional[float], Optional[float]] = models.FloatField(null=True, blank=True, verbose_name='P50响应时间（ms）')
+    p90_response_time: models.FloatField[Optional[float], Optional[float]] = models.FloatField(null=True, blank=True, verbose_name='P90响应时间（ms）')
+    p95_response_time: models.FloatField[Optional[float], Optional[float]] = models.FloatField(null=True, blank=True, verbose_name='P95响应时间（ms）')
+    p99_response_time: models.FloatField[Optional[float], Optional[float]] = models.FloatField(null=True, blank=True, verbose_name='P99响应时间（ms）')
+
+    # 吞吐量
+    throughput: models.FloatField[Optional[float], Optional[float]] = models.FloatField(null=True, blank=True, verbose_name='吞吐量（RPS）')
+
+    # 并发统计
+    peak_concurrent: models.IntegerField[Optional[int], Optional[int]] = models.IntegerField(null=True, blank=True, verbose_name='峰值并发数')
+
+    # 可选：服务器监控数据
+    server_metrics: models.JSONField = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name='服务器监控数据'
+    )
+
+    raw_results: models.JSONField = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name='原始结果数据',
+        help_text='每次请求的详细结果，用于后续分析'
+    )
+
+    class Meta(TypedModelMeta):
+        verbose_name = '压测执行记录'
+        verbose_name_plural = '压测执行记录'
+        ordering = ['-started_at']
+        db_table = 'pressure_test_execution'
+
+    def __str__(self) -> str:
+        return f"{self.config.name} - {self.get_status_display()}"
+
+
+class AdvancedPressureTestConfig(models.Model):
+    """高级压测配置 - 基于Locust的分布式压测
+    
+    支持事务编排、分布式Worker、详细的统计报告
+    """
+    
+    # 提取器类型选择
+    EXTRACTOR_TYPE_CHOICES: List[tuple[str, str]] = [
+        ('json_path', 'JSON Path'),
+        ('regex', '正则表达式'),
+        ('xpath', 'XPath'),
+        ('header', '响应头'),
+        ('status_code', '状态码'),
+        ('response_time', '响应时间'),
+    ]
+    
+    # 基础信息
+    name: models.CharField[str, str] = models.CharField(
+        max_length=100, 
+        verbose_name='配置名称'
+    )
+    description: models.TextField[str, str] = models.TextField(
+        blank=True, 
+        verbose_name='配置描述'
+    )
+    project: models.ForeignKey[Any, Any] = models.ForeignKey(
+        'core.Project',
+        on_delete=models.CASCADE,
+        related_name='advanced_pressure_test_configs',
+        verbose_name='所属项目'
+    )
+    created_by: models.ForeignKey[User | None, User | None] = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='advanced_pressure_test_configs',
+        verbose_name='创建人'
+    )
+    created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(
+        auto_now_add=True, 
+        verbose_name='创建时间'
+    )
+    updated_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(
+        auto_now=True, 
+        verbose_name='更新时间'
+    )
+    
+    # 压测场景定义（支持事务编排）
+    scenario: models.JSONField[Dict[str, Any], Dict[str, Any]] = models.JSONField(
+        verbose_name='测试场景',
+        help_text='''JSON格式定义测试场景和步骤:
+        {
+            "scenario_name": "场景名称",
+            "steps": [
+                {
+                    "name": "步骤名称",
+                    "api_request_id": 1,
+                    "weight": 1,
+                    "extractors": [
+                        {"name": "token", "type": "json_path", "expression": "$.data.token"}
+                    ],
+                    "headers": {"Authorization": "Bearer ${token}"},
+                    "think_time": {"min": 1, "max": 3}
+                }
+            ]
+        }'''
+    )
+    
+    # Locust参数
+    host: models.URLField[str, str] = models.URLField(
+        verbose_name='目标服务器地址',
+        help_text='压测目标的基础URL，例如: http://localhost:8080'
+    )
+    user_count: models.IntegerField[int, int] = models.IntegerField(
+        default=100,
+        validators=[MinValueValidator(1), MaxValueValidator(10000)],
+        verbose_name='并发用户数',
+        help_text='同时模拟的用户数量'
+    )
+    spawn_rate: models.IntegerField[int, int] = models.IntegerField(
+        default=10,
+        validators=[MinValueValidator(1)],
+        verbose_name='启动速率',
+        help_text='每秒启动的用户数'
+    )
+    duration_seconds: models.IntegerField[int, int] = models.IntegerField(
+        default=60,
+        validators=[MinValueValidator(1), MaxValueValidator(3600)],
+        verbose_name='持续时间(秒)',
+        help_text='压测持续的最大秒数'
+    )
+    
+    # 分布式配置
+    use_distributed: models.BooleanField[bool, bool] = models.BooleanField(
+        default=False,
+        verbose_name='启用分布式',
+        help_text='是否启用分布式Worker模式'
+    )
+    worker_count: models.IntegerField[int, int] = models.IntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        verbose_name='Worker数量',
+        help_text='分布式模式下的Worker节点数量'
+    )
+    
+    # Web UI配置
+    web_ui_port: models.IntegerField[int, int] = models.IntegerField(
+        default=18089,
+        verbose_name='Web UI端口',
+        help_text='Locust Web UI访问端口'
+    )
+    enable_web_ui: models.BooleanField[bool, bool] = models.BooleanField(
+        default=True,
+        verbose_name='启用Web UI',
+        help_text='是否启动Locust原生Web界面'
+    )
+    
+    # 高级选项
+    tags: models.JSONField[List[str], List[str]] = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='任务标签',
+        help_text='要运行的任务标签列表'
+    )
+    exclude_tags: models.JSONField[List[str], List[str]] = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='排除标签',
+        help_text='要排除的任务标签列表'
+    )
+    
+    class Meta(TypedModelMeta):
+        verbose_name = '高级压测配置'
+        verbose_name_plural = '高级压测配置'
+        ordering = ['-created_at']
+        db_table = 'advanced_pressure_test_config'
+    
+    def __str__(self) -> str:
+        return self.name
+
+
+class AdvancedPressureTestExecution(models.Model):
+    """高级压测执行记录 - 存储Locust执行结果"""
+    
+    STATUS_CHOICES: List[tuple[str, str]] = [
+        ('pending', '待执行'),
+        ('running', '执行中'),
+        ('completed', '已完成'),
+        ('stopped', '已停止'),
+        ('failed', '失败'),
+    ]
+    
+    # 关联关系
+    config: models.ForeignKey[AdvancedPressureTestConfig, AdvancedPressureTestConfig] = models.ForeignKey(
+        AdvancedPressureTestConfig,
+        on_delete=models.CASCADE,
+        related_name='executions',
+        verbose_name='压测配置'
+    )
+    executor: models.ForeignKey[User | None, User | None] = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='advanced_pressure_test_executions',
+        verbose_name='执行人'
+    )
+    
+    # 执行状态
+    status: models.CharField[str, str] = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        verbose_name='执行状态'
+    )
+    
+    # 时间记录
+    started_at: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(
+        null=True, 
+        blank=True, 
+        verbose_name='开始时间'
+    )
+    finished_at: models.DateTimeField[Optional[datetime], Optional[datetime]] = models.DateTimeField(
+        null=True, 
+        blank=True, 
+        verbose_name='完成时间'
+    )
+    duration_seconds: models.FloatField[Optional[float], Optional[float]] = models.FloatField(
+        null=True, 
+        blank=True, 
+        verbose_name='执行耗时(秒)'
+    )
+    
+    # 基础统计
+    total_requests: models.IntegerField[int, int] = models.IntegerField(
+        default=0, 
+        verbose_name='总请求数'
+    )
+    success_count: models.IntegerField[int, int] = models.IntegerField(
+        default=0, 
+        verbose_name='成功数'
+    )
+    failed_count: models.IntegerField[int, int] = models.IntegerField(
+        default=0, 
+        verbose_name='失败数'
+    )
+    error_rate: models.FloatField[Optional[float], Optional[float]] = models.FloatField(
+        null=True, 
+        blank=True, 
+        verbose_name='错误率(%)'
+    )
+    
+    # 响应时间统计（毫秒）
+    min_response_time: models.FloatField[Optional[float], Optional[float]] = models.FloatField(
+        null=True, 
+        blank=True, 
+        verbose_name='最小响应时间(ms)'
+    )
+    max_response_time: models.FloatField[Optional[float], Optional[float]] = models.FloatField(
+        null=True, 
+        blank=True, 
+        verbose_name='最大响应时间(ms)'
+    )
+    avg_response_time: models.FloatField[Optional[float], Optional[float]] = models.FloatField(
+        null=True, 
+        blank=True, 
+        verbose_name='平均响应时间(ms)'
+    )
+    p50_response_time: models.FloatField[Optional[float], Optional[float]] = models.FloatField(
+        null=True, 
+        blank=True, 
+        verbose_name='P50响应时间(ms)'
+    )
+    p90_response_time: models.FloatField[Optional[float], Optional[float]] = models.FloatField(
+        null=True, 
+        blank=True, 
+        verbose_name='P90响应时间(ms)'
+    )
+    p95_response_time: models.FloatField[Optional[float], Optional[float]] = models.FloatField(
+        null=True, 
+        blank=True, 
+        verbose_name='P95响应时间(ms)'
+    )
+    p99_response_time: models.FloatField[Optional[float], Optional[float]] = models.FloatField(
+        null=True, 
+        blank=True, 
+        verbose_name='P99响应时间(ms)'
+    )
+    
+    # 吞吐量
+    throughput: models.FloatField[Optional[float], Optional[float]] = models.FloatField(
+        null=True, 
+        blank=True, 
+        verbose_name='吞吐量(RPS)'
+    )
+    
+    # 并发统计
+    current_users: models.IntegerField[Optional[int], Optional[int]] = models.IntegerField(
+        null=True, 
+        blank=True, 
+        verbose_name='当前用户数'
+    )
+    peak_users: models.IntegerField[Optional[int], Optional[int]] = models.IntegerField(
+        null=True, 
+        blank=True, 
+        verbose_name='峰值用户数'
+    )
+    
+    # Worker信息（分布式）
+    worker_count: models.IntegerField[Optional[int], Optional[int]] = models.IntegerField(
+        null=True, 
+        blank=True, 
+        verbose_name='Worker数量'
+    )
+    worker_status: models.JSONField[Optional[Dict[str, Any]], Optional[Dict[str, Any]]] = models.JSONField(
+        null=True, 
+        blank=True, 
+        verbose_name='Worker状态',
+        help_text='Worker节点状态信息'
+    )
+    
+    # 报告存储
+    report_html: models.TextField[Optional[str], Optional[str]] = models.TextField(
+        null=True, 
+        blank=True, 
+        verbose_name='HTML报告内容'
+    )
+    raw_results: models.JSONField[Optional[List[Dict[str, Any]]], Optional[List[Dict[str, Any]]]] = models.JSONField(
+        null=True, 
+        blank=True, 
+        verbose_name='原始结果数据',
+        help_text='每次请求的详细结果'
+    )
+    
+    # 错误日志
+    error_log: models.TextField[Optional[str], Optional[str]] = models.TextField(
+        null=True, 
+        blank=True, 
+        verbose_name='错误日志'
+    )
+    
+    class Meta(TypedModelMeta):
+        verbose_name = '高级压测执行记录'
+        verbose_name_plural = '高级压测执行记录'
+        ordering = ['-started_at']
+        db_table = 'advanced_pressure_test_execution'
+    
+    def __str__(self) -> str:
+        return f"{self.config.name} - {self.get_status_display()}"

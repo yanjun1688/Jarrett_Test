@@ -145,22 +145,22 @@ class EnhancedChatBotView(APIView):
         """
         try:
             data: Any = request.data
-            message: str = str(data.get('message', '')).strip()  # type: ignore[union-attr]
+            message: str = str(data.get('message', '')).strip()
             if not message:
                 return Response({
                     "success": False,
                     "error": "消息内容不能为空"
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            provider: str = str(data.get('provider', 'qwen'))  # type: ignore[union-attr]
-            model = data.get('model')  # type: ignore[union-attr]
-            temperature: float = float(data.get('temperature', 0.7))  # type: ignore[union-attr]
-            max_tokens: int = int(data.get('max_tokens', 2048))  # type: ignore[union-attr]
-            system_message: str = str(data.get('system_message', ''))  # type: ignore[union-attr]
-            conversation_id: Optional[str] = data.get('conversation_id')  # type: ignore[union-attr]
-            project_id_raw = data.get('project_id')  # type: ignore[union-attr]
+            provider: str = str(data.get('provider', 'qwen'))
+            model = data.get('model')
+            temperature: float = float(data.get('temperature', 0.7))
+            max_tokens: int = int(data.get('max_tokens', 2048))
+            system_message: str = str(data.get('system_message', ''))
+            conversation_id: Optional[str] = data.get('conversation_id')
+            project_id_raw = data.get('project_id')
             project_id: Optional[int] = int(project_id_raw) if project_id_raw else None
-            stream: bool = bool(data.get('stream', False))  # type: ignore[union-attr]
+            stream: bool = bool(data.get('stream', False))
             
             conversation, error, is_new = await sync_to_async(ConversationService.get_or_create_conversation)(
                 user=request.user,
@@ -202,65 +202,62 @@ class EnhancedChatBotView(APIView):
             await chatbot_agent.initialize()
             logger.info(f"Agent initialized in {time.time() - start_time:.2f}s")
             
-            try:
-                input_data = {
-                    "message": message,
-                    "project_id": project_id,
-                    "conversation_history": conversation_history,
-                    "context": {
-                        "user_id": request.user.id,
-                        "provider": provider,
-                        "model": model,
-                        "temperature": temperature,
-                        "max_tokens": max_tokens,
-                        "conversation_id": conv_id_str,
-                        "session_metadata": metadata
-                    }
-                }
-                exec_start = time.time()
-                result = await chatbot_agent.execute(input_data)
-                logger.info(f"Agent execution took {time.time() - exec_start:.2f}s")
-                
-                assistant_message = result.get("message", "")
-                await sync_to_async(ConversationService.add_message)(
-                    conversation_id=conv_id_str,
-                    user=request.user,
-                    role="assistant",
-                    content=assistant_message,
-                    metadata={
-                        "intent": result.get("intent"),
-                        "tool_used": result.get("tool_used", False)
-                    }
-                )
-                
-                if result.get("tool_result") and result.get("tool_used"):
-                    tool_result = result.get("tool_result")
-                    if isinstance(tool_result, dict):
-                        if "test_cases" in tool_result:
-                            await sync_to_async(ConversationService.set_pending_tests)(
-                                conversation_id=conv_id_str,
-                                user=request.user,
-                                tests={"api": tool_result}
-                            )
-                
-                response_data = {
-                    "success": result.get("success", True),
-                    "response": assistant_message,
-                    "intent": result.get("intent"),
-                    "intent_details": result.get("intent_details"),
-                    "tool_used": result.get("tool_used", False),
-                    "tool_result": result.get("tool_result"),
-                    "logs": result.get("logs", []),
-                    "model": provider,
+            input_data = {
+                "message": message,
+                "project_id": project_id,
+                "conversation_history": conversation_history,
+                "context": {
+                    "user_id": request.user.id,
                     "provider": provider,
-                    "timestamp": result.get("timestamp"),
-                    "conversation_id": conv_id_str
+                    "model": model,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "conversation_id": conv_id_str,
+                    "session_metadata": metadata
                 }
-                
-                return Response(response_data, status=status.HTTP_200_OK)
-            finally:
-                await chatbot_agent.cleanup_mcp()
+            }
+            exec_start = time.time()
+            result = await chatbot_agent.execute(input_data)
+            logger.info(f"Agent execution took {time.time() - exec_start:.2f}s")
             
+            assistant_message = result.get("message", "")
+            await sync_to_async(ConversationService.add_message)(
+                conversation_id=conv_id_str,
+                user=request.user,
+                role="assistant",
+                content=assistant_message,
+                metadata={
+                    "intent": result.get("intent"),
+                    "tool_used": result.get("tool_used", False)
+                }
+            )
+            
+            if result.get("tool_result") and result.get("tool_used"):
+                tool_result = result.get("tool_result")
+                if isinstance(tool_result, dict):
+                    if "test_cases" in tool_result:
+                        await sync_to_async(ConversationService.set_pending_tests)(
+                            conversation_id=conv_id_str,
+                            user=request.user,
+                            tests={"api": tool_result}
+                        )
+            
+            response_data = {
+                "success": result.get("success", True),
+                "response": assistant_message,
+                "intent": result.get("intent"),
+                "intent_details": result.get("intent_details"),
+                "tool_used": result.get("tool_used", False),
+                "tool_result": result.get("tool_result"),
+                "logs": result.get("logs", []),
+                "model": provider,
+                "provider": provider,
+                "timestamp": result.get("timestamp"),
+                "conversation_id": conv_id_str
+            }
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+        
         except Exception as e:
             logger.error(f"ChatBot API error: {str(e)}", exc_info=True)
             return Response({
@@ -372,7 +369,7 @@ class ConversationListView(APIView):
     def post(self, request: Request) -> Response:
         """创建新会话"""
         data: Any = request.data
-        project_id_raw = data.get('project_id')  # type: ignore[union-attr]
+        project_id_raw = data.get('project_id')
         project_id: Optional[int] = int(project_id_raw) if project_id_raw else None
         
         conversation, error = ConversationService.create_conversation(
@@ -452,7 +449,7 @@ class ClearConversationView(APIView):
     def post(self, request: Request) -> Response:
         """清空指定会话的消息历史"""
         data: Any = request.data
-        conversation_id = data.get('conversation_id')  # type: ignore[union-attr]
+        conversation_id = data.get('conversation_id')
         
         if not conversation_id:
             return Response({
@@ -543,6 +540,28 @@ class CacheStatsView(APIView):
         return Response({
             "success": True,
             "data": stats
+        })
+
+
+class MCPStatusView(APIView):
+    """
+    获取 MCP 连接状态
+    GET /api/chatbot/mcp-status/
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request: Request) -> Response:
+        """返回 MCP Server 连接状态"""
+        from core.agents.capability.mcp_lifespan import global_mcp_manager
+        
+        states = global_mcp_manager.get_all_states()
+        
+        return Response({
+            "success": True,
+            "data": {
+                "servers": states,
+                "initialized": global_mcp_manager._initialized
+            }
         })
 
 

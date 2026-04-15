@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class ExecutePendingTestsTool(BaseTool):
     """执行会话上下文中的待执行测试"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="execute_pending_tests",
             description="执行会话上下文中已生成的测试用例。当用户在生成测试后说'执行'、'运行'时调用。",
@@ -44,7 +44,7 @@ class ExecutePendingTestsTool(BaseTool):
     def _get_required_parameters(self) -> List[str]:
         return ["pending_tests"]
     
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs: Any) -> ToolResult:
         """
         执行待执行的测试
         

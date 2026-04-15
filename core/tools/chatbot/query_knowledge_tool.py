@@ -69,7 +69,7 @@ class QueryKnowledgeTool(BaseTool):
                 
                 retriever = KnowledgeRetriever()
                 results = await sync_to_async(retriever.search)(
-                    query, top_k=5, boost_project=True
+                    query, top_k=5, boost_project=True, hybrid_search=True
                 )
                 
                 if not results:

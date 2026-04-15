@@ -138,4 +138,4 @@ class KnowledgeDocument(models.Model):
     @property
     def chroma_id(self) -> str:
         """Generate complete ChromaDB ID"""
-        return f"doc_{self.id}_chunk_{self.chunk_index}"  # type: ignore[attr-defined,union-attr]
+        return f"doc_{self.id}_chunk_{self.chunk_index}"

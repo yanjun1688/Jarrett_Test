@@ -116,12 +116,16 @@ class TestExecutionService:
 
                 # 解析响应体
                 try:
-                    response_body = json.loads(result['response_body'])
+                    raw_body = result['response_body']
+                    if isinstance(raw_body, dict):
+                        response_body = raw_body
+                    else:
+                        response_body = json.loads(raw_body)
                     logs.append(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] 响应体格式: JSON")
                     # 美化打印JSON格式
                     formatted_json = json.dumps(response_body, indent=2, ensure_ascii=False)
                     logs.append(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] 响应体内容:\n{formatted_json}")
-                except (json.JSONDecodeError, ValueError):
+                except (json.JSONDecodeError, ValueError, TypeError):
                     response_body = result['response_body']
                     logs.append(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] 响应体格式: 文本")
                     logs.append(f"[{end_time.strftime('%Y-%m-%d %H:%M:%S')}] 响应体内容:\n{response_body}")
@@ -235,7 +239,7 @@ class TestExecutionService:
             api_requests_list.append(req)
         
         # 创建ID到对象的映射，便于快速查找
-        api_requests_dict = {req.id: req for req in api_requests_list}  # type: ignore[attr-defined]
+        api_requests_dict = {req.id: req for req in api_requests_list}
         
         # 记录未找到的请求ID
         missing_ids = set(request_ids) - set(api_requests_dict.keys())
@@ -355,7 +359,7 @@ class TestExecutionService:
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         # 处理异常结果
-        final_results = []
+        final_results: List[Dict[str, Any]] = []
         for idx, result in enumerate(results):
             if isinstance(result, Exception):
                 req_id = request_ids[idx] if idx < len(request_ids) else None
@@ -380,8 +384,8 @@ class TestExecutionService:
         for req_id in request_ids:
             if req_id in api_requests_dict:
                 api_request = api_requests_dict[req_id]
-                if api_request.project_id:  # type: ignore[attr-defined]  # 使用project_id避免额外查询
-                    project_ids.add(api_request.project_id)  # type: ignore[attr-defined]
+                if api_request.project_id:  # 使用project_id避免额外查询
+                    project_ids.add(api_request.project_id)
         
         # 批量清除项目统计缓存（使用 sync_to_async 包装同步操作）
         if project_ids:

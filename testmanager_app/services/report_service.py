@@ -3,15 +3,19 @@
 处理测试报告生成相关的业务逻辑
 """
 
+from __future__ import annotations
+
 import logging
 import json
 import os
 from datetime import datetime
+from typing import Dict, Any, Optional, List
 from django.db import models, transaction
-from django.db.models import Q, Count
+from django.db.models import Q, Count, QuerySet
 from django.conf import settings
-from core.models import TestExecution
-from testmanager_app.models import TestReport
+from django.contrib.auth.models import User
+from core.models import TestExecution, ChatBotExecutionLog, Project
+from testmanager_app.models import TestReport, ScriptExecution
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +29,12 @@ class ReportService:
 
     @staticmethod
     @transaction.atomic
-    def generate_report(project, start_date, end_date, created_by):
+    def generate_report(
+        project: Project,
+        start_date: datetime,
+        end_date: datetime,
+        created_by: User
+    ) -> TestReport:
         """
         生成测试报告（带事务保护）
 
@@ -64,7 +73,11 @@ class ReportService:
         return report
 
     @staticmethod
-    def _get_execution_stats(project, start_date, end_date):
+    def _get_execution_stats(
+        project: Project,
+        start_date: datetime,
+        end_date: datetime
+    ) -> Dict[str, int]:
         """
         获取指定时间范围内的执行统计数据
 
@@ -101,9 +114,14 @@ class ReportService:
             raise Exception(f"Failed to aggregate test execution data: {str(e)}")
 
     @staticmethod
-    def get_report_data(project=None, start_date=None, end_date=None, created_by=None):
+    def get_report_data(
+        project: Optional[Project] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        created_by: Optional[User] = None
+    ) -> Dict[str, Any]:
         """
-        获取测试报告数据
+        获取测试报告数据（聚合API测试、UI测试、ChatBot执行）
 
         Args:
             project: 项目对象（可选）
@@ -120,33 +138,113 @@ class ReportService:
         projects = [project] if project else Project.objects.all()
 
         for proj in projects:
-            executions = TestExecution.objects.filter(
-                test_case__project=proj
-            )
+            # 1. API测试统计（TestExecution - test_type='api'）
+            # 使用 by_project 过滤，关联 test_case.project / api_request.project / collection_execution
+            api_executions = TestExecution.objects.filter(
+                test_type='api'
+            ).by_project(proj)  # type: ignore[attr-defined]
             if start_date:
-                executions = executions.filter(executed_at__gte=start_date)
+                api_executions = api_executions.filter(executed_at__gte=start_date)
             if end_date:
-                executions = executions.filter(executed_at__lte=end_date)
+                api_executions = api_executions.filter(executed_at__lte=end_date)
 
-            stats = executions.aggregate(
+            api_stats = api_executions.aggregate(
                 total=Count('id'),
                 passed=Count('id', filter=Q(status='passed')),
                 failed=Count('id', filter=Q(status='failed')),
                 blocked=Count('id', filter=Q(status='blocked')),
                 skipped=Count('id', filter=Q(status='skipped')),
             )
+            api_pass_rate = (api_stats['passed'] / api_stats['total'] * 100) if api_stats['total'] > 0 else 0
 
-            pass_rate = (stats['passed'] / stats['total'] * 100) if stats['total'] > 0 else 0
+            # 2. UI测试统计（ScriptExecution）- 按脚本所属项目过滤
+            ui_executions = ScriptExecution.objects.filter(script__project=proj)
+            if start_date:
+                ui_executions = ui_executions.filter(started_at__gte=start_date)
+            if end_date:
+                ui_executions = ui_executions.filter(started_at__lte=end_date)
+
+            ui_stats = ui_executions.aggregate(
+                total=Count('id'),
+                success=Count('id', filter=Q(status='success')),
+                failed=Count('id', filter=Q(status='failed')),
+                running=Count('id', filter=Q(status='running')),
+                pending=Count('id', filter=Q(status='pending')),
+            )
+            ui_success_rate = (ui_stats['success'] / ui_stats['total'] * 100) if ui_stats['total'] > 0 else 0
+
+            # 3. ChatBot执行统计（ChatBotExecutionLog）- 通过 execution 关联过滤项目
+            chatbot_logs = ChatBotExecutionLog.objects.filter(
+                execution__isnull=False
+            )
+            # 复用 TestExecution 的 by_project 过滤逻辑
+            chatbot_logs = chatbot_logs.filter(
+                Q(execution__test_case__project=proj) |
+                Q(execution__api_request__project=proj) |
+                Q(execution__collection_execution__collection__project=proj)
+            )
+            if start_date:
+                chatbot_logs = chatbot_logs.filter(created_at__gte=start_date)
+            if end_date:
+                chatbot_logs = chatbot_logs.filter(created_at__lte=end_date)
+
+            chatbot_stats = chatbot_logs.aggregate(
+                total=Count('id'),
+                skill_count=Count('id', filter=Q(log_type='skill')),
+                api_test_count=Count('id', filter=Q(log_type='api_test')),
+                ui_test_count=Count('id', filter=Q(log_type='ui_test')),
+            )
+
+            # 统计ChatBot执行成功率（从details.status字段）
+            chatbot_success_count = 0
+            chatbot_error_count = 0
+            for log in chatbot_logs:
+                status = log.details.get('status', '') if log.details else ''
+                if status == 'success':
+                    chatbot_success_count += 1
+                elif status == 'error':
+                    chatbot_error_count += 1
+
+            chatbot_success_rate = (chatbot_success_count / chatbot_stats['total'] * 100) if chatbot_stats['total'] > 0 else 0
+
+            # 4. 总执行数统计
+            total_executions = api_stats['total'] + ui_stats['total'] + chatbot_stats['total']
+            total_passed = api_stats['passed'] + ui_stats['success'] + chatbot_success_count
+            total_failed = api_stats['failed'] + ui_stats['failed'] + chatbot_error_count
+            total_pass_rate = (total_passed / total_executions * 100) if total_executions > 0 else 0
 
             statistics.append({
                 'project_id': proj.id,
                 'project_name': proj.name,
-                'total_cases': stats['total'],
-                'passed_cases': stats['passed'],
-                'failed_cases': stats['failed'],
-                'blocked_cases': stats['blocked'],
-                'skipped_cases': stats['skipped'],
-                'pass_rate': round(pass_rate, 2),
+                'api_tests': {
+                    'total': api_stats['total'],
+                    'passed': api_stats['passed'],
+                    'failed': api_stats['failed'],
+                    'blocked': api_stats['blocked'],
+                    'skipped': api_stats['skipped'],
+                    'pass_rate': round(api_pass_rate, 2),
+                },
+                'ui_tests': {
+                    'total': ui_stats['total'],
+                    'success': ui_stats['success'],
+                    'failed': ui_stats['failed'],
+                    'running': ui_stats['running'],
+                    'pending': ui_stats['pending'],
+                    'success_rate': round(ui_success_rate, 2),
+                },
+                'chatbot_executions': {
+                    'total': chatbot_stats['total'],
+                    'success': chatbot_success_count,
+                    'error': chatbot_error_count,
+                    'skill_count': chatbot_stats['skill_count'],
+                    'api_test_count': chatbot_stats['api_test_count'],
+                    'ui_test_count': chatbot_stats['ui_test_count'],
+                    'success_rate': round(chatbot_success_rate, 2),
+                },
+                'total_executions': total_executions,
+                'total_passed': total_passed,
+                'total_failed': total_failed,
+                'total_pass_rate': round(total_pass_rate, 2),
             })
 
         return {'statistics': statistics}

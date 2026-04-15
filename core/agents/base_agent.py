@@ -289,7 +289,7 @@ class BaseAgent(ABC):
         
         # 基本验证：输入必须是字典
         if not isinstance(input_data, dict):
-            errors.append("输入数据必须是字典类型")
+            errors.append("输入数据必须是字典类型")  # type: ignore[unreachable]
             return errors
         
         # 子类可以重写此方法添加特定验证
@@ -309,7 +309,7 @@ class BaseAgent(ABC):
         
         # 基本验证：输出必须是字典
         if not isinstance(output_data, dict):
-            errors.append("输出数据必须是字典类型")
+            errors.append("输出数据必须是字典类型")  # type: ignore[unreachable]
             return errors
         
         # 子类可以重写此方法添加特定验证

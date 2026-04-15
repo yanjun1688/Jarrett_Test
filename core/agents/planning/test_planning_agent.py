@@ -14,7 +14,6 @@ from shared.constants import TestType, TimeConstants
 from core.config import get_settings
 
 from ...flow.flow_ir import FlowIR, FlowNodeIR
-from ...flow.test_node_registry import global_node_registry
 from ..base_agent import BaseAgent
 from ..rag.knowledge_rag_agent import KnowledgeRAGAgent
 
@@ -73,9 +72,6 @@ class TestPlanningAgent(BaseAgent):
         self.llm_service = llm_service
         self.rag_service = rag_service
         self.knowledge_rag_agent = knowledge_rag_agent
-        
-        # 工具
-        self.node_registry = global_node_registry
         
         # 统计
         self._planning_stats = {
@@ -924,7 +920,7 @@ class TestPlanningAgent(BaseAgent):
             "supports_llm": self.llm_service is not None,
             "supports_refinement": True,
             "max_nodes_per_flow": 50,
-            "available_node_types": self.node_registry.get_node_names()
+            "available_node_types": ["ui_navigate", "ui_click", "ui_input", "ui_assert", "api_request", "api_validate"]
         }
         
         return capabilities

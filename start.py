@@ -18,7 +18,8 @@ import time
 import signal
 import threading
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Any, Union
+from subprocess import Popen, CompletedProcess
 
 
 class ServiceManager:
@@ -30,16 +31,16 @@ class ServiceManager:
     # 常见的虚拟环境目录名
     VENV_DIRS = ["venv", ".venv", "env", ".env"]
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.python_exe: str = sys.executable
-        self.venv_info: Optional[Dict] = None
-        self.processes: List[Tuple[str, subprocess.Popen]] = []
+        self.venv_info: Optional[Dict[str, Any]] = None
+        self.processes: List[Tuple[str, Popen[str]]] = []
         self.log_threads: List[threading.Thread] = []
         self.shutdown_event = threading.Event()
         self._daphne_available: Optional[bool] = None
         self._playwright_checked: bool = False
     
-    def _find_venv(self) -> Optional[Dict]:
+    def _find_venv(self) -> Optional[Dict[str, Any]]:
         """查找并缓存虚拟环境目录"""
         if self.venv_info is not None:
             return self.venv_info
@@ -66,7 +67,7 @@ class ServiceManager:
         
         return None
     
-    def _setup_venv(self):
+    def _setup_venv(self) -> None:
         """设置虚拟环境"""
         venv_path_env = os.environ.get("VIRTUAL_ENV")
         if venv_path_env:
@@ -124,7 +125,7 @@ class ServiceManager:
             self.python_exe = sys.executable
             os.environ["PYTHON_EXE"] = sys.executable
     
-    def _run_cmd(self, cmd, cwd=None, check=True, shell=False, capture=False, timeout=None):
+    def _run_cmd(self, cmd: Union[str, List[str]], cwd: Optional[Path] = None, check: bool = True, shell: bool = False, capture: bool = False, timeout: Optional[int] = None) -> CompletedProcess[str]:
         """执行命令的统一方法"""
         if isinstance(cmd, list) and len(cmd) > 0:
             if cmd[0] == sys.executable or cmd[0].endswith("python") or cmd[0].endswith("python.exe"):
@@ -141,14 +142,16 @@ class ServiceManager:
             env["PYTHON_EXE"] = self.python_exe
         
         if capture:
-            return subprocess.run(
+            result = subprocess.run(
                 cmd, cwd=cwd, shell=shell, env=env,
                 capture_output=True, text=True, timeout=timeout, check=False
             )
+            return result
         else:
-            return subprocess.run(cmd, cwd=cwd, check=check, shell=shell, env=env)
+            result = subprocess.run(cmd, cwd=cwd, check=check, shell=shell, env=env, text=True)
+            return result
     
-    def _read_stream(self, stream, prefix):
+    def _read_stream(self, stream: Any, prefix: str) -> None:
         """实时读取并打印流输出"""
         try:
             for line in iter(stream.readline, ''):
@@ -165,7 +168,7 @@ class ServiceManager:
             except Exception:
                 pass
     
-    def _start_process_with_logging(self, cmd, cwd, name) -> subprocess.Popen:
+    def _start_process_with_logging(self, cmd: List[str], cwd: Path, name: str) -> Popen[str]:
         """启动进程并实时读取日志"""
         env = os.environ.copy()
         if self.python_exe:
@@ -202,11 +205,11 @@ class ServiceManager:
         last_check = filepath.stat().st_mtime
         return (time.time() - last_check) > (days * 24 * 3600)
     
-    def _update_timestamp(self, filepath: Path):
+    def _update_timestamp(self, filepath: Path) -> None:
         """更新检查时间戳"""
         filepath.touch()
     
-    def _ensure_pip(self):
+    def _ensure_pip(self) -> None:
         """确保pip是最新版本并安装依赖（快速检查模式）"""
         requirements_file = self.BASE_DIR / "requirements.txt"
         if not requirements_file.exists():
@@ -300,7 +303,7 @@ class ServiceManager:
         print("[WARN] WebSocket功能可能不可用，将使用runserver")
         return False
     
-    def _ensure_playwright(self):
+    def _ensure_playwright(self) -> None:
         """确保playwright及其浏览器已安装"""
         if self._playwright_checked:
             return
@@ -326,7 +329,7 @@ class ServiceManager:
         self._ensure_playwright_browser()
         self._playwright_checked = True
     
-    def _install_playwright(self):
+    def _install_playwright(self) -> None:
         """安装playwright"""
         print("[ENV] 安装playwright...")
         try:
@@ -336,7 +339,7 @@ class ServiceManager:
         except Exception as e:
             print(f"[WARN] 安装playwright失败: {e}")
     
-    def _ensure_playwright_browser(self):
+    def _ensure_playwright_browser(self) -> None:
         """确保playwright浏览器已安装"""
         print("[ENV] 检查playwright浏览器...")
         
@@ -369,7 +372,7 @@ class ServiceManager:
         except Exception as e:
             print(f"[WARN] playwright浏览器安装失败: {e}")
     
-    def _ensure_node_modules(self):
+    def _ensure_node_modules(self) -> None:
         """确保前端node_modules已安装"""
         print("[ENV] 检查前端依赖...")
         node_modules = self.FRONTEND_DIR / "node_modules"
@@ -386,7 +389,7 @@ class ServiceManager:
         else:
             print("[ENV] 前端依赖已安装")
     
-    def setup_environment(self):
+    def setup_environment(self) -> None:
         """设置所有环境"""
         self._print_header("环境检查与准备")
         
@@ -404,7 +407,7 @@ class ServiceManager:
         
         print("\n[ENV] 环境准备完成!\n")
     
-    def start_django(self) -> Optional[subprocess.Popen]:
+    def start_django(self) -> Optional[Popen[str]]:
         """启动Django后端服务"""
         self._print_header("启动Django后端服务")
         
@@ -426,7 +429,7 @@ class ServiceManager:
         
         return proc
     
-    def start_frontend(self) -> Optional[subprocess.Popen]:
+    def start_frontend(self) -> Optional[Popen[str]]:
         """启动React前端服务"""
         self._print_header("启动React前端服务")
         
@@ -438,7 +441,7 @@ class ServiceManager:
         time.sleep(3)
         return proc
     
-    def _validate_playwright_for_celery(self):
+    def _validate_playwright_for_celery(self) -> None:
         """在启动Celery前验证Playwright环境"""
         print("[CELERY] 验证Playwright环境...")
         
@@ -483,7 +486,7 @@ class ServiceManager:
         
         print("[CELERY] [OK] Playwright环境验证通过")
     
-    def start_celery(self, purge: bool = True) -> Optional[subprocess.Popen]:
+    def start_celery(self, purge: bool = True) -> Optional[Popen[str]]:
         """启动Celery Worker"""
         self._print_header("启动Celery Worker")
         
@@ -530,7 +533,7 @@ class ServiceManager:
         
         return proc
     
-    def _print_header(self, text):
+    def _print_header(self, text: str) -> None:
         """打印带格式的标题"""
         print(f"\n{'=' * 60}")
         print(f"  {text}")
@@ -547,7 +550,7 @@ class ServiceManager:
         except psutil.NoSuchProcess:
             return []
     
-    def _is_process_alive(self, proc: subprocess.Popen, name: str) -> bool:
+    def _is_process_alive(self, proc: Popen[str], name: str) -> bool:
         """检查进程是否仍在运行（处理Daphne master-worker模型）"""
         if proc.poll() is not None:
             # Daphne在Windows上可能fork后主进程退出
@@ -569,9 +572,9 @@ class ServiceManager:
             return False
         return True
     
-    def monitor(self):
+    def monitor(self) -> None:
         """监控所有进程"""
-        print(self._print_header("服务运行中") or "", end="")
+        self._print_header("服务运行中")
         print(f"[INFO] 已启动 {len(self.processes)} 个服务:")
         for name, proc in self.processes:
             print(f"  - {name}: PID {proc.pid}")
@@ -593,7 +596,7 @@ class ServiceManager:
         except KeyboardInterrupt:
             print("\n\n[INFO] 收到停止信号，正在关闭所有服务...")
     
-    def shutdown(self):
+    def shutdown(self) -> None:
         """关闭所有服务"""
         self.shutdown_event.set()
         
@@ -619,7 +622,7 @@ class ServiceManager:
         print("[INFO] 所有服务已停止")
 
 
-def main():
+def main() -> None:
     """主函数"""
     parser = argparse.ArgumentParser(
         description="统一启动脚本 - 启动项目的前后端服务",

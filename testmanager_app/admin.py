@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import Any
 from django.contrib import admin
 from core.models import Project, Module, TestCase, TestExecution
 from testmanager_app.models import TestReport, AuthToken, ApiRequest, RequestCollection, FeatureTestCase
@@ -52,15 +54,15 @@ class AuthTokenAdmin(admin.ModelAdmin):
     ordering = ['-created']
     readonly_fields = ['key', 'created', 'last_used']
     
-    def key_short(self, obj):
+    def key_short(self, obj: AuthToken) -> str:
         """显示token的前8个字符"""
         return f"{obj.key[:8]}..." if obj.key else '-'
-    key_short.short_description = 'Token'
+    key_short.short_description = 'Token'  # type: ignore[attr-defined]
     
-    def is_expired_display(self, obj):
+    def is_expired_display(self, obj: AuthToken) -> str:
         """显示是否过期"""
         return '是' if obj.is_expired() else '否'
-    is_expired_display.short_description = '是否过期'
+    is_expired_display.short_description = '是否过期'  # type: ignore[attr-defined]
 
 
 @admin.register(ApiRequest)

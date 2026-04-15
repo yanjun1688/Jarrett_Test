@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import base64
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, cast, Callable, Literal
 
 from asgiref.sync import sync_to_async, async_to_sync
 from django.utils import timezone
@@ -87,14 +87,15 @@ class UITestService:
         - 立即返回task_id，实际执行在后台进行
         """
         from .tasks import execute_ui_test_task
+        task_func: Any = execute_ui_test_task
         
         try:
             # 提交Celery任务异步执行
             # 如果user_id为None，不传递该参数，让任务函数使用默认值
             if user_id is not None:
-                task = execute_ui_test_task.delay(script_id, user_id=user_id)
+                task = task_func.delay(script_id, user_id=user_id)
             else:
-                task = execute_ui_test_task.delay(script_id)
+                task = task_func.delay(script_id)
             # Removed verbose logging
             
             return {
@@ -125,9 +126,10 @@ class UITestService:
             Dict[str, Any]: 包含 task_id 的结果
         """
         from .tasks import execute_ui_test_with_execution_task
+        task_func: Any = execute_ui_test_with_execution_task
         
         try:
-            task = execute_ui_test_with_execution_task.delay(
+            task = task_func.delay(
                 script_id, execution_id, user_id=user_id
             )
             
@@ -180,13 +182,14 @@ class ScriptBuilder:
         with transaction.atomic():
             script = UITestScript.objects.create(
                 name=name,
-                project_id=project_id,
+                project_id=project_id if project_id is not None else None,
                 created_by_id=user_id,
                 actions=actions,
                 **kwargs
             )
+            script_id: int = getattr(script, 'id', 0)
             
-            logger.info(f"[ScriptBuilder] 脚本创建成功: id={script.id}, actions数量={len(actions)}")
+            logger.info(f"[ScriptBuilder] 脚本创建成功: id={script_id}, actions数量={len(actions)}")
             return script
 
 
@@ -290,10 +293,12 @@ class PlaywrightService:
             )
             
             # 导航到URL
+            if self.engine.page is None:
+                raise RuntimeError("页面未初始化")
             await self.engine.page.goto(url, wait_until='networkidle', timeout=30000)
             
             # 根据坐标或选择器获取元素
-            element_data = None
+            element_data: Any = None
             if x is not None and y is not None:
                 # 使用坐标获取元素
                 element_data = await self.engine.page.evaluate("""
@@ -344,10 +349,12 @@ class PlaywrightService:
                             parent: parentInfo
                         };
                     }
-                """, x, y)
+                """, {"x": x, "y": y})
             elif selector:
                 # 使用选择器获取元素
                 try:
+                    if self.engine.page is None:
+                        raise RuntimeError("页面未初始化")
                     element_data = await self.engine.page.evaluate("""
                         (selector) => {
                             const element = document.querySelector(selector);
@@ -553,7 +560,7 @@ class ElementExtractor(PlaywrightEngine):
     ) -> None:
         if self.page is None:
             raise RuntimeError("页面未初始化")
-        wait_until: str = 'networkidle' if wait_for_network else 'domcontentloaded'
+        wait_until: Literal['networkidle', 'domcontentloaded'] = 'networkidle' if wait_for_network else 'domcontentloaded'
         await self.page.goto(url, wait_until=wait_until, timeout=30000)
         
         if wait_selector:
@@ -564,6 +571,9 @@ class ElementExtractor(PlaywrightEngine):
     
     async def _extract_elements_via_js(self) -> List[Dict[str, Any]]:
         """通过 JavaScript 提取页面交互元素"""
+        if self.page is None:
+            raise RuntimeError("页面未初始化")
+        page = self.page
         js_code = """
         () => {
             const elements = [];
@@ -743,4 +753,5 @@ class ElementExtractor(PlaywrightEngine):
         }
         """
         
-        return await self.page.evaluate(js_code)
+        result: List[Dict[str, Any]] = cast(List[Dict[str, Any]], await page.evaluate(js_code))
+        return result

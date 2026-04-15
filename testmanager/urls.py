@@ -7,15 +7,15 @@ See api/urls.py for detailed routing configuration.
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Union
 
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from django.urls.resolvers import URLPattern
+from django.urls.resolvers import URLPattern, URLResolver
 
-urlpatterns: List[URLPattern] = [
+urlpatterns: List[Union[URLPattern, URLResolver]] = [
     path("admin/", admin.site.urls),
     
     path("api/", include("api.urls")),
