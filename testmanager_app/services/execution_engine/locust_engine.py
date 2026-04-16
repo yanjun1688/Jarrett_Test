@@ -6,6 +6,7 @@ Locust高级压测引擎
 from __future__ import annotations
 
 import asyncio
+import csv
 import json
 import logging
 import subprocess
@@ -318,95 +319,38 @@ class LocustEngine:
                 except subprocess.TimeoutExpired:
                     proc.kill()
     
-    async def _generate_locustfile(self, callback_port: int = 18090) -> str:
-        """生成Locust测试文件"""
+    async def _generate_locustfile(self) -> str:
+        """生成Locust测试文件 - 使用 CSV 输出方案"""
         from .locust_user_generator import LocustUserGenerator
         
-        generator = LocustUserGenerator(self.config, callback_port=callback_port)
+        generator = LocustUserGenerator(self.config)
         locust_code = generator.generate()
         
         # 写入临时文件
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as f:
             f.write(locust_code)
-            logger.info(f"[LocustEngine._generate_locustfile] Generated locustfile with callback_port={callback_port}")
+            logger.info("[LocustEngine._generate_locustfile] Generated locustfile (CSV mode)")
             return f.name
     
     async def _run_standalone_mode(self) -> None:
-        """单机模式运行 - 使用HTTP服务接收Locust真实请求结果"""
+        """单机模式运行 - 使用 CSV 输出方案（跨平台兼容）"""
         import subprocess
         import sys
-        import threading
-        from http.server import HTTPServer, BaseHTTPRequestHandler
-        import json
+        import tempfile
+        import os
         
-        # 回调端口
-        callback_port = 18090
+        logger.info("[LocustEngine._run_standalone_mode] Starting with CSV output mode")
         
-        logger.info(f"[LocustEngine._run_standalone_mode] Starting HTTP callback server on port {callback_port}")
-        
-        # 存储请求结果
-        request_results: List[LocustRequestResult] = []
-        test_stopped = False
-        server_running = True
-        
-        # 创建简单的 HTTP 处理器
-        class ResultHandler(BaseHTTPRequestHandler):
-            def do_POST(handler):
-                content_length = int(handler.headers.get('Content-Length', 0))
-                body = handler.rfile.read(content_length)
-                
-                try:
-                    data = json.loads(body.decode('utf-8'))
-                    result = LocustRequestResult(
-                        name=data.get('name', ''),
-                        request_type=data.get('request_type', ''),
-                        response_time_ms=float(data.get('response_time_ms', 0)),
-                        response_length=int(data.get('response_length', 0)),
-                        success=data.get('success', True),
-                        error_message=data.get('error_message', ''),
-                    )
-                    
-                    request_results.append(result)
-                    
-                    # 同步推送 WebSocket（在 asyncio 外部）
-                    if self.websocket:
-                        try:
-                            # 使用 asyncio.run_coroutine_threadsafe
-                            loop = asyncio.get_event_loop()
-                            if loop.is_running():
-                                asyncio.run_coroutine_threadsafe(
-                                    self.websocket.send_result(result),
-                                    loop
-                                )
-                        except Exception as e:
-                            logger.warning(f"[LocustEngine] WebSocket push error: {e}")
-                    
-                    handler.send_response(200)
-                    handler.send_header('Content-Type', 'text/plain')
-                    handler.end_headers()
-                    handler.wfile.write(b'OK')
-                    
-                except Exception as e:
-                    logger.warning(f"[LocustEngine] Handle result error: {e}")
-                    handler.send_response(500)
-                    handler.end_headers()
-            
-            def log_message(handler, format, *args):
-                pass  # 禁用默认日志
-        
-        # 启动 HTTP 服务（在独立线程中）
-        server = HTTPServer(('localhost', callback_port), ResultHandler)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        
-        logger.info(f"[LocustEngine._run_standalone_mode] HTTP callback server started")
+        # 创建临时目录存放 CSV 文件
+        csv_dir = tempfile.mkdtemp(prefix='locust_csv_')
+        csv_prefix = os.path.join(csv_dir, 'stats')
         
         try:
-            # 生成 locustfile（传入回调端口）
-            self._locustfile_path = await self._generate_locustfile(callback_port)
+            # 生成 locustfile
+            self._locustfile_path = await self._generate_locustfile()
             logger.info(f"[LocustEngine._run_standalone_mode] Locustfile: {self._locustfile_path}")
             
-            # 启动 Locust
+            # 启动 Locust，使用 --csv 输出统计数据
             cmd = [
                 sys.executable, '-m', 'locust',
                 '--locustfile', self._locustfile_path,
@@ -415,6 +359,8 @@ class LocustEngine:
                 '--spawn-rate', str(self.config.spawn_rate),
                 '--run-time', f'{self.config.duration_seconds}s',
                 '--headless',
+                '--csv', csv_prefix,
+                '--csv-full-history',
                 '--only-summary',
             ]
             
@@ -423,153 +369,178 @@ class LocustEngine:
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,  # 合并 stderr 到 stdout
+                stderr=subprocess.STDOUT,
                 text=True,
                 encoding='utf-8',
-                errors='ignore'
+                errors='replace'
             )
             
             logger.info(f"[LocustEngine._run_standalone_mode] Locust process started, PID={process.pid}")
             
-            # 等待 Locust 结束或收到 stop 通知，同时实时打印输出
+            # 等待进程完成，同时读取输出
             start_time = asyncio.get_event_loop().time()
-            max_wait = self.config.duration_seconds + 30
+            max_wait = self.config.duration_seconds + 60
+            all_output = ''
             
-            while process.poll() is None and not test_stopped:
+            while process.poll() is None:
                 elapsed = asyncio.get_event_loop().time() - start_time
                 if elapsed > max_wait:
-                    logger.warning(f"[LocustEngine._run_standalone_mode] Timeout, terminating process")
+                    logger.warning(f"[LocustEngine._run_standalone_mode] Timeout, terminating")
                     process.terminate()
+                    await asyncio.sleep(2)
+                    if process.poll() is None:
+                        process.kill()
                     break
                 
-                # 实时读取 Locust 输出（包含回调错误）
                 if process.stdout:
                     try:
                         line = process.stdout.readline()
                         if line:
-                            line = line.strip()
-                            if 'Callback Error' in line or 'Error' in line:
-                                logger.warning(f"[Locust Output] {line}")
-                            elif 'Starting' in line or 'spawned' in line or 'Shutting' in line:
-                                logger.info(f"[Locust Output] {line}")
+                            all_output += line
+                            line_stripped = line.strip()
+                            if line_stripped and any(kw in line_stripped for kw in ['Starting', 'spawned', 'Aggregated', 'Error']):
+                                logger.info(f"[Locust Output] {line_stripped}")
                     except Exception:
                         pass
                 
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.2)
             
-            # 等待进程完全结束
             if process.poll() is None:
-                try:
-                    process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
+                process.wait(timeout=10)
+            
+            try:
+                remaining = process.stdout.read() if process.stdout else ''
+                if remaining:
+                    all_output += remaining
+            except Exception:
+                pass
             
             logger.info(f"[LocustEngine._run_standalone_mode] Locust process ended with code={process.returncode}")
             
-            # 读取剩余输出
-            remaining_output = process.stdout.read() if process.stdout else ''
-            if remaining_output:
-                logger.info(f"[LocustEngine._run_standalone_mode] Remaining output: {remaining_output[:500]}")
-            
-            # 解析最终统计（从合并的输出中）
-            all_output = remaining_output
-            if all_output:
-                stats_parsed = self._parse_locust_stats(all_output)
-                self._parsed_stats = stats_parsed
-                logger.info(f"[LocustEngine._run_standalone_mode] Parsed final stats: {stats_parsed}")
-            
-            # 等待最后的回调请求到达
+            # 等待 CSV 文件写入完成
             await asyncio.sleep(2)
             
+            # 解析 CSV 文件获取统计数据
+            self._parsed_stats = self._parse_csv_files(csv_dir)
+            logger.info(f"[LocustEngine._run_standalone_mode] CSV stats: {self._parsed_stats}")
+            
+            # 如果 CSV 解析失败，尝试从 stdout 解析
+            if not self._parsed_stats.get('total_requests'):
+                stdout_stats = self._parse_locust_stats(all_output)
+                if stdout_stats.get('total_requests'):
+                    self._parsed_stats = stdout_stats
+                    logger.info(f"[LocustEngine._run_standalone_mode] Using stdout fallback")
+            
+            # 推送统计汇总到 WebSocket
+            if self.websocket and self._parsed_stats:
+                try:
+                    await self.websocket.send_stats_summary(self._parsed_stats)
+                except Exception as e:
+                    logger.warning(f"[LocustEngine._run_standalone_mode] WebSocket error: {e}")
+            
         except Exception as e:
-            logger.error(f"[LocustEngine._run_standalone_mode] Error: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            logger.error(f"[LocustEngine._run_standalone_mode] Error: {e}", exc_info=True)
             raise
         finally:
-            # 关闭 HTTP 服务
-            server.shutdown()
-            server.server_close()
-            logger.info(f"[LocustEngine._run_standalone_mode] HTTP callback server stopped")
-        
-        # 存储结果并添加到 metrics
-        for result in request_results:
-            await self.metrics.add_result(result)
-        
-        self._websocket_results = request_results
-        logger.info(f"[LocustEngine._run_standalone_mode] Collected {len(request_results)} real request results")
+            # 清理 CSV 目录
+            try:
+                import shutil
+                if os.path.exists(csv_dir):
+                    shutil.rmtree(csv_dir)
+                logger.info(f"[LocustEngine._run_standalone_mode] Cleaned up CSV directory")
+            except Exception as e:
+                logger.warning(f"[LocustEngine._run_standalone_mode] Cleanup error: {e}")
         
         await self._generate_report()
     
-    async def _read_csv_and_push_websocket(self, csv_dir: str) -> None:
-        """读取Locust CSV文件并推送每个请求结果到WebSocket"""
-        import os
-        import csv
+    def _parse_csv_files(self, csv_dir: str) -> Dict[str, Any]:
+        """解析 Locust CSV 文件获取统计数据"""
+        stats: Dict[str, Any] = {
+            'total_requests': 0,
+            'success_count': 0,
+            'failed_count': 0,
+            'error_rate': 0.0,
+            'avg_response_time': 0.0,
+            'min_response_time': 0.0,
+            'max_response_time': 0.0,
+            'p50_response_time': 0.0,
+            'p90_response_time': 0.0,
+            'p95_response_time': 0.0,
+            'p99_response_time': 0.0,
+            'throughput': 0.0,
+            'requests_per_endpoint': {},
+            'peak_users': self.config.user_count,
+            'duration_seconds': self.config.duration_seconds,
+        }
         
-        if not self.websocket:
-            logger.info("[LocustEngine._read_csv_and_push_websocket] No websocket, skipping")
-            return
-        
-        # Locust生成的CSV文件名
-        stats_csv = os.path.join(csv_dir, 'stats.csv')
-        stats_history_csv = os.path.join(csv_dir, 'stats_history.csv')
-        
-        # 尝试读取stats_history.csv（包含每个请求的记录）
-        if os.path.exists(stats_history_csv):
-            logger.info(f"[LocustEngine._read_csv_and_push_websocket] Reading {stats_history_csv}")
+        # Locust CSV 文件命名规则：{prefix}_stats.csv（而不是 stats.csv）
+        stats_csv = os.path.join(csv_dir, 'stats_stats.csv')
+        if not os.path.exists(stats_csv):
+            logger.warning(f"[LocustEngine._parse_csv_files] stats_stats.csv not found in {csv_dir}")
+            # 列出目录内容帮助调试
             try:
-                with open(stats_history_csv, 'r', encoding='utf-8', errors='ignore') as f:
-                    reader = csv.DictReader(f)
-                    count = 0
-                    for row in reader:
+                files = os.listdir(csv_dir)
+                logger.info(f"[LocustEngine._parse_csv_files] Files in dir: {files}")
+            except Exception:
+                pass
+            return stats
+        
+        try:
+            with open(stats_csv, 'r', encoding='utf-8', errors='ignore') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    name = row.get('Name', '')
+                    
+                    if name == 'Aggregated':
+                        # Locust CSV 列名：Request Count（不是 Total Request Count）
+                        stats['total_requests'] = int(float(row.get('Request Count', 0) or 0))
+                        stats['failed_count'] = int(float(row.get('Failure Count', 0) or 0))
+                        stats['success_count'] = stats['total_requests'] - stats['failed_count']
+                        
+                        if stats['total_requests'] > 0:
+                            stats['error_rate'] = round((stats['failed_count'] / stats['total_requests']) * 100, 2)
+                        
+                        # 响应时间 - Locust 列名：Average Response Time 等
+                        for key, col in [('avg_response_time', 'Average Response Time'),
+                                         ('min_response_time', 'Min Response Time'),
+                                         ('max_response_time', 'Max Response Time')]:
+                            val = row.get(col, '0')
+                            try:
+                                stats[key] = float(val)
+                            except ValueError:
+                                stats[key] = 0.0
+                        
+                        # 吞吐量
+                        rps_str = row.get('Requests/s', '0')
                         try:
-                            # 构造请求结果
-                            result = LocustRequestResult(
-                                name=row.get('Name', ''),
-                                request_type=row.get('Type', ''),
-                                response_time_ms=float(row.get('Average Response Time', 0) or 0),
-                                response_length=int(row.get('Response Length', 0) or 0),
-                                success=row.get('Success Rate', '100') == '100',
-                                error_message=row.get('Error', ''),
-                                context={},
-                            )
-                            
-                            # 推送到WebSocket
-                            await self.websocket.send_result(result)
-                            await self.metrics.add_result(result)
-                            count += 1
-                            
-                        except (ValueError, KeyError) as e:
-                            logger.warning(f"[LocustEngine._read_csv_and_push_websocket] Failed to parse row: {e}")
+                            stats['throughput'] = float(rps_str)
+                        except ValueError:
+                            stats['throughput'] = 0.0
+                        
+                        # 百分位数 - 列名是 50%, 90%, 95%, 99%
+                        for key, col in [('p50_response_time', '50%'),
+                                         ('p90_response_time', '90%'),
+                                         ('p95_response_time', '95%'),
+                                         ('p99_response_time', '99%')]:
+                            val = row.get(col, '0')
+                            try:
+                                stats[key] = float(val)
+                            except ValueError:
+                                pass
                     
-                    logger.info(f"[LocustEngine._read_csv_and_push_websocket] Pushed {count} results to WebSocket")
-                    
-            except Exception as e:
-                logger.error(f"[LocustEngine._read_csv_and_push_websocket] Error reading CSV: {e}")
-        else:
-            logger.warning(f"[LocustEngine._read_csv_and_push_websocket] CSV file not found: {stats_history_csv}")
+                    elif name:
+                        stats['requests_per_endpoint'][name] = {
+                            'method': row.get('Type', 'GET'),
+                            'requests': int(float(row.get('Request Count', 0) or 0)),
+                            'failures': int(float(row.get('Failure Count', 0) or 0)),
+                        }
             
-            # 尝试读取stats.csv作为备选
-            if os.path.exists(stats_csv):
-                logger.info(f"[LocustEngine._read_csv_and_push_websocket] Reading {stats_csv} as fallback")
-                try:
-                    with open(stats_csv, 'r', encoding='utf-8', errors='ignore') as f:
-                        reader = csv.DictReader(f)
-                        for row in reader:
-                            if row.get('Name') != 'Aggregated':
-                                result = LocustRequestResult(
-                                    name=row.get('Name', ''),
-                                    request_type=row.get('Type', ''),
-                                    response_time_ms=float(row.get('Average Response Time', 0) or 0),
-                                    response_length=0,
-                                    success=row.get('Failures', '0') == '0',
-                                    error_message='',
-                                    context={},
-                                )
-                                await self.websocket.send_result(result)
-                except Exception as e:
-                    logger.error(f"[LocustEngine._read_csv_and_push_websocket] Error reading stats.csv: {e}")
+            logger.info(f"[LocustEngine._parse_csv_files] Read stats_stats.csv: {stats['total_requests']} requests")
+            
+        except Exception as e:
+            logger.warning(f"[LocustEngine._parse_csv_files] Error: {e}")
+        
+        return stats
     
     async def _run_distributed_mode(self) -> None:
         """分布式模式运行"""
@@ -789,6 +760,7 @@ class LocustEngine:
             'throughput': 0.0,
             'requests_per_endpoint': {},
             'peak_users': self.config.user_count,
+            'duration_seconds': self.config.duration_seconds,
         }
         
         lines = stderr_output.split('\n')
@@ -1067,19 +1039,9 @@ class LocustEngine:
             if error:
                 execution.error_log = error
             
-            # 原始结果
-            execution.raw_results = [
-                {
-                    'name': r.name,
-                    'request_type': r.request_type,
-                    'response_time_ms': r.response_time_ms,
-                    'success': r.success,
-                    'error_message': r.error_message,
-                    'timestamp': r.timestamp.isoformat(),
-                    'context': r.context
-                }
-                for r in self.metrics.results
-            ]
+            # CSV方案：不存储单次请求结果，仅存储聚合统计
+            # raw_results 保持为空列表（节省存储空间）
+            execution.raw_results = []
             
             logger.info("[LocustEngine._update_execution_complete] Calling execution.save()")
             execution.save()

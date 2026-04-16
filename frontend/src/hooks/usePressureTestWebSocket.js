@@ -28,8 +28,11 @@ export const usePressureTestWebSocket = (getToken) => {
   const reconnectAttemptsRef = useRef(0);
   const isManualDisconnectRef = useRef(false);
   const authenticatedRef = useRef(false);
+  const executionIdRef = useRef(null);
+  const connectionTimeoutRef = useRef(null);
   const maxReconnectAttempts = 3;
   const reconnectDelay = 3000;
+  const CONNECTION_IDLE_TIMEOUT = 60000; // 60秒无活动自动断开
 
   /**
    * 构建 WebSocket URL
@@ -45,16 +48,20 @@ export const usePressureTestWebSocket = (getToken) => {
 
   useEffect(() => {
     authenticatedRef.current = authenticated;
-  }, [authenticated]);
+    executionIdRef.current = executionId;
+  }, [authenticated, executionId]);
 
   /**
    * 连接 WebSocket
    * @param {number} execId - 执行记录ID
    */
   const connect = useCallback((execId) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      logger.info('[usePressureTestWS] Already connected');
-      return;
+    // 先断开旧连接（如果存在）
+    if (wsRef.current) {
+      if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+        wsRef.current.close();
+      }
+      wsRef.current = null;
     }
 
     logger.info('[usePressureTestWS] Connecting to execution:', execId);
@@ -72,6 +79,15 @@ export const usePressureTestWebSocket = (getToken) => {
         reconnectAttemptsRef.current = 0;
         logger.info('[usePressureTestWS] WebSocket connected');
 
+        // 重置空闲超时
+        if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current);
+        }
+        connectionTimeoutRef.current = setTimeout(() => {
+          logger.warn('[usePressureTestWS] Connection idle timeout, disconnecting');
+          disconnect();
+        }, CONNECTION_IDLE_TIMEOUT);
+
         const currentToken = typeof getToken === 'function' ? getToken() : null;
         if (currentToken) {
           ws.send(JSON.stringify({
@@ -83,6 +99,15 @@ export const usePressureTestWebSocket = (getToken) => {
 
       ws.onmessage = (event) => {
         try {
+          // 重置空闲超时
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+          }
+          connectionTimeoutRef.current = setTimeout(() => {
+            logger.warn('[usePressureTestWS] Connection idle timeout, disconnecting');
+            disconnect();
+          }, CONNECTION_IDLE_TIMEOUT);
+
           const data = JSON.parse(event.data);
           logger.info('[usePressureTestWS] Received:', data.type);
 
@@ -137,14 +162,38 @@ export const usePressureTestWebSocket = (getToken) => {
                 failedCount: data.summary?.failed_count,
                 errorRate: data.summary?.error_rate,
                 avgResponseTime: data.summary?.avg_response_time,
-                throughput: data.summary?.throughput
+                minResponseTime: data.summary?.min_response_time,
+                maxResponseTime: data.summary?.max_response_time,
+                p50ResponseTime: data.summary?.p50_response_time,
+                p90ResponseTime: data.summary?.p90_response_time,
+                p95ResponseTime: data.summary?.p95_response_time,
+                p99ResponseTime: data.summary?.p99_response_time,
+                throughput: data.summary?.throughput,
+                peakConcurrent: data.summary?.peak_concurrent,
+                durationSeconds: data.summary?.duration_seconds
               });
               logger.info('[usePressureTestWS] Pressure test completed');
+              // 清理空闲超时，设置自动断开超时
+              if (connectionTimeoutRef.current) {
+                clearTimeout(connectionTimeoutRef.current);
+              }
+              connectionTimeoutRef.current = setTimeout(() => {
+                logger.info('[usePressureTestWS] Auto disconnecting after test completed');
+                disconnect();
+              }, 3000);
               break;
 
             case 'stopped':
               setRunning(false);
               logger.info('[usePressureTestWS] Pressure test stopped');
+              // 清理空闲超时，设置自动断开超时
+              if (connectionTimeoutRef.current) {
+                clearTimeout(connectionTimeoutRef.current);
+              }
+              connectionTimeoutRef.current = setTimeout(() => {
+                logger.info('[usePressureTestWS] Auto disconnecting after stopped');
+                disconnect();
+              }, 1000);
               break;
 
             case 'error':
@@ -172,15 +221,22 @@ export const usePressureTestWebSocket = (getToken) => {
         setAuthenticated(false);
         wsRef.current = null;
 
+        // 清理空闲超时
+        if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current);
+          connectionTimeoutRef.current = null;
+        }
+
         const currentToken = typeof getToken === 'function' ? getToken() : null;
+        // 使用 executionIdRef 替代闭包中的 executionId，避免闭包问题
         if (!isManualDisconnectRef.current && 
             reconnectAttemptsRef.current < maxReconnectAttempts && 
             currentToken && 
-            executionId) {
+            executionIdRef.current) {
           logger.info('[usePressureTestWS] Scheduling reconnect');
           reconnectAttemptsRef.current++;
           reconnectTimeoutRef.current = setTimeout(() => {
-            connect(execId);
+            connect(executionIdRef.current);  // 使用最新的 executionId
           }, reconnectDelay);
         }
       };
@@ -202,6 +258,11 @@ export const usePressureTestWebSocket = (getToken) => {
       reconnectTimeoutRef.current = null;
     }
 
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
+
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -216,6 +277,10 @@ export const usePressureTestWebSocket = (getToken) => {
    * 开始压测
    */
   const startTest = useCallback(() => {
+    if (running) {
+      logger.warn('[usePressureTestWS] Pressure test already running');
+      return false;
+    }
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       logger.warn('[usePressureTestWS] WebSocket not connected');
       return false;
@@ -235,7 +300,7 @@ export const usePressureTestWebSocket = (getToken) => {
     setStats(null);
     setSummary(null);
     return true;
-  }, []);
+  }, [running]);
 
   /**
    * 停止压测
@@ -263,6 +328,14 @@ export const usePressureTestWebSocket = (getToken) => {
     setResults([]);
     setSummary(null);
     setError(null);
+
+    // 断开 WebSocket 连接
+    if (wsRef.current) {
+      if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+        wsRef.current.close();
+      }
+      wsRef.current = null;
+    }
   }, []);
 
   const disconnectRef = useRef(disconnect);

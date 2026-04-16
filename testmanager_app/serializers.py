@@ -13,19 +13,19 @@ from django.utils import timezone
 from datetime import timedelta
 
 
-class UserSerializer(serializers.ModelSerializer):
+class UserSerializer(serializers.ModelSerializer[User]):
     class Meta:
         model = User
         fields = ['id', 'username', 'first_name', 'last_name']
 
 
-class ProjectSerializer(serializers.ModelSerializer):
+class ProjectSerializer(serializers.ModelSerializer[Project]):
     class Meta:
         model = Project
         fields = '__all__'
 
 
-class ModuleSerializer(serializers.ModelSerializer):
+class ModuleSerializer(serializers.ModelSerializer[Module]):
     project_name = serializers.CharField(source='project.name', read_only=True)
     
     class Meta:
@@ -33,7 +33,7 @@ class ModuleSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class TestCaseSerializer(serializers.ModelSerializer):
+class TestCaseSerializer(serializers.ModelSerializer[TestCase]):
     project_name = serializers.CharField(source='project.name', read_only=True)
     module_name = serializers.CharField(source='module.name', read_only=True)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
@@ -43,14 +43,14 @@ class TestCaseSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class TestCaseCreateSerializer(serializers.ModelSerializer):
+class TestCaseCreateSerializer(serializers.ModelSerializer[TestCase]):
     """测试用例创建序列化器（用于创建和更新操作）"""
     class Meta:
         model = TestCase
         fields = ['title', 'project', 'module', 'priority', 'precondition', 'steps', 'expected_result']
 
 
-class TestExecutionSerializer(serializers.ModelSerializer):
+class TestExecutionSerializer(serializers.ModelSerializer[TestExecution]):
     testcase_title = serializers.CharField(source='testcase.title', read_only=True)
     api_request_name = serializers.CharField(source='api_request.name', read_only=True)
     executor_name = serializers.CharField(source='executor.username', read_only=True)
@@ -60,13 +60,13 @@ class TestExecutionSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class TestExecutionCreateSerializer(serializers.ModelSerializer):
+class TestExecutionCreateSerializer(serializers.ModelSerializer[TestExecution]):
     class Meta:
         model = TestExecution
         fields = ['test_type', 'testcase', 'api_request', 'status', 'actual_result', 'comments', 'duration', 'api_response_data', 'api_logs']
 
 
-class TestExecutionListSerializer(serializers.ModelSerializer):
+class TestExecutionListSerializer(serializers.ModelSerializer[TestExecution]):
     """轻量级执行记录序列化器，用于列表展示，优化性能"""
     api_request_name = serializers.CharField(source='api_request.name', read_only=True)
     api_request_url = serializers.CharField(source='api_request.url', read_only=True)
@@ -82,7 +82,7 @@ class TestExecutionListSerializer(serializers.ModelSerializer):
         ]
 
 
-class TestReportSerializer(serializers.ModelSerializer):
+class TestReportSerializer(serializers.ModelSerializer[TestReport]):
     project_name = serializers.CharField(source='project.name', read_only=True)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     pass_rate = serializers.ReadOnlyField()
@@ -92,7 +92,7 @@ class TestReportSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class GenerateReportSerializer(serializers.Serializer):
+class GenerateReportSerializer(serializers.Serializer[Any]):
     """
     生成报告的参数验证器
 
@@ -137,7 +137,7 @@ class GenerateReportSerializer(serializers.Serializer):
 
         return data
 
-    def to_representation(self, instance: tuple) -> Dict[str, Optional[str]]:
+    def to_representation(self, instance: tuple[Any, ...]) -> Dict[str, Optional[str]]:
         """序列化输出（用于调试）"""
         return {
             'project_id': str(instance[0].id) if instance else None,
@@ -146,7 +146,7 @@ class GenerateReportSerializer(serializers.Serializer):
         }
 
 
-class TestScriptSerializer(serializers.ModelSerializer):
+class TestScriptSerializer(serializers.ModelSerializer[TestScript]):
     project_name = serializers.CharField(source='project.name', read_only=True)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     
@@ -156,7 +156,7 @@ class TestScriptSerializer(serializers.ModelSerializer):
         read_only_fields = ['file']
 
 
-class TestScriptCreateSerializer(serializers.ModelSerializer):
+class TestScriptCreateSerializer(serializers.ModelSerializer[TestScript]):
     class Meta:
         model = TestScript
         fields = ['id', 'name', 'description', 'script_type', 'content', 'project', 'created_by']
@@ -542,11 +542,24 @@ class PressureTestConfigCreateSerializer(serializers.ModelSerializer):
                     {'batch_interval': '分批并发模式需要设置批次间隔'}
                 )
         
-        # 验证最大并发
-        if data.get('max_concurrent', 100) > 1000:
+        # 验证最大并发（保守方案：单机压测≤200）
+        max_concurrent = data.get('max_concurrent', 100)
+        if max_concurrent > 200:
             raise serializers.ValidationError(
-                {'max_concurrent': '最大并发数不能超过1000'}
+                {'max_concurrent': f'最大并发数不能超过200（单机压测安全上限），当前值: {max_concurrent}'}
             )
+        
+        # 验证持续并发模式的总请求数
+        pressure_mode = data.get('pressure_mode', 'instant')
+        if pressure_mode == 'sustained':
+            rate = data.get('rate_per_second', 10)
+            duration = data.get('duration_seconds', 60)
+            total_requests = rate * duration
+            MAX_TOTAL_REQUESTS = 5000
+            if total_requests > MAX_TOTAL_REQUESTS:
+                raise serializers.ValidationError(
+                    {'rate_per_second': f'持续并发模式总请求数超过上限（{total_requests} > {MAX_TOTAL_REQUESTS}），请降低 rate_per_second 或 duration_seconds'}
+                )
         
         return data
 

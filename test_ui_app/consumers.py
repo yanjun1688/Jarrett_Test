@@ -383,7 +383,15 @@ class PressureTestConsumer(AsyncWebsocketConsumer):
                     'failed_count': execution.failed_count,
                     'error_rate': execution.error_rate,
                     'avg_response_time': execution.avg_response_time,
-                    'throughput': execution.throughput
+                    'min_response_time': execution.min_response_time,
+                    'max_response_time': execution.max_response_time,
+                    'p50_response_time': execution.p50_response_time,
+                    'p90_response_time': execution.p90_response_time,
+                    'p95_response_time': execution.p95_response_time,
+                    'p99_response_time': execution.p99_response_time,
+                    'throughput': execution.throughput,
+                    'peak_concurrent': execution.peak_concurrent,
+                    'duration_seconds': execution.duration_seconds
                 }
             }))
             logger.info(f"[PressureTestWS] Complete message sent")

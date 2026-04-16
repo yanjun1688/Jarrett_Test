@@ -1,6 +1,7 @@
 """
 Locust用户生成器
 根据配置动态生成Locust User类代码
+使用 CSV 输出方案 - 不依赖 HTTP 回调机制
 """
 
 from __future__ import annotations
@@ -12,10 +13,9 @@ from typing import Any, Dict, List
 class LocustUserGenerator:
     """生成Locust测试代码"""
     
-    def __init__(self, config: Any, callback_port: int = 18090):
+    def __init__(self, config: Any):
         self.config = config
         self.scenario = config.scenario or {}
-        self.callback_port = callback_port
     
     def generate(self) -> str:
         """生成完整的Locust文件内容"""
@@ -23,10 +23,6 @@ class LocustUserGenerator:
         
         # 导入语句
         code_lines.extend(self._generate_imports())
-        code_lines.append("")
-        
-        # 事件监听器设置
-        code_lines.extend(self._generate_event_listener())
         code_lines.append("")
         
         # 事务上下文类
@@ -43,47 +39,12 @@ class LocustUserGenerator:
         return "\n".join(code_lines)
     
     def _generate_imports(self) -> List[str]:
-        """生成导入语句"""
+        """生成导入语句 - 移除 requests 和 events（不再需要回调）"""
         return [
-            "from locust import HttpUser, task, between, events",
+            "from locust import HttpUser, task, between",
             "import json",
             "import re",
-            "import requests",
             "from typing import Dict, Any, Optional",
-        ]
-    
-    def _generate_event_listener(self) -> List[str]:
-        """生成事件监听器，每个请求完成后POST到本地HTTP服务"""
-        return [
-            f"# 回调端口 - 用于接收真实请求结果",
-            f"CALLBACK_PORT = {self.callback_port}",
-            f"",
-            f"@events.request.add_listener",
-            f"def on_request(request_type, name, response_time, response_length,",
-            f"               exception, context, **kwargs):",
-            f"    \"\"\"每个请求完成后发送结果到主进程\"\"\"",
-            f"    try:",
-            f"        result = {{",
-            f"            'request_type': request_type,",
-            f"            'name': name,",
-            f"            'response_time_ms': response_time,",
-            f"            'response_length': response_length or 0,",
-            f"            'success': exception is None,",
-            f"            'error_message': str(exception) if exception else '',",
-            f"        }}",
-            f"        requests.post(f'http://localhost:{{CALLBACK_PORT}}/result',",
-            f"                     json=result, timeout=1)",
-            f"    except Exception as e:",
-            f"        print(f'[Callback Error] Failed to send result: {{e}}')",
-            f"",
-            f"@events.test_stop.add_listener",
-            f"def on_test_stop(**kwargs):",
-            f"    \"\"\"测试结束时通知主进程\"\"\"",
-            f"    try:",
-            f"        requests.post(f'http://localhost:{{CALLBACK_PORT}}/stop',",
-            f"                     json={{'status': 'completed'}}, timeout=2)",
-            f"    except Exception:",
-            f"        pass",
         ]
     
     def _generate_context_class(self) -> List[str]:
@@ -216,25 +177,75 @@ class LocustUserGenerator:
         
         code_lines.append(f"    @task({weight})")
         code_lines.append(f"    def {self._sanitize_name(step_name)}(self):")
-        code_lines.append(f'        \"\"\"{step_name}\"\"\"')
+        code_lines.append(f'        """{step_name}"""')
         code_lines.append('')
         
         code_lines.append(f'        url = "{step_url}"')
         code_lines.append('')
+        
+        if headers:
+            headers_json = json.dumps(headers)
+            code_lines.append(f'        headers = {headers_json}')
+        
         code_lines.append('        try:')
         
         if step_method == 'GET':
-            code_lines.append(f'            response = self.client.get(url, name="{step_name}")')
+            if headers:
+                code_lines.append(f'            response = self.client.get(url, headers=headers, name="{step_name}")')
+            else:
+                code_lines.append(f'            response = self.client.get(url, name="{step_name}")')
         elif step_method == 'POST':
             code_lines.append(f'            body = "{body}"')
-            code_lines.append(f'            response = self.client.post(url, data=body, name="{step_name}")')
+            if headers:
+                code_lines.append(f'            response = self.client.post(url, data=body, headers=headers, name="{step_name}")')
+            else:
+                code_lines.append(f'            response = self.client.post(url, data=body, name="{step_name}")')
         elif step_method == 'PUT':
             code_lines.append(f'            body = "{body}"')
-            code_lines.append(f'            response = self.client.put(url, data=body, name="{step_name}")')
+            if headers:
+                code_lines.append(f'            response = self.client.put(url, data=body, headers=headers, name="{step_name}")')
+            else:
+                code_lines.append(f'            response = self.client.put(url, data=body, name="{step_name}")')
         elif step_method == 'DELETE':
-            code_lines.append(f'            response = self.client.delete(url, name="{step_name}")')
+            if headers:
+                code_lines.append(f'            response = self.client.delete(url, headers=headers, name="{step_name}")')
+            else:
+                code_lines.append(f'            response = self.client.delete(url, name="{step_name}")')
         else:
-            code_lines.append(f'            response = self.client.request("{step_method}", url, name="{step_name}")')
+            if headers:
+                code_lines.append(f'            response = self.client.request("{step_method}", url, headers=headers, name="{step_name}")')
+            else:
+                code_lines.append(f'            response = self.client.request("{step_method}", url, name="{step_name}")')
+        
+        if extractors:
+            code_lines.append('')
+            code_lines.append('            # 数据提取')
+            for extractor in extractors:
+                ext_type = extractor.get('type', '')
+                ext_name = extractor.get('name', '')
+                ext_expr = extractor.get('expression', '')
+                
+                if ext_type == 'json_path':
+                    code_lines.append(f'            try:')
+                    code_lines.append(f'                import jsonpath_ng')
+                    code_lines.append(f'                json_data = response.json()')
+                    code_lines.append(f'                jsonpath_expr = jsonpath_ng.parse("{ext_expr}")')
+                    code_lines.append(f'                matches = [match.value for match in jsonpath_expr.find(json_data)]')
+                    code_lines.append(f'                if matches:')
+                    code_lines.append(f'                    self.tx_context.set("{ext_name}", matches[0])')
+                    code_lines.append(f'            except Exception:')
+                    code_lines.append(f'                pass')
+                elif ext_type == 'regex':
+                    code_lines.append(f'            try:')
+                    code_lines.append(f'                match = re.search("{ext_expr}", response.text)')
+                    code_lines.append(f'                if match:')
+                    code_lines.append(f'                    self.tx_context.set("{ext_name}", match.group(1) if match.groups() else match.group(0))')
+                    code_lines.append(f'            except Exception:')
+                    code_lines.append(f'                pass')
+                elif ext_type == 'header':
+                    code_lines.append(f'            self.tx_context.set("{ext_name}", response.headers.get("{ext_expr}"))')
+                elif ext_type == 'status_code':
+                    code_lines.append(f'            self.tx_context.set("{ext_name}", response.status_code)')
         
         code_lines.append('')
         code_lines.append('        except Exception as e:')
@@ -245,9 +256,9 @@ class LocustUserGenerator:
     def _sanitize_name(self, name: str) -> str:
         """将名称转换为有效的Python标识符"""
         import re
-        # 替换非法字符为下划线
+        if not name:
+            return 'task'
         sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
-        # 确保不以数字开头
         if sanitized[0].isdigit():
             sanitized = '_' + sanitized
         return sanitized.lower()
@@ -260,7 +271,7 @@ class DynamicLocustUserGenerator:
         self.config = config
         self.scenario = config.scenario or {}
     
-    def generate_user_class(self):
+    def generate_user_class(self) -> type:
         """动态生成并返回User类（非代码字符串）"""
         from locust import HttpUser, task, between
         import json
@@ -286,7 +297,7 @@ class DynamicLocustUserGenerator:
         
         # 定义事务上下文
         class TransactionContext:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.variables: Dict[str, Any] = {}
             
             def set(self, name: str, value: Any) -> None:
@@ -324,7 +335,7 @@ class DynamicLocustUserGenerator:
                 return result
         
         # 定义数据提取函数
-        def extract_value(response, extractor: Dict[str, Any]) -> Any:
+        def extract_value(response: Any, extractor: Dict[str, Any]) -> Any:
             ext_type = extractor.get('type')
             expression = extractor.get('expression', '')
             
@@ -366,10 +377,10 @@ class DynamicLocustUserGenerator:
         class AdvancedTestUser(HttpUser):
             wait_time = between(think_time.get('min', 1), think_time.get('max', 3))
             
-            def on_start(self):
+            def on_start(self) -> None:
                 self.tx_context = TransactionContext()
             
-            def on_stop(self):
+            def on_stop(self) -> None:
                 pass
         
         # 动态添加任务方法
@@ -379,15 +390,17 @@ class DynamicLocustUserGenerator:
         
         return AdvancedTestUser
     
-    def _create_task_method(self, step: Dict, idx: int, api_requests: Dict, extract_value_func):
+    def _create_task_method(self, step: Dict[str, Any], idx: int, api_requests: Dict[int, Any], extract_value_func: Any) -> Any:
         """创建任务方法"""
         step_name = step.get('name', f'step_{idx}')
         api_request_id = step.get('api_request_id')
         headers_template = step.get('headers', {})
         extractors = step.get('extractors', [])
         
-        def task_method(self):
+        def task_method(self: Any) -> None:
             # 获取API请求信息
+            if api_request_id is None:
+                return
             api_request = api_requests.get(api_request_id)
             if not api_request:
                 return

@@ -5,7 +5,7 @@ plugins = [
     "mypy_drf_plugin.main",
 ]
 
-# 放宽严格模式，保持核心检查
+# Relax strict mode, keep core checks
 strict = false
 warn_return_any = true
 warn_unused_ignores = true
@@ -13,7 +13,7 @@ warn_unused_configs = true
 warn_redundant_casts = true
 warn_unreachable = true
 
-# 忽略的文件
+# Excluded files
 exclude = [
     "venv",
     ".venv",
@@ -24,30 +24,26 @@ exclude = [
     "skills",
     "test_.*\\.py",
     ".*_test\\.py",
-    "validate_.*\\.py",
-    "check_.*\\.py",
-    "fix_.*\\.py",
-    "debug_.*\\.py",
 ]
 
-# 忽略缺失的 imports（针对第三方库）
+# Ignore missing imports for third-party libraries
 ignore_missing_imports = true
 
-# 显示错误代码
+# Show error codes
 show_error_codes = true
 show_column_numbers = true
 
-# 类型注解要求
+# Type annotation requirements
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 check_untyped_defs = true
 
-# 其他配置
+# Other configurations
 implicit_optional = true
 strict_optional = true
 warn_no_return = true
 
-# Per-module 配置 - 对 DRF/Celery/第三方库集成代码放宽类型要求
+# Per-module config - relax type requirements for DRF/Celery/third-party integration
 [[tool.mypy.overrides]]
 module = [
     "testmanager_app.serializers",

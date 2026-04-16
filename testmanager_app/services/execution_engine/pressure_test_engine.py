@@ -40,36 +40,35 @@ class RealtimeStats:
 
 
 class MetricsCollector:
-    """指标收集器"""
+    """指标收集器（简化锁策略）"""
     
     def __init__(self):
         self.results: List[RequestResult] = []
         self.start_time: Optional[datetime] = None
-        self._lock = asyncio.Lock()
-        self.peak_concurrent = 0  # 峰值并发数
+        self.peak_concurrent = 0
     
     def start(self):
         """开始收集"""
         self.start_time = datetime.now()
     
     async def add_result(self, result: RequestResult) -> None:
-        """添加单次结果"""
-        async with self._lock:
-            self.results.append(result)
+        """添加单次结果（asyncio 单线程，append 是原子操作，无需锁）"""
+        self.results.append(result)
     
     async def update_peak_concurrent(self, current: int) -> None:
-        """更新峰值并发数"""
-        async with self._lock:
-            self.peak_concurrent = max(self.peak_concurrent, current)
+        """更新峰值并发数（asyncio 单线程，整数操作是原子，无需锁）"""
+        if current > self.peak_concurrent:
+            self.peak_concurrent = current
     
     def get_realtime_stats(self, total: int, current_concurrent: int = 0) -> RealtimeStats:
-        """获取实时统计"""
+        """获取实时统计（读取时复制数据，避免不一致）"""
         if not self.results or not self.start_time:
             return RealtimeStats(total=total, current_concurrent=current_concurrent, peak_concurrent=self.peak_concurrent)
         
-        completed = len(self.results)
-        success_count = sum(1 for r in self.results if r.success)
-        response_times = [r.response_time_ms for r in self.results]
+        results_snapshot = self.results.copy()
+        completed = len(results_snapshot)
+        success_count = sum(1 for r in results_snapshot if r.success)
+        response_times = [r.response_time_ms for r in results_snapshot]
         
         elapsed = (datetime.now() - self.start_time).total_seconds()
         
@@ -143,8 +142,8 @@ class PressureTestEngine:
         self.metrics = MetricsCollector()
         self.stop_event = asyncio.Event()
         self._active_count = 0
-        self._active_lock = asyncio.Lock()
         self._execution = None
+        self._client: Optional[httpx.AsyncClient] = None
         
         logger.info(f"[PressureEngine] Initialized - config_id={config.id}, mode={config.pressure_mode}")
         logger.info(f"[PressureEngine] Config details: request_count={config.request_count}, "
@@ -152,6 +151,28 @@ class PressureTestEngine:
                     f"batch_size={config.batch_size}, batch_interval={config.batch_interval}s, "
                     f"max_concurrent={config.max_concurrent}")
         logger.info(f"[PressureEngine] Target API: {config.api_request.method} {config.api_request.url}")
+    
+    async def _get_client(self) -> httpx.AsyncClient:
+        """获取或创建共享的 AsyncClient（连接池复用）"""
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                timeout=30.0,
+                limits=httpx.Limits(
+                    max_connections=self.config.max_concurrent,
+                    max_keepalive_connections=self.config.max_concurrent,
+                    keepalive_expiry=30.0
+                )
+            )
+            logger.info(f"[PressureEngine] Created shared AsyncClient with "
+                        f"max_connections={self.config.max_concurrent}")
+        return self._client
+    
+    async def _close_client(self) -> None:
+        """关闭共享的 AsyncClient"""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+            logger.info(f"[PressureEngine] Closed AsyncClient")
     
     async def create_execution_only(self) -> Any:
         """
@@ -216,22 +237,15 @@ class PressureTestEngine:
             final_stats = self.metrics.calculate_final_stats()
             await self._update_execution_complete(execution, final_stats, 'failed')
             raise
+        finally:
+            await self._close_client()
         
         return execution
-    
-    async def execute(self) -> Any:
-        """
-        执行压测（向后兼容）
-        
-        Returns:
-            PressureTestExecution 实例
-        """
-        execution = await self.create_execution_only()
-        return await self.execute_existing(execution)
     
     async def stop(self):
         """停止压测"""
         self.stop_event.set()
+        await self._close_client()
     
     async def _create_execution(self):
         """创建执行记录"""
@@ -312,7 +326,7 @@ class PressureTestEngine:
         await update()
     
     async def _execute_single(self, index: int) -> RequestResult:
-        """执行单个请求"""
+        """执行单个请求（使用共享 AsyncClient）"""
         import time
         
         start_time = time.time()
@@ -326,31 +340,32 @@ class PressureTestEngine:
             
             logger.debug(f"[PressureEngine] Request {index}: {method} {url}")
             
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                if body and method in ['POST', 'PUT', 'PATCH']:
-                    response = await client.request(
-                        method=method,
-                        url=url,
-                        headers=headers,
-                        content=body.encode('utf-8') if isinstance(body, str) else body
-                    )
-                else:
-                    response = await client.request(
-                        method=method,
-                        url=url,
-                        headers=headers
-                    )
-                
-                elapsed_ms = (time.time() - start_time) * 1000
-                logger.debug(f"[PressureEngine] Request {index}: Completed in {elapsed_ms:.2f}ms, "
-                            f"status={response.status_code}")
-                
-                return RequestResult(
-                    index=index,
-                    status_code=response.status_code,
-                    response_time_ms=round(elapsed_ms, 2),
-                    success=200 <= response.status_code < 400
+            client = await self._get_client()
+            
+            if body and method in ['POST', 'PUT', 'PATCH']:
+                response = await client.request(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    content=body.encode('utf-8') if isinstance(body, str) else body
                 )
+            else:
+                response = await client.request(
+                    method=method,
+                    url=url,
+                    headers=headers
+                )
+            
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.debug(f"[PressureEngine] Request {index}: Completed in {elapsed_ms:.2f}ms, "
+                        f"status={response.status_code}")
+            
+            return RequestResult(
+                index=index,
+                status_code=response.status_code,
+                response_time_ms=round(elapsed_ms, 2),
+                success=200 <= response.status_code < 400
+            )
         
         except Exception as e:
             elapsed_ms = (time.time() - start_time) * 1000
@@ -408,16 +423,14 @@ class PressureTestEngine:
                 if self.stop_event.is_set():
                     return
                 
-                async with self._active_lock:
-                    self._active_count += 1
-                    current = self._active_count
+                self._active_count += 1
+                current = self._active_count
                 
                 try:
                     result = await self._execute_single(index)
                     await self._on_request_complete(result, total, current)
                 finally:
-                    async with self._active_lock:
-                        self._active_count -= 1
+                    self._active_count -= 1
         
         tasks = [bounded_request(i) for i in range(total)]
         logger.info(f"[PressureEngine] Created {len(tasks)} tasks")
@@ -426,51 +439,45 @@ class PressureTestEngine:
         logger.info(f"[PressureEngine] All tasks completed")
     
     async def _execute_sustained(self):
-        """持续并发：每秒X个，持续Y秒"""
+        """持续并发：每秒X个，持续Y秒（方案二改进版：等待发送时间 + semaphore）"""
         total = self.config.rate_per_second * self.config.duration_seconds
-        MAX_TOTAL_REQUESTS = 10000
+        MAX_TOTAL_REQUESTS = 5000  # 保守方案：单机压测安全上限
         if total > MAX_TOTAL_REQUESTS:
             logger.error(f"[PressureEngine] Total requests exceeds limit: {total} > {MAX_TOTAL_REQUESTS}")
             raise ValueError(f"持续并发模式总请求数超过上限 ({total} > {MAX_TOTAL_REQUESTS})，请降低 rate_per_second 或 duration_seconds")
         
         interval = 1.0 / self.config.rate_per_second
         semaphore = asyncio.Semaphore(self.config.max_concurrent)
+        start_time = time.time()
+        
         logger.info(f"[PressureEngine] _execute_sustained: total={total}, rate={self.config.rate_per_second}/s, "
                     f"duration={self.config.duration_seconds}s, interval={interval}s, max_concurrent={self.config.max_concurrent}")
         
         async def bounded_request(index: int) -> None:
+            # 1. 先等待到发送时间（独立于 semaphore）
+            send_time = start_time + index * interval
+            wait_time = send_time - time.time()
+            if wait_time > 0:
+                await asyncio.sleep(wait_time)
+            
+            # 2. 获取 semaphore 后实际发送
             async with semaphore:
                 if self.stop_event.is_set():
                     return
                 
-                async with self._active_lock:
-                    self._active_count += 1
-                    current = self._active_count
+                self._active_count += 1
+                current = self._active_count
                 
                 try:
                     result = await self._execute_single(index)
                     await self._on_request_complete(result, total, current)
                 finally:
-                    async with self._active_lock:
-                        self._active_count -= 1
+                    self._active_count -= 1
         
-        tasks = []
-        start_time = time.time()
+        # 同时创建所有任务，每个任务内部控制发送时间
+        tasks = [asyncio.create_task(bounded_request(i)) for i in range(total)]
+        logger.info(f"[PressureEngine] Created {len(tasks)} tasks with rate control")
         
-        for i in range(total):
-            if self.stop_event.is_set():
-                logger.warning(f"[PressureEngine] Stopped at request {i}/{total}")
-                break
-            
-            task = asyncio.create_task(bounded_request(i))
-            tasks.append(task)
-            
-            next_time = start_time + (i + 1) * interval
-            sleep_time = next_time - time.time()
-            if sleep_time > 0:
-                await asyncio.sleep(sleep_time)
-        
-        logger.info(f"[PressureEngine] Created {len(tasks)} tasks, waiting for completion")
         await asyncio.gather(*tasks, return_exceptions=True)
         logger.info(f"[PressureEngine] All sustained tasks completed")
     
@@ -490,16 +497,14 @@ class PressureTestEngine:
                 if self.stop_event.is_set():
                     return
                 
-                async with self._active_lock:
-                    self._active_count += 1
-                    current = self._active_count
+                self._active_count += 1
+                current = self._active_count
                 
                 try:
                     result = await self._execute_single(index)
                     await self._on_request_complete(result, total, current)
                 finally:
-                    async with self._active_lock:
-                        self._active_count -= 1
+                    self._active_count -= 1
         
         for batch_idx in range(total_batches):
             if self.stop_event.is_set():

@@ -96,6 +96,11 @@ const renderStatusTag = (status) => {
 
 const PressureTestConfigForm = ({ form, initialValues, apiRequests, onSubmit, onCancel }) => {
   const [pressureMode, setPressureMode] = useState(initialValues?.pressure_mode || 'instant');
+  
+  const ratePerSecond = Form.useWatch('rate_per_second', form);
+  const durationSeconds = Form.useWatch('duration_seconds', form);
+  const totalRequests = (ratePerSecond || 0) * (durationSeconds || 0);
+  const exceedsLimit = totalRequests > 5000;
 
   const handleSubmit = async () => {
     try {
@@ -182,19 +187,37 @@ const PressureTestConfigForm = ({ form, initialValues, apiRequests, onSubmit, on
           <Form.Item
             name="rate_per_second"
             label="每秒请求数"
-            rules={[{ required: true, message: '请输入每秒请求数' }]}
-            extra="持续并发模式下每秒发起的请求数"
+            rules={[
+              { required: true, message: '请输入每秒请求数' },
+              { type: 'number', max: 100, message: '单机压测建议≤100 req/s' }
+            ]}
+            extra="持续并发模式下每秒发起的请求数（建议≤100）"
           >
-            <InputNumber min={1} max={1000} style={{ width: '100%' }} />
+            <InputNumber min={1} max={100} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item
             name="duration_seconds"
             label="持续秒数"
-            rules={[{ required: true, message: '请输入持续秒数' }]}
-            extra="压测持续的总秒数"
+            rules={[
+              { required: true, message: '请输入持续秒数' },
+              { type: 'number', max: 300, message: '单机压测建议≤300秒' }
+            ]}
+            extra="压测持续的总秒数（建议≤300秒）"
           >
-            <InputNumber min={1} max={600} style={{ width: '100%' }} />
+            <InputNumber min={1} max={300} style={{ width: '100%' }} />
           </Form.Item>
+          {totalRequests > 0 && (
+            <Alert
+              type={exceedsLimit ? 'error' : 'info'}
+              message={`预计总请求数: ${totalRequests}`}
+              description={exceedsLimit 
+                ? `总请求数超过单机压测上限 (5000)，执行时会报错。请降低 rate_per_second 或 duration_seconds。` 
+                : `总请求数在安全范围内 (≤5000)`
+              }
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+          )}
         </>
       )}
 
@@ -230,9 +253,13 @@ const PressureTestConfigForm = ({ form, initialValues, apiRequests, onSubmit, on
       <Form.Item
         name="max_concurrent"
         label="最大并发数"
-        extra="同时最多发起的请求数（最大1000）"
+        extra="同时最多发起的请求数（单机压测安全上限≤200）"
+        rules={[
+          { required: true, message: '请输入最大并发数' },
+          { type: 'number', max: 200, message: '最大并发数不能超过200（单机压测安全上限）' }
+        ]}
       >
-        <InputNumber min={1} max={1000} style={{ width: '100%' }} />
+        <InputNumber min={1} max={200} style={{ width: '100%' }} />
       </Form.Item>
 
       <Form.Item>
@@ -378,13 +405,21 @@ const ExecutionMonitor = ({ wsState, onStart, onStop, configName }) => {
           title={<Space><CheckCircleOutlined style={{ color: '#52c41a' }} />压测完成</Space>}
           style={{ borderColor: '#52c41a', marginTop: 16 }}
         >
-          <Descriptions bordered column={3} size="small">
+          <Descriptions bordered column={4} size="small">
             <Descriptions.Item label="总请求数">{summary.totalRequests}</Descriptions.Item>
             <Descriptions.Item label="成功数">{summary.successCount}</Descriptions.Item>
             <Descriptions.Item label="失败数">{summary.failedCount}</Descriptions.Item>
             <Descriptions.Item label="错误率">{summary.errorRate}%</Descriptions.Item>
-            <Descriptions.Item label="平均响应">{summary.avgResponseTime}ms</Descriptions.Item>
-            <Descriptions.Item label="吞吐量">{summary.throughput} RPS</Descriptions.Item>
+            <Descriptions.Item label="平均响应">{summary.avgResponseTime?.toFixed(2)}ms</Descriptions.Item>
+            <Descriptions.Item label="最小响应">{summary.minResponseTime?.toFixed(2)}ms</Descriptions.Item>
+            <Descriptions.Item label="最大响应">{summary.maxResponseTime?.toFixed(2)}ms</Descriptions.Item>
+            <Descriptions.Item label="吞吐量">{summary.throughput?.toFixed(2)} RPS</Descriptions.Item>
+            <Descriptions.Item label="P50">{summary.p50ResponseTime?.toFixed(2)}ms</Descriptions.Item>
+            <Descriptions.Item label="P90">{summary.p90ResponseTime?.toFixed(2)}ms</Descriptions.Item>
+            <Descriptions.Item label="P95">{summary.p95ResponseTime?.toFixed(2)}ms</Descriptions.Item>
+            <Descriptions.Item label="P99">{summary.p99ResponseTime?.toFixed(2)}ms</Descriptions.Item>
+            <Descriptions.Item label="峰值并发">{summary.peakConcurrent}</Descriptions.Item>
+            <Descriptions.Item label="执行耗时">{summary.durationSeconds?.toFixed(2)}s</Descriptions.Item>
           </Descriptions>
         </Card>
       )}
@@ -486,7 +521,11 @@ const PressureTestManager = () => {
 
   const handleUpdateConfig = async (values) => {
     try {
-      const response = await pressureTestAPI.config.update(editingConfig.id, values);
+      const data = {
+        ...values,
+        project: editingConfig.project
+      };
+      const response = await pressureTestAPI.config.update(editingConfig.id, data);
       // DRF ViewSet update 返回 status 200 和更新的对象数据
       if (response.status === 200 || response.data?.id) {
         message.success('配置更新成功');
@@ -516,6 +555,11 @@ const PressureTestManager = () => {
   const handleExecute = async (config) => {
     setSelectedConfig(config);
     wsState.reset();
+    
+    // 确保完全断开旧连接后再创建新连接
+    if (wsState.connected) {
+      wsState.disconnect();
+    }
 
     try {
       const response = await pressureTestAPI.config.execute(config.id);
@@ -531,6 +575,10 @@ const PressureTestManager = () => {
   };
 
   const handleStart = () => {
+    if (wsState.running) {
+      message.warning('压测正在进行中');
+      return;
+    }
     if (wsState.connected && wsState.authenticated) {
       wsState.startTest();
       message.info('压测已开始');
@@ -591,14 +639,13 @@ const PressureTestManager = () => {
     loadProjects();
   }, [loadProjects]);
 
-  // 选择项目后只加载API请求列表，配置列表由用户手动刷新
+  // 选择项目后自动加载API请求列表和压测配置列表
   useEffect(() => {
     if (selectedProjectId) {
       loadApiRequests();
-      // 清空配置列表，等用户手动刷新
-      setConfigs([]);
+      loadConfigs();  // 自动加载配置列表
     }
-  }, [selectedProjectId, loadApiRequests]);
+  }, [selectedProjectId, loadApiRequests, loadConfigs]);
 
   const configColumns = [
     {

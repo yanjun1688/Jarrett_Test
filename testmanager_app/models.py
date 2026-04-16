@@ -639,9 +639,9 @@ class PressureTestConfig(models.Model):
     # 通用参数
     max_concurrent: models.IntegerField[int, int] = models.IntegerField(
         default=100,
-        validators=[MaxValueValidator(1000)],
+        validators=[MaxValueValidator(200)],
         verbose_name='最大并发数',
-        help_text='同时最多发起的请求数（最大1000）'
+        help_text='同时最多发起的请求数（单机压测建议≤200，最大200）'
     )
 
     # 可选：服务器监控（P2阶段实现）

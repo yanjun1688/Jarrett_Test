@@ -5,7 +5,7 @@
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -152,7 +152,7 @@ class AdvancedPressureTestConsumer(AsyncWebsocketConsumer):
             logger.info(f"[AdvancedPressureWS] Execution completed - status={execution.status}, "
                         f"total={execution.total_requests}, success={execution.success_count}")
             
-            # 发送完成消息
+            # 发送完成消息（包含完整统计）
             await self.send(json.dumps({
                 'type': 'complete',
                 'execution_id': execution.id,
@@ -164,9 +164,16 @@ class AdvancedPressureTestConsumer(AsyncWebsocketConsumer):
                     'failed_count': execution.failed_count,
                     'error_rate': execution.error_rate,
                     'avg_response_time': execution.avg_response_time,
+                    'min_response_time': execution.min_response_time,
+                    'max_response_time': execution.max_response_time,
+                    'p50_response_time': execution.p50_response_time,
+                    'p90_response_time': execution.p90_response_time,
+                    'p95_response_time': execution.p95_response_time,
+                    'p99_response_time': execution.p99_response_time,
                     'throughput': execution.throughput,
                     'peak_users': execution.peak_users,
-                    'duration_seconds': execution.duration_seconds
+                    'duration_seconds': execution.duration_seconds,
+                    'requests_per_endpoint': getattr(self.engine, '_parsed_stats', {}).get('requests_per_endpoint', {})
                 }
             }))
             logger.info(f"[AdvancedPressureWS] Complete message sent")
@@ -242,6 +249,31 @@ class AdvancedPressureTestConsumer(AsyncWebsocketConsumer):
             }))
         except Exception as e:
             logger.error(f"[AdvancedPressureWS] Send worker status error: {e}")
+    
+    async def send_stats_summary(self, stats: Dict[str, Any]) -> None:
+        """推送统计汇总（CSV方案）"""
+        try:
+            await self.send(json.dumps({
+                'type': 'stats_summary',
+                'total_requests': stats.get('total_requests', 0),
+                'success_count': stats.get('success_count', 0),
+                'failed_count': stats.get('failed_count', 0),
+                'error_rate': stats.get('error_rate', 0.0),
+                'avg_response_time': stats.get('avg_response_time', 0.0),
+                'min_response_time': stats.get('min_response_time', 0.0),
+                'max_response_time': stats.get('max_response_time', 0.0),
+                'p50_response_time': stats.get('p50_response_time', 0.0),
+                'p90_response_time': stats.get('p90_response_time', 0.0),
+                'p95_response_time': stats.get('p95_response_time', 0.0),
+                'p99_response_time': stats.get('p99_response_time', 0.0),
+                'throughput': stats.get('throughput', 0.0),
+                'peak_users': stats.get('peak_users', 0),
+                'duration_seconds': stats.get('duration_seconds', 0),
+                'requests_per_endpoint': stats.get('requests_per_endpoint', {})
+            }))
+            logger.info(f"[AdvancedPressureWS] Stats summary sent: {stats.get('total_requests', 0)} requests")
+        except Exception as e:
+            logger.error(f"[AdvancedPressureWS] Send stats summary error: {e}")
     
     @database_sync_to_async
     def _authenticate_token(self, token: Optional[str]) -> bool:

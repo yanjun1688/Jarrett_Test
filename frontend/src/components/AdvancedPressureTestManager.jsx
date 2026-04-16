@@ -5,41 +5,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Button, Input, InputNumber, Select, Card, Space, Typography,
-  Alert, message, Tag, Popconfirm, Table, Tooltip, Empty, Progress,
+  Alert, message, Tag, Table, Tooltip, Empty,
   Statistic, Row, Col, Form, Descriptions, Modal, Breadcrumb, Switch
 } from 'antd';
 import {
-  ThunderboltOutlined, PlayCircleOutlined, PauseCircleOutlined,
-  DeleteOutlined, ReloadOutlined, EyeOutlined, PlusOutlined,
-  EditOutlined, ClockCircleOutlined, CheckCircleOutlined,
-  CloseCircleOutlined, SyncOutlined, CloudServerOutlined,
-  HistoryOutlined, ProjectOutlined, HomeOutlined, RocketOutlined
+  PlayCircleOutlined, PauseCircleOutlined,
+  ReloadOutlined, EyeOutlined, PlusOutlined,
+  CheckCircleOutlined,
+  SyncOutlined, CloudServerOutlined,
+  HistoryOutlined, ProjectOutlined, HomeOutlined
 } from '@ant-design/icons';
 import { advancedPressureTestAPI } from '../api/advancedPressureTest';
-import { apiRequestsAPI } from '../api/apiRequests';
 import { projectsAPI } from '../api/projects';
 import { useAdvancedPressureTestWebSocket } from '../hooks/useAdvancedPressureTestWebSocket';
-import moment from 'moment';
 
 const { Text, Title } = Typography;
 const { Option } = Select;
-
-const STATUS_MAP = {
-  pending: { color: 'default', icon: <ClockCircleOutlined />, text: '待执行' },
-  running: { color: 'processing', icon: <SyncOutlined spin />, text: '执行中' },
-  completed: { color: 'success', icon: <CheckCircleOutlined />, text: '已完成' },
-  stopped: { color: 'warning', icon: <PauseCircleOutlined />, text: '已停止' },
-  failed: { color: 'error', icon: <CloseCircleOutlined />, text: '失败' }
-};
-
-const renderStatusTag = (status) => {
-  const config = STATUS_MAP[status] || STATUS_MAP.pending;
-  return (
-    <Tag icon={config.icon} color={config.color}>
-      {config.text}
-    </Tag>
-  );
-};
 
 const AdvancedPressureTestManager = () => {
   const [form] = Form.useForm();
@@ -47,12 +28,13 @@ const AdvancedPressureTestManager = () => {
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [configs, setConfigs] = useState([]);
-  const [apiRequests, setApiRequests] = useState([]);
   const [selectedConfig, setSelectedConfig] = useState(null);
   const [formVisible, setFormVisible] = useState(false);
   const [editingConfig, setEditingConfig] = useState(null);
   const [historyVisible, setHistoryVisible] = useState(false);
   const [executions, setExecutions] = useState([]);
+  const [webUiVisible, setWebUiVisible] = useState(false);
+  const [webUiUrl, setWebUiUrl] = useState(null);
 
   const getToken = () => localStorage.getItem('authToken');
   const wsState = useAdvancedPressureTestWebSocket(getToken());
@@ -81,18 +63,6 @@ const AdvancedPressureTestManager = () => {
     }
   }, [selectedProjectId]);
 
-  const loadApiRequests = useCallback(async () => {
-    if (!selectedProjectId) return;
-    try {
-      const response = await apiRequestsAPI.getAll({ project: selectedProjectId });
-      const data = response.data?.results || response.data?.data?.results || response.data || [];
-      setApiRequests(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Load API requests error:', error);
-      setApiRequests([]);
-    }
-  }, [selectedProjectId]);
-
   const handleCreateConfig = async (values) => {
     try {
       const data = { ...values, project: selectedProjectId };
@@ -109,20 +79,36 @@ const AdvancedPressureTestManager = () => {
     }
   };
 
+  const handleViewHistory = async (config) => {
+    setSelectedConfig(config);
+    setHistoryVisible(true);
+    try {
+      const response = await advancedPressureTestAPI.config.getHistory(config.id);
+      if (response.data) {
+        setExecutions(response.data?.data || response.data || []);
+      }
+    } catch (error) {
+      message.error('加载历史失败: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
   const handleExecute = async (config) => {
     setSelectedConfig(config);
     wsState.reset();
+    setWebUiUrl(null);
 
     try {
       const response = await advancedPressureTestAPI.config.execute(config.id);
       if (response.data?.execution_id || response.data?.data?.execution_id) {
         const execId = response.data?.execution_id || response.data?.data?.execution_id;
+        const uiUrl = response.data?.web_ui_url || response.data?.data?.web_ui_url;
+        
         message.info('正在启动高级压测...');
         wsState.connect(execId);
         
-        if (response.data?.web_ui_url || response.data?.data?.web_ui_url) {
-          const webUiUrl = response.data?.web_ui_url || response.data?.data?.web_ui_url;
-          message.info(`Locust Web UI: ${webUiUrl}`);
+        if (uiUrl) {
+          setWebUiUrl(uiUrl);
+          message.info(`Locust Web UI 已启用: ${uiUrl}`);
         }
       }
     } catch (error) {
@@ -143,29 +129,15 @@ const AdvancedPressureTestManager = () => {
     wsState.stopTest();
   };
 
-  const handleViewHistory = async (config) => {
-    setSelectedConfig(config);
-    setHistoryVisible(true);
-    try {
-      const response = await advancedPressureTestAPI.config.getHistory(config.id);
-      if (response.data) {
-        setExecutions(response.data?.data || response.data || []);
-      }
-    } catch (error) {
-      message.error('加载历史失败: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
   useEffect(() => {
     loadProjects();
   }, [loadProjects]);
 
   useEffect(() => {
     if (selectedProjectId) {
-      loadApiRequests();
       setConfigs([]);
     }
-  }, [selectedProjectId, loadApiRequests]);
+  }, [selectedProjectId]);
 
   const configColumns = [
     {
@@ -271,13 +243,22 @@ const AdvancedPressureTestManager = () => {
 
         {/* 监控面板 */}
         {selectedConfig && (
-          <Card title="执行监控">
+          <Card title="执行监控" extra={
+            webUiUrl && (
+              <Button 
+                icon={<EyeOutlined />}
+                onClick={() => setWebUiVisible(true)}
+              >
+                查看 Locust UI
+              </Button>
+            )
+          }>
             {!wsState.running && !wsState.summary && wsState.connected && (
               <>
                 <Alert
                   type="success"
                   message={<Space><CheckCircleOutlined /> 已连接，准备就绪</Space>}
-                  description={`配置: ${selectedConfig.name}`}
+                  description={`配置: ${selectedConfig.name} | 目标: ${selectedConfig.host}`}
                   style={{ marginBottom: 16 }}
                 />
                 <Button
@@ -289,43 +270,39 @@ const AdvancedPressureTestManager = () => {
                 >
                   开始压测
                 </Button>
-                {selectedConfig.enable_web_ui && (
+                {webUiUrl && (
                   <Alert
                     type="info"
-                    message="Locust Web UI"
-                    description={`访问地址: http://localhost:${selectedConfig.web_ui_port}`}
+                    message="Locust Web UI 已启用"
+                    description={`可在 Locust UI 中查看实时监控: ${webUiUrl}`}
                     style={{ marginTop: 16 }}
                   />
                 )}
               </>
             )}
 
-            {wsState.running && wsState.stats && (
+            {wsState.running && (
               <>
                 <Alert
                   type="info"
-                  message={<Space><SyncOutlined spin /> 正在执行</Space>}
+                  message={<Space><SyncOutlined spin /> 正在执行 ({selectedConfig.duration_seconds}秒)</Space>}
                   style={{ marginBottom: 16 }}
                 />
-                <Progress 
-                  percent={Math.round((wsState.stats.total_requests / (selectedConfig.user_count * 10)) * 100)}
-                  status="active"
-                />
-                <Row gutter={16} style={{ marginTop: 16 }}>
+                <Row gutter={16}>
                   <Col span={4}>
-                    <Statistic title="用户数" value={wsState.stats.current_users} />
+                    <Statistic title="当前用户" value={wsState.stats?.current_users || 0} suffix={`/ ${selectedConfig.user_count}`} />
                   </Col>
                   <Col span={4}>
-                    <Statistic title="RPS" value={wsState.stats.rps?.toFixed(2) || 0} />
+                    <Statistic title="总请求" value={wsState.stats?.total_requests || 0} />
                   </Col>
                   <Col span={4}>
-                    <Statistic title="成功率" value={100 - (wsState.stats.fail_ratio || 0)} suffix="%" />
+                    <Statistic title="RPS" value={wsState.stats?.rps?.toFixed(2) || wsState.stats?.throughput?.toFixed(2) || 0} />
                   </Col>
                   <Col span={4}>
-                    <Statistic title="平均响应" value={wsState.stats.avg_response_time?.toFixed(2) || 0} suffix="ms" />
+                    <Statistic title="成功率" value={100 - (wsState.stats?.fail_ratio || wsState.stats?.error_rate || 0)} suffix="%" />
                   </Col>
                   <Col span={4}>
-                    <Statistic title="总请求" value={wsState.stats.total_requests} />
+                    <Statistic title="平均响应" value={wsState.stats?.avg_response_time?.toFixed(2) || 0} suffix="ms" />
                   </Col>
                   <Col span={4}>
                     <Button type="primary" danger icon={<PauseCircleOutlined />} onClick={handleStop} block>
@@ -341,15 +318,63 @@ const AdvancedPressureTestManager = () => {
                 title={<Space><CheckCircleOutlined style={{ color: '#52c41a' }} />压测完成</Space>}
                 style={{ borderColor: '#52c41a', marginTop: 16 }}
               >
-                <Descriptions bordered column={3} size="small">
+                <Descriptions bordered column={4} size="small">
                   <Descriptions.Item label="总请求数">{wsState.summary.total_requests}</Descriptions.Item>
                   <Descriptions.Item label="成功数">{wsState.summary.success_count}</Descriptions.Item>
                   <Descriptions.Item label="失败数">{wsState.summary.failed_count}</Descriptions.Item>
-                  <Descriptions.Item label="错误率">{wsState.summary.error_rate}%</Descriptions.Item>
-                  <Descriptions.Item label="平均响应">{wsState.summary.avg_response_time}ms</Descriptions.Item>
-                  <Descriptions.Item label="吞吐量">{wsState.summary.throughput} RPS</Descriptions.Item>
+                  <Descriptions.Item label="错误率">{wsState.summary.error_rate?.toFixed(2)}%</Descriptions.Item>
+                  <Descriptions.Item label="平均响应">{wsState.summary.avg_response_time?.toFixed(2)}ms</Descriptions.Item>
+                  <Descriptions.Item label="最小响应">{wsState.summary.min_response_time?.toFixed(2)}ms</Descriptions.Item>
+                  <Descriptions.Item label="最大响应">{wsState.summary.max_response_time?.toFixed(2)}ms</Descriptions.Item>
+                  <Descriptions.Item label="吞吐量">{wsState.summary.throughput?.toFixed(2)} RPS</Descriptions.Item>
+                  <Descriptions.Item label="P50">{wsState.summary.p50_response_time?.toFixed(2)}ms</Descriptions.Item>
+                  <Descriptions.Item label="P90">{wsState.summary.p90_response_time?.toFixed(2)}ms</Descriptions.Item>
+                  <Descriptions.Item label="P95">{wsState.summary.p95_response_time?.toFixed(2)}ms</Descriptions.Item>
+                  <Descriptions.Item label="P99">{wsState.summary.p99_response_time?.toFixed(2)}ms</Descriptions.Item>
+                  <Descriptions.Item label="峰值用户">{wsState.summary.peak_users}</Descriptions.Item>
+                  <Descriptions.Item label="持续时间">{wsState.summary.duration_seconds}秒</Descriptions.Item>
                 </Descriptions>
+                
+                {wsState.summary.requests_per_endpoint && Object.keys(wsState.summary.requests_per_endpoint).length > 0 && (
+                  <div style={{ marginTop: 16 }}>
+                    <Text strong>端点统计：</Text>
+                    <Row gutter={[8, 8]} style={{ marginTop: 8 }}>
+                      {Object.entries(wsState.summary.requests_per_endpoint).map(([name, data]) => (
+                        <Col span={6} key={name}>
+                          <Card size="small">
+                            <Statistic 
+                              title={name} 
+                              value={data.requests} 
+                              suffix={`请求 | ${data.failures}失败`}
+                            />
+                          </Card>
+                        </Col>
+                      ))}
+                    </Row>
+                  </div>
+                )}
+                
+                <Button 
+                  type="primary" 
+                  style={{ marginTop: 16 }}
+                  onClick={() => {
+                    setSelectedConfig(null);
+                    wsState.reset();
+                    setWebUiUrl(null);
+                  }}
+                >
+                  返回配置列表
+                </Button>
               </Card>
+            )}
+
+            {wsState.error && (
+              <Alert
+                type="error"
+                message="执行出错"
+                description={wsState.error}
+                style={{ marginTop: 16 }}
+              />
             )}
           </Card>
         )}
@@ -391,10 +416,11 @@ const AdvancedPressureTestManager = () => {
       </Space>
 
       <Modal
-        title="新建高级压测配置"
+        title={editingConfig ? "编辑高级压测配置" : "新建高级压测配置"}
         open={formVisible}
         onCancel={() => {
           setFormVisible(false);
+          setEditingConfig(null);
           form.resetFields();
         }}
         footer={null}
@@ -403,7 +429,7 @@ const AdvancedPressureTestManager = () => {
         <Form
           form={form}
           layout="vertical"
-          initialValues={{
+          initialValues={editingConfig || {
             user_count: 100,
             spawn_rate: 10,
             duration_seconds: 60,
@@ -457,6 +483,50 @@ const AdvancedPressureTestManager = () => {
             </Space>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 历史记录 Modal */}
+      <Modal
+        title="执行历史记录"
+        open={historyVisible}
+        onCancel={() => setHistoryVisible(false)}
+        footer={null}
+        width={800}
+      >
+        <Table
+          dataSource={executions}
+          rowKey="id"
+          size="small"
+          pagination={{ pageSize: 10 }}
+          columns={[
+            { title: 'ID', dataIndex: 'id', key: 'id' },
+            { title: '状态', dataIndex: 'status', key: 'status', render: (s) => <Tag color={s === 'completed' ? 'green' : 'blue'}>{s}</Tag> },
+            { title: '总请求', dataIndex: 'total_requests', key: 'total_requests' },
+            { title: '成功率', key: 'success_rate', render: (_, r) => r.total_requests > 0 ? `${((r.success_count / r.total_requests) * 100).toFixed(1)}%` : '0%' },
+            { title: '开始时间', dataIndex: 'started_at', key: 'started_at' },
+          ]}
+          locale={{ emptyText: '暂无执行记录' }}
+        />
+      </Modal>
+
+      {/* Locust Web UI iframe Modal */}
+      <Modal
+        title="Locust Web UI 实时监控"
+        open={webUiVisible}
+        onCancel={() => setWebUiVisible(false)}
+        footer={null}
+        width={1200}
+        style={{ top: 20 }}
+      >
+        {webUiUrl && (
+          <div style={{ height: '600px', border: '1px solid #d9d9d9', borderRadius: 4 }}>
+            <iframe
+              src={webUiUrl}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+              title="Locust Web UI"
+            />
+          </div>
+        )}
       </Modal>
     </div>
   );

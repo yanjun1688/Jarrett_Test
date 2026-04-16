@@ -52,6 +52,12 @@ export const useAdvancedPressureTestWebSocket = (token) => {
           case 'stats':
             setStats(data);
             break;
+          
+          case 'stats_summary':
+            // CSV方案的统计汇总消息
+            setStats(data);
+            setSummary(data);
+            break;
             
           case 'complete':
             setRunning(false);
