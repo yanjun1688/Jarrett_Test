@@ -71,7 +71,7 @@ class YamlParser:
         
         return self._parse_config(config)
     
-    def _parse_config(self, config: Dict) -> YamlConfig:
+    def _parse_config(self, config: Dict[str, Any]) -> YamlConfig:
         """解析配置字典"""
         name = config.get('name', 'Unnamed Collection')
         description = config.get('description', '')
@@ -96,7 +96,7 @@ class YamlParser:
             extract_vars=extract_vars
         )
     
-    def validate(self, yaml_content: str) -> Tuple[bool, List[Dict], List[Dict]]:
+    def validate(self, yaml_content: str) -> Tuple[bool, List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         验证 YAML 内容
         
@@ -158,7 +158,7 @@ class YamlParser:
         
         return len(errors) == 0, errors, warnings
     
-    def _validate_step(self, step: Dict, idx: int) -> Tuple[List[Dict], List[Dict]]:
+    def _validate_step(self, step: Dict[str, Any], idx: int) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """验证单个步骤"""
         errors = []
         warnings = []

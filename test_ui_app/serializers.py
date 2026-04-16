@@ -11,9 +11,9 @@ from .models import (
 )
 
 
-class UITestScriptSerializer(serializers.ModelSerializer):
+class UITestScriptSerializer(serializers.ModelSerializer[UITestScript]):
     """UI测试脚本序列化器"""
-    actions = serializers.JSONField(default=list, help_text="动作列表（统一格式）")
+    actions = serializers.JSONField(default=list, help_text="动作列表（统一格式）")  # type: ignore[arg-type]
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     
@@ -27,10 +27,11 @@ class UITestScriptSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data: Dict[str, Any]) -> UITestScript:
         validated_data['created_by'] = self.context['request'].user
-        return super().create(validated_data)
+        script: UITestScript = super().create(validated_data)
+        return script
 
 
-class UITestScriptCreateSerializer(serializers.ModelSerializer):
+class UITestScriptCreateSerializer(serializers.ModelSerializer[UITestScript]):
     """UI测试脚本创建序列化器（使用actions格式）"""
     actions = serializers.ListField(
         child=serializers.DictField(),
@@ -68,7 +69,7 @@ class UITestScriptCreateSerializer(serializers.ModelSerializer):
         return script
 
 
-class UITestExecutionSerializer(serializers.ModelSerializer):
+class UITestExecutionSerializer(serializers.ModelSerializer[UITestExecution]):
     """UI测试执行记录序列化器"""
     script_name = serializers.CharField(source='script.name', read_only=True)
     executed_by_username = serializers.CharField(source='executed_by.username', read_only=True)
@@ -84,7 +85,7 @@ class UITestExecutionSerializer(serializers.ModelSerializer):
                            'created_at']
 
 
-class UITestExecutionListSerializer(serializers.ModelSerializer):
+class UITestExecutionListSerializer(serializers.ModelSerializer[UITestExecution]):
     """轻量级UI测试执行记录序列化器，用于列表展示，优化性能"""
     script_name = serializers.CharField(source='script.name', read_only=True)
     executed_by_username = serializers.CharField(source='executed_by.username', read_only=True)
@@ -97,7 +98,7 @@ class UITestExecutionListSerializer(serializers.ModelSerializer):
         ]
 
 
-class ScriptExecutionRequestSerializer(serializers.Serializer):
+class ScriptExecutionRequestSerializer(serializers.Serializer[Any]):
     """脚本执行请求序列化器"""
     script_id = serializers.IntegerField()
     # 可选：覆盖浏览器配置
@@ -108,7 +109,7 @@ class ScriptExecutionRequestSerializer(serializers.Serializer):
     timeout = serializers.IntegerField(required=False)
 
 
-class RecordedStepSerializer(serializers.Serializer):
+class RecordedStepSerializer(serializers.Serializer[Any]):
     """录制的步骤序列化器"""
     action_type = serializers.CharField()
     element_locator = serializers.DictField(required=False, allow_null=True)
@@ -116,7 +117,7 @@ class RecordedStepSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True, default='')
 
 
-class ScriptRecordingSerializer(serializers.Serializer):
+class ScriptRecordingSerializer(serializers.Serializer[Any]):
     """脚本录制序列化器"""
     name = serializers.CharField()
     description = serializers.CharField(required=False, allow_blank=True, default='')

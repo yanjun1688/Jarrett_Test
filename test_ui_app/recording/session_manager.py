@@ -37,7 +37,7 @@ class RecordingSessionManager:
             str: 会话ID
         """
         session_id = str(uuid.uuid4())
-        session_data = {
+        session_data: dict[str, Any] = {
             'session_id': session_id,
             'user_id': user_id,
             'start_url': start_url,

@@ -12,7 +12,7 @@ from testmanager_app.models import AuthToken
 logger = logging.getLogger(__name__)
 
 
-class TokenAuthMiddleware(BaseMiddleware):
+class TokenAuthMiddleware(BaseMiddleware):  # type: ignore[misc]
     """
     WebSocket Token认证中间件
     

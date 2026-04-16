@@ -20,7 +20,7 @@ class YamlValidator:
         self.variable_pattern = re.compile(r'{{\s*(.*?)\s*}}')
         self.valid_var_pattern = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_\.]*(\s*\|\s*default\s*:\s*"[^"]*")?$')
 
-    def validate(self, yaml_content: str, check_variables: bool = True, check_jsonpath: bool = True) -> Tuple[bool, List[Dict], List[Dict]]:
+    def validate(self, yaml_content: str, check_variables: bool = True, check_jsonpath: bool = True) -> Tuple[bool, List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         验证YAML配置文件
 
@@ -65,11 +65,12 @@ class YamlValidator:
 
         return is_valid, self.validation_errors, self.validation_warnings
 
-    def _validate_yaml_syntax(self, yaml_content: str) -> Dict[Any, Any]:
+    def _validate_yaml_syntax(self, yaml_content: str) -> Dict[str, Any]:
         """验证YAML语法并返回解析后的配置"""
-        return yaml.safe_load(yaml_content)
+        result: Dict[str, Any] = yaml.safe_load(yaml_content)
+        return result
 
-    def _validate_basic_structure(self, config: Dict) -> None:
+    def _validate_basic_structure(self, config: Dict[str, Any]) -> None:
         """验证基础结构"""
         # 检查必填字段
         required_fields = ['name', 'steps']
@@ -120,7 +121,7 @@ class YamlValidator:
                             'location': f'steps[{idx}]'
                         })
 
-    def _validate_step_structure(self, step: Dict, step_index: int) -> None:
+    def _validate_step_structure(self, step: Dict[str, Any], step_index: int) -> None:
         """验证单个步骤的结构"""
         if not isinstance(step, dict):
             self.validation_errors.append({  # type: ignore[unreachable]
@@ -170,7 +171,7 @@ class YamlValidator:
                     'location': f'steps[{step_index}].request.method'
                 })
 
-    def _validate_variables(self, config: Dict) -> None:
+    def _validate_variables(self, config: Dict[str, Any]) -> None:
         """验证模板变量语法"""
         # 收集所有定义的环境变量
         defined_vars: set[str] = set()
@@ -194,7 +195,7 @@ class YamlValidator:
                 'location': first_location
             })
 
-    def _check_variables_in_step(self, step: Dict, step_idx: int, defined_vars: set) -> None:
+    def _check_variables_in_step(self, step: Dict[str, Any], step_idx: int, defined_vars: set[str]) -> None:
         """检查步骤中的变量"""
         if not isinstance(step, dict):
             return  # type: ignore[unreachable]
@@ -229,7 +230,7 @@ class YamlValidator:
                 if isinstance(expected, str):
                     self._check_variables_in_string(expected, location, defined_vars)
 
-    def _check_variables_in_string(self, text: str, location: str, defined_vars: set) -> None:
+    def _check_variables_in_string(self, text: str, location: str, defined_vars: set[str]) -> None:
         """检查字符串中的变量语法"""
         if not isinstance(text, str):
             return  # type: ignore[unreachable]
@@ -275,7 +276,7 @@ class YamlValidator:
                                 'location': location
                             })
 
-    def _scan_for_variables(self, obj: Any, base_location: str, defined_vars: set) -> None:
+    def _scan_for_variables(self, obj: Any, base_location: str, defined_vars: set[str]) -> None:
         """递归扫描对象中的变量"""
         if isinstance(obj, dict):
             for key, value in obj.items():
@@ -297,7 +298,7 @@ class YamlValidator:
         matches = self.variable_pattern.findall(text)
         return matches if matches else []
 
-    def _extract_undefined_variables(self, config: Dict) -> Dict[str, List[str]]:
+    def _extract_undefined_variables(self, config: Dict[str, Any]) -> Dict[str, List[str]]:
         """提取未定义的变量"""
         # 收集所有定义的变量
         defined_vars: set[str] = set()
@@ -352,7 +353,7 @@ class YamlValidator:
                 variables[root_var] = []
             variables[root_var].append(location)
 
-    def _validate_jsonpath_expressions(self, config: Dict) -> None:
+    def _validate_jsonpath_expressions(self, config: Dict[str, Any]) -> None:
         """验证JSONPath表达式"""
         steps = config.get('steps', [])
         if not isinstance(steps, list):
@@ -394,7 +395,7 @@ class YamlValidator:
                                 'location': f'steps[{step_idx}].assertions[{assertion_idx}].path'
                             })
 
-    def _validate_assertions(self, config: Dict) -> None:
+    def _validate_assertions(self, config: Dict[str, Any]) -> None:
         """验证断言配置"""
         valid_comparison_types = ['equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte']
 

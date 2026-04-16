@@ -250,7 +250,7 @@ class ReportService:
         return {'statistics': statistics}
 
     @staticmethod
-    def get_report_list(project=None):
+    def get_report_list(project: Optional[Project] = None) -> QuerySet[TestReport]:
         """
         获取报告列表
 
@@ -268,7 +268,10 @@ class ReportService:
         return queryset
 
     @staticmethod
-    def generate_api_test_html_report(test_results, api_spec_info=None):
+    def generate_api_test_html_report(
+        test_results: Dict[str, Any], 
+        api_spec_info: Optional[Dict[str, Any]] = None
+    ) -> str:
         """
         生成API测试HTML报告
 
@@ -700,7 +703,7 @@ class ReportService:
             """
     
     @staticmethod
-    def save_html_report(html_content, report_name=None):
+    def save_html_report(html_content: str, report_name: Optional[str] = None) -> str:
         """
         保存HTML报告到文件
 
@@ -737,7 +740,7 @@ class ReportService:
             raise Exception(f"Failed to save HTML report: {str(e)}")
     
     @staticmethod
-    def generate_api_test_summary(test_results):
+    def generate_api_test_summary(test_results: Dict[str, Any]) -> Dict[str, Any]:
         """
         生成API测试摘要报告
 
@@ -806,7 +809,12 @@ class ReportService:
             }
     
     @staticmethod
-    def _generate_recommendations(passed_cases, failed_cases, total_cases, failed_details):
+    def _generate_recommendations(
+        passed_cases: int, 
+        failed_cases: int, 
+        total_cases: int, 
+        failed_details: List[Dict[str, Any]]
+    ) -> List[str]:
         """
         根据测试结果生成建议
 

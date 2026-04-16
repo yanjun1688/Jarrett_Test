@@ -163,7 +163,7 @@ class YamlToScriptConverter:
         }
         return preview
 
-    def _collect_all_used_variables(self, steps: List) -> set:
+    def _collect_all_used_variables(self, steps: List[Dict[str, Any]]) -> set[str]:
         """收集所有使用的变量"""
         import re
         used_vars: set[str] = set()
@@ -184,7 +184,7 @@ class YamlToScriptConverter:
 
         return used_vars
 
-    def _collect_from_string(self, text: str, location: str, variables: set, re_module: types.ModuleType) -> None:
+    def _collect_from_string(self, text: str, location: str, variables: set[str], re_module: types.ModuleType) -> None:
         """从字符串收集变量"""
         if not isinstance(text, str):
             return  # type: ignore[unreachable]
@@ -199,7 +199,7 @@ class YamlToScriptConverter:
             root_var = var.split('.')[0]
             variables.add(root_var)
 
-    def _collect_from_object(self, obj: Any, base_location: str, variables: set, re: types.ModuleType) -> None:
+    def _collect_from_object(self, obj: Any, base_location: str, variables: set[str], re: types.ModuleType) -> None:
         """递归收集对象中的变量"""
         if isinstance(obj, dict):
             for key, value in obj.items():
@@ -401,7 +401,7 @@ class YamlToCollectionConverter:
         }
         return preview
 
-    def _collect_all_used_variables(self, steps: List) -> set:
+    def _collect_all_used_variables(self, steps: List[Dict[str, Any]]) -> set[str]:
         """收集所有使用的变量"""
         import re
         used_vars: set[str] = set()
@@ -422,7 +422,7 @@ class YamlToCollectionConverter:
 
         return used_vars
 
-    def _collect_from_string(self, text: str, location: str, variables: set, re_module: types.ModuleType) -> None:
+    def _collect_from_string(self, text: str, location: str, variables: set[str], re_module: types.ModuleType) -> None:
         """从字符串收集变量"""
         if not isinstance(text, str):
             return  # type: ignore[unreachable]
@@ -437,7 +437,7 @@ class YamlToCollectionConverter:
             root_var = var.split('.')[0]
             variables.add(root_var)
 
-    def _collect_from_object(self, obj: Any, base_location: str, variables: set, re: types.ModuleType) -> None:
+    def _collect_from_object(self, obj: Any, base_location: str, variables: set[str], re: types.ModuleType) -> None:
         """递归收集对象中的变量"""
         if isinstance(obj, dict):
             for key, value in obj.items():

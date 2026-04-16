@@ -48,7 +48,7 @@ class CacheKeyRegistry:
         except Exception as e:
             logger.warning(f"Failed to register cache key {key}: {e}")
     
-    def register_prefix(self, prefix: str, keys: list) -> None:
+    def register_prefix(self, prefix: str, keys: list[str]) -> None:
         """
         批量注册具有相同前缀的缓存键
         
@@ -165,7 +165,8 @@ class CacheKeyRegistry:
             注册的键数量
         """
         try:
-            return cache.cache.client._client.scard(self._redis_key)
+            result = cache.cache.client._client.scard(self._redis_key)
+            return int(result) if result is not None else 0
         except Exception as e:
             logger.warning(f"Failed to get registry size: {e}")
             return 0

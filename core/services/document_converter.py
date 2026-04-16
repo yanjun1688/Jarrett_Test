@@ -331,7 +331,7 @@ class DocumentConverter:
         if 'servers' in spec:
             servers = spec['servers']
             if servers and len(servers) > 0:
-                return servers[0].get('url', '')
+                return str(servers[0].get('url', ''))
         elif 'host' in spec:
             host = spec['host']
             base_path = spec.get('basePath', '')
