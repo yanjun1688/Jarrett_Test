@@ -412,6 +412,4 @@ class TestChainExecutor:
         """执行API脚本（JSON格式）"""
         return self.execute_test_chain(script_content, script_format='json')
 
-    # def execute_selenium_script(self, script_content):
-    #     """执行Selenium脚本（JSON格式）"""
-    #     return self.execute_test_chain(script_content, script_format='json')
+    

@@ -16,11 +16,6 @@ from rest_framework.response import Response
 from rest_framework import status
 from asgiref.sync import sync_to_async, async_to_sync
 
-# TODO: 从 core 模块重新实现这些功能
-# from core.intent.tool_router import global_intent_processor
-# from core.tools.api_test_tool import api_test_tool
-# from core.tools.api_doc_integration import api_doc_integration_tool
-
 logger = logging.getLogger(__name__)
 
 

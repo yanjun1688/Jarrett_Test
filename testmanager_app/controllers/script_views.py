@@ -132,11 +132,6 @@ class TestScriptViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, Base
         engine = ScriptEngine()
         return engine.execute_yaml_script(script.content)
 
-    # def _execute_selenium_script(self, script):
-    #     """执行Selenium脚本"""
-    #     engine = ScriptEngine()
-    #     return engine.execute_selenium_script(script.content)
-
 
 class ScriptExecutionViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
     """脚本执行记录API"""
@@ -150,7 +145,7 @@ class ScriptExecutionViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin,
     filter_int_fields = ['script']
 
     # 缓存配置
-    cache_timeout = 120  # 列表查询缓存2分钟
+    cache_timeout = 120
     cache_list = True
     cache_retrieve = True
 
