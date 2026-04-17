@@ -136,8 +136,14 @@ pyright_errors.json
 
 # Test files
 test_*.py
-!tests/
+tests/
+**/tests/
 validate_*.py
+
+# Start scripts (local only)
+start.py
+start.sh
+start.ps1
 
 # Data directory
 data/

@@ -187,26 +187,34 @@ npm install
 
 ### 启动服务
 
-**一键启动所有服务：**
+**启动后端服务：**
+
+```bash
+# 启动 Django 开发服务器 (默认端口 8000)
+python manage.py runserver
+
+# 或启动 Daphne (生产环境，支持 WebSocket)
+daphne -b 0.0.0.0 -p 8000 testmanager.asgi:application
+```
+
+**启动 Celery Worker（异步任务处理）：**
 
 ```bash
 # Windows
-python start.py
+celery -A testmanager worker -l info -P solo
 
 # Linux/Mac
-chmod +x start.sh
-./start.sh
+celery -A testmanager worker -l info
 ```
 
-**可选参数：**
+**启动前端开发服务器：**
+
 ```bash
-python start.py --backend     # 只启动后端
-python start.py --frontend    # 只启动前端
-python start.py --celery      # 只启动 Celery Worker
-python start.py --env-only    # 只检查环境，不启动服务
+cd frontend
+npm start
 ```
 
-**或者分别启动各服务：**
+**完整启动流程：**
 
 ```bash
 # 启动 Django 后端 (默认端口 8000)
@@ -581,7 +589,9 @@ python manage.py migrate
 python manage.py createsuperuser
 
 # Start services
-python start.py
+python manage.py runserver &          # Backend
+celery -A testmanager worker -l info & # Worker
+cd frontend && npm start               # Frontend
 ```
 
 ## 🔌 API Endpoints
