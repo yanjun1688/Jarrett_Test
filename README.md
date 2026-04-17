@@ -7,26 +7,70 @@
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License">
 </p>
 
-JTest 是一个基于 Django + React 的智能化测试管理平台，深度融合 AI Agent 技术，支持 API 测试、UI 自动化测试、性能测试等功能。通过模块化 Agent 架构和技能系统，让测试工作更高效、更智能。
+JTest 是一个基于 Django + React 的智能化测试管理平台，深度融合 AI Agent 技术，支持 API 测试、UI 自动化测试、性能压测等功能。通过 Native Function Calling 架构和技能系统，让测试工作更高效、更智能。
 
 ## 核心功能
 
-### 测试管理
-- **API 测试** - RESTful API 的创建、执行、断言和报告
-- **UI 自动化测试** - 基于 Playwright 的浏览器录制和执行
-- **性能测试** - 压力测试和并发性能评估
-- **测试集合** - 批量执行、链式执行和变量传递
+### API 测试管理
+- **API 请求管理** - 创建、编辑、执行 RESTful API 请求
+- **断言与验证** - 支持状态码、JSON Path、响应时间等多种断言
+- **请求集合** - 批量执行多个 API 请求，支持并发和链式执行
+- **变量传递** - 支持集合内变量提取和传递，实现接口依赖测试
+- **YAML 导入导出** - 支持 Postman、Swagger 等格式的 YAML 导入导出
 
-### AI 智能
-- **智能对话** - 多 LLM 提供商（OpenAI/Claude/DeepSeek/GLM/Qwen）
+### UI 自动化测试
+- **Playwright 录制** - 浏览器操作录制和回放
+- **UI 测试脚本** - 管理和编辑 UI 测试脚本
+- **执行引擎** - 基于 Playwright 的浏览器自动化执行
+- **操作转换** - 录制操作转换为可执行测试脚本
+
+### 性能测试（压测）
+- **基础压测** - 简单的并发压力测试
+- **高级压测** - 基于 Locust 的分布式压测，支持自定义压测脚本
+- **实时监控** - WebSocket 实时推送压测进度和指标
+- **压测报告** - 自动生成详细的性能测试报告
+
+### AI 智能助手
+- **Native Function Calling** - 无需意图分类，LLM 直接决策调用工具或回复
+- **多 LLM 支持** - 支持 OpenAI、Claude、DeepSeek、智谱 GLM、通义千问 Qwen
 - **测试生成** - AI 辅助生成 API/UI 测试用例和脚本
-- **意图识别** - 基于集合论的智能意图分类系统
-- **RAG 知识库** - 检索增强生成，提供测试最佳实践
+- **测试规划** - 智能测试计划生成和细化
+- **智能对话** - 支持技能调用、测试执行、知识查询
+
+### Token Economics（上下文管理）
+- **Token 预算管理** - 监控和控制 Token 消耗
+- **上下文缓存优化** - 智能缓存减少重复 Token 消耗
+- **增量存储** - 增量更新上下文，避免重复传输
+- **智能摘要** - 长对话自动摘要，保持上下文精简
+- **分层管理** - 根据重要性分层存储上下文信息
+
+### 知识库管理（RAG）
+- **文档上传** - 支持 PDF、Word、Markdown、TXT 格式
+- **向量存储** - 基于 ChromaDB 的向量数据库存储
+- **智能检索** - 语义搜索，获取测试最佳实践
+- **知识构建** - 自动构建领域知识库
 
 ### 技能系统
-- **可扩展技能** - 支持动态安装和执行测试技能
-- **自定义工作流** - 灵活的技能编排和执行
-- **Agent 编排** - 多 Agent 协同完成复杂测试任务
+- **技能市场** - 浏览和安装社区技能
+- **MCP 工具集成** - 支持 Model Context Protocol 工具
+- **内置技能** - 
+  - 测试用例生成器（testcase-generator）
+  - MCP 构建器（mcp-builder）
+  - 技能创建器（skill-creator）
+  - Agent 浏览器（agent-browser）
+  - API 设计原则（api-design-principles）
+- **自定义技能** - 开发并发布自己的测试技能
+
+### 测试报告与统计
+- **执行报告** - 详细的测试执行结果统计
+- **可视化报表** - 图表展示测试趋势和分布
+- **项目统计** - 项目级别的测试覆盖率、成功率统计
+- **历史记录** - 完整的测试执行历史追踪
+
+### 用户与权限
+- **Token 认证** - 基于 Token 的 API 认证机制
+- **角色权限** - 超级管理员和普通用户权限分离
+- **用户管理** - 用户 CRUD 和权限分配
 
 ## 技术架构
 
@@ -34,10 +78,12 @@ JTest 是一个基于 Django + React 的智能化测试管理平台，深度融�
 - **Python 3.11+** - 主要开发语言
 - **Django 5.2.6** - Web 框架
 - **Django REST Framework** - RESTful API
+- **Django Channels** - WebSocket 支持
 - **Celery** - 异步任务处理
 - **Redis** - 缓存和消息队列
 - **ChromaDB** - 向量数据库（RAG）
 - **Playwright** - UI 自动化测试
+- **Locust** - 性能测试框架
 
 ### 前端
 - **React 18** - UI 框架
@@ -60,36 +106,44 @@ JTest/
 │   ├── agents/                    # Agent 实现
 │   │   ├── generation/           # 测试生成 Agent
 │   │   ├── planning/             # 测试规划 Agent
-│   │   ├── execution/            # 执行 Agent
+│   │   ├── chatbot_agent.py      # Chatbot Agent (Native Function Calling)
 │   │   ├── rag/                  # RAG 知识库 Agent
 │   │   └── llm/                  # LLM 服务层
+│   ├── context/                   # 上下文管理
+│   │   └── token_economics/      # Token Economics 系统
 │   └── tools/                     # 测试工具库
 │       ├── api/                   # HTTP 客户端
 │       ├── chatbot/              # Chatbot 工具
 │       ├── execution/            # 执行编排
 │       ├── generation/           # 测试生成
-│       ├── ui/                   # UI 测试工具
 │       └── validation/           # 响应验证
 │
-├── api/v1/                        # RESTful API
+├── api/v1/                        # RESTful API v1
+│   ├── execution/                # 执行相关 API
+│   ├── knowledge/                # 知识库 API
+│   └── planning/                 # 规划 API
+│
 ├── testmanager_app/              # API 测试管理应用
 │   ├── models.py                 # 数据模型
-│   ├── viewsets/                 # API 视图集
+│   ├── controllers/              # API 控制器
 │   ├── services/                 # 业务服务
+│   │   ├── execution_engine/     # 执行引擎
+│   │   ├── yaml_converter.py     # YAML 转换
+│   │   └── report_service.py     # 报告服务
 │   └── chatbots/                 # AI 对话
 │
 ├── test_ui_app/                  # UI 测试应用
 │   ├── recording/                # 录制功能
 │   ├── execution/                # 执行引擎
-│   └── playwright_engine.py      # Playwright 引擎
+│   ├── consumers.py              # WebSocket 消费者
+│   └── advanced_pressure_consumers.py  # 压测消费者
 │
 ├── test_ai_agent/                # AI Agent 应用
 ├── frontend/                     # React 前端
 │   ├── src/
 │   │   ├── features/            # 功能模块
 │   │   ├── components/          # 组件
-│   │   ├── api/                 # API 封装
-│   │   └── hooks/               # React Hooks
+│   │   └── api/                 # API 封装
 │   └── package.json
 │
 ├── skills/                       # 技能系统
@@ -148,11 +202,40 @@ cd frontend
 npm install
 ```
 
+## 启动服务
+
+**启动 Django 后端**
+```bash
+# 开发环境
+python manage.py runserver
+
+# 或启动 Daphne（支持 WebSocket）
+daphne -b 0.0.0.0 -p 8000 testmanager.asgi:application
+```
+
+**启动 Celery Worker**
+```bash
+# Windows
+celery -A testmanager worker -l info -P solo
+
+# Linux/Mac
+celery -A testmanager worker -l info
+```
+
+**启动前端**
+```bash
+cd frontend
+npm start
+```
+
+**访问地址**
+- 前端界面: http://localhost:3000
+- 后端 API: http://localhost:8000/api/
+- Django Admin: http://localhost:8000/admin/
+
 ## 用户管理
 
 ### 系统权限说明
-
-JTest 采用基于角色的权限管理：
 
 | 角色 | 权限 |
 |------|------|
@@ -227,61 +310,65 @@ curl -X POST http://localhost:8000/api/logout/ \
   -H "Authorization: Token your-token-here"
 ```
 
-### 获取当前用户信息
-
-```bash
-curl http://localhost:8000/api/me/ \
-  -H "Authorization: Token your-token-here"
-```
-
-### 启动服务
-
-**启动 Django 后端**
-```bash
-# 开发环境
-python manage.py runserver
-
-# 或启动 Daphne（支持 WebSocket）
-daphne -b 0.0.0.0 -p 8000 testmanager.asgi:application
-```
-
-**启动 Celery Worker**
-```bash
-# Windows
-celery -A testmanager worker -l info -P solo
-
-# Linux/Mac
-celery -A testmanager worker -l info
-```
-
-**启动前端**
-```bash
-cd frontend
-npm start
-```
-
-**访问地址**
-- 前端界面: http://localhost:3000
-- 后端 API: http://localhost:8000/api/
-- Django Admin: http://localhost:8000/admin/
-
 ## 使用示例
 
-### API 测试
+### API 测试流程
 
-1. 创建项目 → 添加 API 请求
-2. 配置请求参数（URL、方法、Headers、Body）
-3. 添加断言规则（状态码、JSON Path 等）
-4. 执行测试并查看报告
+1. **创建项目** → 在项目管理页面新建项目
+2. **添加 API 请求** → 配置 URL、方法、Headers、Body
+3. **配置断言** → 添加状态码、JSON Path 等断言规则
+4. **创建请求集合** → 将多个请求组织成集合
+5. **执行测试** → 支持单个执行、批量并发、链式执行
+6. **查看报告** → 查看执行结果和详细报告
 
-### UI 自动化测试
+**YAML 导入示例：**
+```yaml
+collection_name: "用户管理接口测试"
+requests:
+  - name: "登录接口"
+    url: "/api/auth/login"
+    method: "POST"
+    headers:
+      Content-Type: "application/json"
+    body:
+      username: "admin"
+      password: "123456"
+    assertions:
+      - type: "status_code"
+        expected: 200
+      - type: "json_path"
+        path: "$.token"
+        exists: true
+    variables:
+      - name: "auth_token"
+        source: "json"
+        path: "$.token"
+  
+  - name: "获取用户信息"
+    url: "/api/users/me"
+    method: "GET"
+    headers:
+      Authorization: "Bearer {{auth_token}}"
+```
 
-1. 录制浏览器操作
-2. 编辑生成的测试脚本
-3. 配置执行环境
-4. 运行测试并查看结果
+### UI 自动化测试流程
 
-### AI 对话
+1. **启动录制** → 点击录制按钮开始录制浏览器操作
+2. **执行操作** → 在浏览器中执行登录、点击、填写表单等操作
+3. **停止录制** → 系统自动生成测试脚本
+4. **编辑脚本** → 可编辑生成的脚本，添加断言
+5. **执行测试** → 选择浏览器环境执行测试
+6. **查看结果** → 查看执行截图和日志
+
+### 性能压测流程
+
+1. **创建压测配置** → 配置并发用户数、压测时长、请求频率
+2. **编写压测脚本**（高级模式）→ 使用 Locust 编写自定义压测脚本
+3. **启动压测** → WebSocket 实时推送压测进度
+4. **监控指标** → 实时查看 QPS、响应时间、错误率
+5. **生成报告** → 自动生成详细的压测报告
+
+### AI 对话使用
 
 ```
 用户: 帮我生成 /api/login 接口的测试用例
@@ -289,11 +376,32 @@ npm start
 AI: 好的，我来为您生成 /api/login 接口的测试用例：
 
 1. POST /api/login - 正向测试（有效凭据）
+   - 预期：返回 200，包含 token
+   
 2. POST /api/login - 边界测试（空用户名）
+   - 预期：返回 400，提示用户名不能为空
+   
 3. POST /api/login - 异常测试（错误密码）
-...
+   - 预期：返回 401，提示认证失败
 
 是否立即执行这些测试用例？
+```
+
+### 技能使用示例
+
+```bash
+# 安装技能
+curl -X POST http://localhost:8000/api/skills/install/ \
+  -H "Authorization: Token your-token" \
+  -d '{"skill_name": "testcase-generator"}'
+
+# 执行技能
+curl -X POST http://localhost:8000/api/skills/execute/ \
+  -H "Authorization: Token your-token" \
+  -d '{
+    "skill_name": "testcase-generator",
+    "input": {"endpoint": "/api/users", "method": "GET"}
+  }'
 ```
 
 ## 配置说明
@@ -324,22 +432,42 @@ ANTHROPIC_API_KEY=sk-xxx
 DEEPSEEK_API_KEY=sk-xxx
 ZHIPU_API_KEY=xxx
 QWEN_API_KEY=sk-xxx
+
+# Token Economics（可选）
+TOKEN_BUDGET_DAILY=100000
+CONTEXT_CACHE_ENABLED=true
 ```
 
 ## API 文档
 
-主要 API 端点：
+### 主要 API 端点
 
 | 端点 | 说明 |
 |------|------|
 | `/api/projects/` | 项目管理 |
 | `/api/modules/` | 模块管理 |
-| `/api/testcases/` | 测试用例 |
-| `/api/api-requests/` | API 请求 |
-| `/api/request-collections/` | 请求集合 |
-| `/api/executions/` | 执行记录 |
-| `/api/chatbot/chat/` | AI 对话 |
+| `/api/api-requests/` | API 请求管理 |
+| `/api/request-collections/` | 请求集合管理 |
+| `/api/collection-executions/` | 集合执行记录 |
+| `/api/test-scripts/` | 测试脚本管理 |
+| `/api/script-executions/` | 脚本执行记录 |
+| `/api/pressure-test-configs/` | 压测配置管理 |
+| `/api/pressure-test-executions/` | 压测执行记录 |
+| `/api/advanced-pressure-test-configs/` | 高级压测配置 |
+| `/api/advanced-pressure-test-executions/` | 高级压测执行 |
+| `/api/test-reports/` | 测试报告 |
 | `/api/skills/` | 技能管理 |
+| `/api/login/` | 用户登录 |
+| `/api/logout/` | 用户登出 |
+| `/api/me/` | 当前用户信息 |
+
+### WebSocket 端点
+
+| 端点 | 说明 |
+|------|------|
+| `/ws/chatbot/` | Chatbot 实时对话 |
+| `/ws/pressure-test/<id>/` | 压测实时进度 |
+| `/ws/advanced-pressure-test/<id>/` | 高级压测实时进度 |
 
 ## 开发指南
 
@@ -373,6 +501,21 @@ class MyTool(BaseTool):
     async def execute(self, **kwargs) -> ToolResult:
         # 实现工具逻辑
         return ToolResult(success=True, data={})
+```
+
+### 添加 Skill
+
+```python
+# skills/my-skill/skill.yaml
+name: my-skill
+description: "My custom skill"
+version: "1.0.0"
+entry_point: main.py
+
+# skills/my-skill/main.py
+async def execute(input_data: dict) -> dict:
+    # 实现技能逻辑
+    return {"result": "..."}
 ```
 
 ## 贡献指南
