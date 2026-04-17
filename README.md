@@ -134,13 +134,104 @@ python -m playwright install chromium
 5. **数据库迁移**
 ```bash
 python manage.py migrate
-python manage.py createsuperuser
 ```
 
-6. **安装前端依赖**
+6. **创建管理员账户**
+```bash
+python manage.py createsuperuser
+# 输入用户名、邮箱、密码
+```
+
+7. **安装前端依赖**
 ```bash
 cd frontend
 npm install
+```
+
+## 用户管理
+
+### 系统权限说明
+
+JTest 采用基于角色的权限管理：
+
+| 角色 | 权限 |
+|------|------|
+| **超级管理员** | 创建/删除用户、管理所有资源、系统配置 |
+| **普通用户** | 创建/管理自己的测试项目、执行测试、查看报告 |
+
+### 创建用户
+
+**方式1：通过 Django Admin（推荐）**
+```bash
+# 1. 启动后端
+python manage.py runserver
+
+# 2. 访问 http://localhost:8000/admin/
+# 3. 用超级管理员登录
+# 4. 进入 "Users" → "Add user"
+# 5. 填写用户名、密码，勾选 "Staff status" 可设为管理员
+```
+
+**方式2：通过 API（需管理员权限）**
+```bash
+curl -X POST http://localhost:8000/api/users/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Token your-admin-token" \
+  -d '{
+    "username": "newuser",
+    "password": "userpassword",
+    "email": "user@example.com"
+  }'
+```
+
+### 用户登录
+
+**获取 Token**
+```bash
+curl -X POST http://localhost:8000/api/login/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "your-username",
+    "password": "your-password"
+  }'
+
+# 响应示例：
+{
+  "token": "abc123xyz...",
+  "user": {
+    "user_id": 1,
+    "username": "your-username",
+    "token_expires_at": "2026-04-24T12:00:00"
+  }
+}
+```
+
+**使用 Token 访问 API**
+```bash
+# 在所有请求头中添加：
+Authorization: Token your-token-here
+
+curl http://localhost:8000/api/projects/ \
+  -H "Authorization: Token abc123xyz..."
+```
+
+**前端登录**
+- 访问 http://localhost:3000
+- 输入用户名密码
+- 系统自动保存 Token 到 localStorage
+
+### 用户登出
+
+```bash
+curl -X POST http://localhost:8000/api/logout/ \
+  -H "Authorization: Token your-token-here"
+```
+
+### 获取当前用户信息
+
+```bash
+curl http://localhost:8000/api/me/ \
+  -H "Authorization: Token your-token-here"
 ```
 
 ### 启动服务
