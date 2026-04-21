@@ -338,55 +338,71 @@ class SkillLoader:
     技能加载器
     
     负责扫描、加载和管理技能
+    
+    支持多目录扫描：
+    - 内置技能目录（skills/）：项目自带技能
+    - 用户技能目录（.agent/skills/）：用户从 skill.sh 安装的技能
     """
     
-    def __init__(self, skill_dir: str = "skills", enabled_categories: Optional[List[str]] = None):
+    def __init__(
+        self,
+        skill_dir: str = "skills",
+        enabled_categories: Optional[List[str]] = None,
+        extra_skill_dirs: Optional[List[str]] = None
+    ):
         """
         初始化技能加载器
         
         Args:
-            skill_dir: 技能目录路径
+            skill_dir: 主技能目录路径（内置技能）
             enabled_categories: 允许的技能类别列表，None表示全部
+            extra_skill_dirs: 额外的技能目录列表（如用户安装的技能）
         """
         self.skill_dir = Path(skill_dir)
         self.enabled_categories = enabled_categories or ["all"]
-        self.default_timeout = 30  # 默认超时时间秒
-        self.default_max_filesize = 10 * 1024 * 1024  # 10MB
+        self.default_timeout = 30
+        self.default_max_filesize = 10 * 1024 * 1024
         
-        # 已加载的技能
+        self.skill_dirs: List[Path] = [self.skill_dir]
+        if extra_skill_dirs:
+            for d in extra_skill_dirs:
+                self.skill_dirs.append(Path(d))
+        
         self.skills: Dict[str, Skill] = {}
         
-        # 缓存
         self._skill_path_cache: Dict[str, Optional[str]] = {}
         self._skill_config_cache: Dict[str, SkillSpec] = {}
         
-        logger.info(f"技能加载器初始化，目录: {self.skill_dir}")
+        dirs_str = ", ".join(str(d) for d in self.skill_dirs)
+        logger.info(f"技能加载器初始化，目录: [{dirs_str}]")
     
     def scan_skills(self) -> List[str]:
         """
-        扫描可用的技能
+        扫描可用的技能（扫描所有目录）
         
         Returns:
             找到的技能名称列表
         """
         skills_found: List[str] = []
         
-        if not self.skill_dir.exists():
-            logger.warning(f"技能目录不存在: {self.skill_dir}")
-            return skills_found
-        
-        for skill_subdir in self.skill_dir.iterdir():
-            if not skill_subdir.is_dir():
+        for skill_dir in self.skill_dirs:
+            if not skill_dir.exists():
+                logger.warning(f"技能目录不存在: {skill_dir}")
                 continue
             
-            skill_md_path = skill_subdir / "SKILL.md"
-            if skill_md_path.exists():
-                try:
-                    skill_name = skill_subdir.name
-                    skills_found.append(skill_name)
-                    logger.debug(f"发现技能: {skill_name} in {skill_md_path}")
-                except Exception as e:
-                    logger.warning(f"验证技能文件失败 {skill_md_path}: {e}")
+            for skill_subdir in skill_dir.iterdir():
+                if not skill_subdir.is_dir():
+                    continue
+                
+                skill_md_path = skill_subdir / "SKILL.md"
+                if skill_md_path.exists():
+                    try:
+                        skill_name = skill_subdir.name
+                        if skill_name not in skills_found:
+                            skills_found.append(skill_name)
+                            logger.debug(f"发现技能: {skill_name} in {skill_md_path}")
+                    except Exception as e:
+                        logger.warning(f"验证技能文件失败 {skill_md_path}: {e}")
         
         logger.info(f"扫描到 {len(skills_found)} 个技能")
         return skills_found
@@ -410,11 +426,11 @@ class SkillLoader:
         if cache_key in self._skill_path_cache:
             return self._skill_path_cache[cache_key]
         
-        # 只查找 SKILL.md 文件
-        skill_md_path = self.skill_dir / skill_name / "SKILL.md"
-        if skill_md_path.exists():
-            self._skill_path_cache[cache_key] = str(skill_md_path)
-            return str(skill_md_path)
+        for skill_dir in self.skill_dirs:
+            skill_md_path = skill_dir / skill_name / "SKILL.md"
+            if skill_md_path.exists():
+                self._skill_path_cache[cache_key] = str(skill_md_path)
+                return str(skill_md_path)
         
         self._skill_path_cache[cache_key] = None
         return None

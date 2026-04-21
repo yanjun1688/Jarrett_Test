@@ -72,7 +72,10 @@ class TestExecutionQuerySet(QuerySet['TestExecution']):
     def by_project(self, project: Any) -> 'TestExecutionQuerySet':
         """按项目过滤"""
         return self.filter(
-            Q(test_case__project=project) | Q(api_request__project=project) | Q(collection_execution__collection__project=project)
+            Q(test_case__project=project) |
+            Q(api_request__project=project) |
+            Q(collection_execution__collection__project=project) |
+            Q(test_script__project=project)
         )
 
     def by_date_range(self, start_date: Any, end_date: Any) -> 'TestExecutionQuerySet':
@@ -89,7 +92,8 @@ class TestExecutionQuerySet(QuerySet['TestExecution']):
             skipped_executions=Count('id', filter=Q(status='skipped')),
             total_cases=Count('test_case', distinct=True, filter=Q(test_case__isnull=False)) +
                         Count('api_request', distinct=True, filter=Q(api_request__isnull=False)) +
-                        Count('collection_execution', distinct=True, filter=Q(collection_execution__isnull=False))
+                        Count('collection_execution', distinct=True, filter=Q(collection_execution__isnull=False)) +
+                        Count('test_script', distinct=True, filter=Q(test_script__isnull=False))
         )
 
 
@@ -122,6 +126,7 @@ class TestExecution(models.Model):
         ('functional', '功能测试'),
         ('api', 'API测试'),
         ('flow', '流程测试'),
+        ('script', '测试脚本'),
     ]
 
     test_type = models.CharField(
@@ -159,6 +164,16 @@ class TestExecution(models.Model):
         verbose_name='所属集合执行'
     )
 
+    test_script = models.ForeignKey(
+        'testmanager_app.TestScript',
+        on_delete=models.CASCADE,
+        related_name='executions',
+        null=True,
+        blank=True,
+        verbose_name='测试脚本',
+        db_index=True
+    )
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -193,6 +208,13 @@ class TestExecution(models.Model):
         verbose_name='API响应数据'
     )
     api_logs = models.TextField(blank=True, verbose_name='API执行日志')
+    error_message = models.TextField(blank=True, verbose_name='错误信息')
+    step_results = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name='步骤执行结果',
+        help_text='格式: {"total": 10, "passed": 8, "failed": 2, "details": [...]}'
+    )
     
     screenshot_path = models.CharField(
         max_length=500,
@@ -214,7 +236,9 @@ class TestExecution(models.Model):
     objects = TestExecutionManager()
     
     def __str__(self) -> str:
-        if self.test_type == 'api' and self.api_request:
+        if self.test_type == 'script' and self.test_script:
+            return f"{self.test_script.name} - {self.get_status_display()}"
+        elif self.test_type == 'api' and self.api_request:
             return f"{self.api_request.name} - {self.get_status_display()}"
         elif self.test_type == 'api' and self.collection_execution:
             return f"{self.collection_execution.collection.name} - {self.get_status_display()}"

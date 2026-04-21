@@ -367,7 +367,7 @@ const KnowledgeBaseManager = () => {
                 >
                   <Dragger
                     name="file"
-                    accept=".txt,.md,.json,.yaml,.yml"
+                    accept=".txt,.md,.json,.yaml,.yml,.pdf,.docx,.doc"
                     beforeUpload={() => false}
                     maxCount={1}
                     showUploadList
@@ -377,7 +377,7 @@ const KnowledgeBaseManager = () => {
                     </p>
                     <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
                     <p className="ant-upload-hint">
-                      支持 txt, md, json, yaml, yml 格式的文本文件
+                      支持 PDF、Word(.docx/.doc)、TXT、Markdown、JSON、YAML 格式
                     </p>
                   </Dragger>
                 </Form.Item>

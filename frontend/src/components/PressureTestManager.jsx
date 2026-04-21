@@ -442,6 +442,8 @@ const PressureTestManager = () => {
   const [executionDetail, setExecutionDetail] = useState(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [rawResults, setRawResults] = useState([]);
+  const [logModalVisible, setLogModalVisible] = useState(false);
+  const [logModalContent, setLogModalContent] = useState('');
 
   const getToken = () => localStorage.getItem('authToken');
   const wsState = usePressureTestWebSocket(getToken);
@@ -629,6 +631,17 @@ const PressureTestManager = () => {
     }
   };
 
+  const handleViewLogs = async (execution) => {
+    try {
+      const response = await pressureTestAPI.execution.getById(execution.id);
+      const detail = response.data?.data || response.data;
+      setLogModalContent(detail?.logs || '暂无执行日志');
+      setLogModalVisible(true);
+    } catch (error) {
+      message.error('加载日志失败: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
   const handleEdit = (config) => {
     setEditingConfig(config);
     setFormVisible(true);
@@ -779,13 +792,22 @@ const PressureTestManager = () => {
       title: '操作',
       key: 'action',
       render: (_, record) => (
-        <Button 
-          icon={<EyeOutlined />}
-          onClick={() => handleViewDetail(record)}
-          size="small"
-        >
-          详情
-        </Button>
+        <Space>
+          <Button 
+            icon={<EyeOutlined />}
+            onClick={() => handleViewDetail(record)}
+            size="small"
+          >
+            详情
+          </Button>
+          <Button
+            icon={<HistoryOutlined />}
+            onClick={() => handleViewLogs(record)}
+            size="small"
+          >
+            日志
+          </Button>
+        </Space>
       )
     }
   ];
@@ -975,6 +997,21 @@ const PressureTestManager = () => {
           </Space>
         )}
       </Drawer>
+
+      {/* 执行日志弹窗 */}
+      <Modal
+        title="执行日志"
+        open={logModalVisible}
+        onCancel={() => setLogModalVisible(false)}
+        footer={[<Button key="close" onClick={() => setLogModalVisible(false)}>关闭</Button>]}
+        width={800}
+      >
+        <Card style={{ background: '#f5f5f5', maxHeight: 500, overflow: 'auto' }}>
+          <pre style={{ fontFamily: 'monospace', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>
+            {logModalContent}
+          </pre>
+        </Card>
+      </Modal>
     </div>
   );
 };

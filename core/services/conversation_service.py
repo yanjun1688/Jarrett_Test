@@ -6,7 +6,7 @@ Conversation Service - 会话管理服务（支持 Markdown 存储）
 """
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, TYPE_CHECKING
 from dataclasses import dataclass, field
 from pathlib import Path
 import logging
@@ -18,6 +18,10 @@ from django.conf import settings
 
 from core.models.agents import AgentConversation
 from core.context.markdown_store import MarkdownContextStore
+from core.context.token_economics import TokenEconomicsContextStore, BudgetStatus
+
+if TYPE_CHECKING:
+    from core.agents.llm.base_llm import BaseLLMService
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +31,7 @@ PENDING_TESTS_EXPIRE_HOURS = 1
 TITLE_MAX_LENGTH = 30
 
 _md_store: Optional[MarkdownContextStore] = None
+_token_economics_store: Optional[TokenEconomicsContextStore] = None
 
 
 def get_markdown_store() -> MarkdownContextStore:
@@ -36,6 +41,45 @@ def get_markdown_store() -> MarkdownContextStore:
         root_dir = getattr(settings, 'CONTEXT_ROOT_DIR', Path(settings.BASE_DIR / "context_data"))
         _md_store = MarkdownContextStore(root_dir)
     return _md_store
+
+
+def get_token_economics_store(
+    model_name: str = 'gpt-4',
+    llm_service: Optional['BaseLLMService'] = None
+) -> TokenEconomicsContextStore:
+    """
+    获取 TokenEconomicsContextStore 单例
+
+    支持延迟注入 llm_service：首次创建时可不传，后续调用传入时自动更新。
+
+    Args:
+        model_name: 模型名称
+        llm_service: LLM 服务（用于智能摘要，可选）
+
+    Returns:
+        TokenEconomicsContextStore 单例实例
+    """
+    global _token_economics_store
+    if _token_economics_store is None:
+        root_dir = getattr(
+            settings, 'CONTEXT_ROOT_DIR',
+            Path(settings.BASE_DIR / 'context_data')
+        )
+        _token_economics_store = TokenEconomicsContextStore(
+            root_dir=root_dir,
+            model_name=model_name,
+            llm_service=llm_service,
+        )
+        logger.info(
+            f'TokenEconomicsContextStore 单例已创建: '
+            f'root_dir={root_dir}, model={model_name}'
+        )
+    elif llm_service is not None and _token_economics_store.llm_service is None:
+        # 延迟注入 llm_service：首次创建时可能没有，后续传入时更新
+        _token_economics_store.llm_service = llm_service
+        _token_economics_store.summarizer.llm_service = llm_service
+        logger.info('TokenEconomicsContextStore: llm_service 延迟注入完成')
+    return _token_economics_store
 
 
 @dataclass
@@ -200,7 +244,7 @@ class ConversationService:
         metadata: Optional[Dict[str, Any]] = None
     ) -> Tuple[bool, Optional[str]]:
         """
-        添加消息到会话
+        添加消息到会话（使用 TokenEconomicsContextStore 带 Token 计算）
         
         Args:
             conversation_id: 会话ID
@@ -217,8 +261,8 @@ class ConversationService:
             return False, "会话不存在"
         
         if conversation.migrated_to_markdown:
-            md_store = get_markdown_store()
-            success = md_store.append_message(
+            store = get_token_economics_store()
+            success = store.append_message(
                 session_id=conversation_id,
                 user_id=str(user.id),  # pyright: ignore
                 role=role,
@@ -277,23 +321,65 @@ class ConversationService:
         return conversation.messages or [], None
     
     @staticmethod
-    def get_messages_for_llm(conversation_id: str, user: User) -> List[Dict[str, str]]:
+    def get_messages_for_llm(
+        conversation_id: str,
+        user: User,
+        model_name: str = 'gpt-4'
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
-        获取用于 LLM 的消息历史（简化格式）
+        获取用于 LLM 的消息历史（分层压缩 + Token 统计）
+        
+        使用 TokenEconomicsContextStore 进行三层管理：
+        - 热区: 最近 N 条完整消息
+        - 温区: SmartSummarizer 智能摘要
+        - 冷区: LLM 语义摘要
         
         Args:
             conversation_id: 会话ID
             user: 用户对象
+            model_name: 模型名称
             
         Returns:
-            消息列表 [{"role": "user", "content": "..."}, ...]
+            (optimized_messages, token_info)
+            - optimized_messages: 分层压缩后的消息列表
+            - token_info: Token 统计信息
         """
-        messages, _ = ConversationService.get_messages(conversation_id, user)
-        return [
-            {"role": msg["role"], "content": msg["content"]}
-            for msg in messages
-            if msg.get("role") in ["user", "assistant"]
+        conversation = ConversationService.get_conversation(conversation_id, user)
+        if not conversation:
+            return [], {}
+        
+        if conversation.migrated_to_markdown:
+            store = get_token_economics_store(model_name)
+            
+            messages = store.get_messages_for_llm(
+                session_id=conversation_id,
+                user_id=str(user.id)  # pyright: ignore
+            )
+            
+            budget = store.check_budget(
+                session_id=conversation_id,
+                user_id=str(user.id)  # pyright: ignore
+            )
+            
+            token_info: Dict[str, Any] = {
+                'total': budget.used_tokens,
+                'hot': budget.tier_breakdown.get('hot', 0),
+                'warm': budget.tier_breakdown.get('warm', 0),
+                'cold': budget.tier_breakdown.get('cold', 0),
+                'status': budget.status.value,
+                'available': budget.available_tokens,
+            }
+            
+            return messages, token_info
+        
+        # 旧数据 fallback
+        raw_messages = conversation.messages or []
+        simple_messages = [
+            {'role': msg['role'], 'content': msg['content']}
+            for msg in raw_messages
+            if msg.get('role') in ['user', 'assistant']
         ]
+        return simple_messages, {}
     
     @staticmethod
     def update_metadata(

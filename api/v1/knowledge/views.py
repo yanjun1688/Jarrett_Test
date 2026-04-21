@@ -413,10 +413,19 @@ class UploadDocumentView(APIView):
         )
         
         try:
-            content = uploaded_file.read().decode('utf-8')
-        except UnicodeDecodeError:
+            from test_ai_agent.document_loader import DocumentLoader
+            file_bytes = uploaded_file.read()
+            filename = str(uploaded_file.name)
+            content = DocumentLoader.load_document_from_bytes(file_bytes, filename)
+        except ValueError as e:
             return Response(
-                {'error': 'File encoding must be UTF-8'},
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"Error parsing uploaded file: {str(e)}")
+            return Response(
+                {'error': f'Failed to parse file: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         

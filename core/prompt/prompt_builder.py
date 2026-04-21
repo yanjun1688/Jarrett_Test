@@ -389,12 +389,15 @@ _global_prompt_builder_lock = threading.Lock()
 
 
 def get_prompt_builder(
-    context_store=None,
+    context_store: Any = None,
     model_name: str = "gpt-4",
     force_new: bool = False
 ) -> PromptBuilder:
     """
     获取 PromptBuilder（线程安全单例）
+
+    支持延迟注入 context_store：首次创建时可不传，后续调用传入时自动更新。
+    这避免了单例创建顺序导致 context_store 为 None 的问题。
     """
     if force_new:
         return PromptBuilder(context_store=context_store, model_name=model_name)
@@ -403,4 +406,12 @@ def get_prompt_builder(
     with _global_prompt_builder_lock:
         if _global_prompt_builder is None:
             _global_prompt_builder = PromptBuilder(context_store=context_store, model_name=model_name)
+        elif context_store is not None and _global_prompt_builder.context_store is None:
+            # 延迟注入：单例已创建但 context_store 为空，后续传入时更新
+            _global_prompt_builder.context_store = context_store
+            logger.info('[PromptBuilder] context_store 延迟注入完成')
+        elif context_store is not None and _global_prompt_builder.context_store is not context_store:
+            # context_store 实例变更（如测试场景），同步更新
+            _global_prompt_builder.context_store = context_store
+            logger.info('[PromptBuilder] context_store 已更新为新实例')
     return _global_prompt_builder

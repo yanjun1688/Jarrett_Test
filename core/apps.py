@@ -14,3 +14,6 @@ class CoreConfig(AppConfig):
     def ready(self) -> None:
         """Import signals when app is ready"""
         import core.signals  # noqa: F401
+        # Connect lazy signals that need models from the same app
+        core.signals._connect_test_execution_signals()
+        core.signals._connect_chatbot_execution_log_signals()

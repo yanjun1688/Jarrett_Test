@@ -3,17 +3,14 @@ AI处理器 - 处理PRD并生成测试用例
 """
 # pyright: reportAttributeAccessIssue=false, reportArgumentType=false
 import os
-import json
-from typing import List
+from typing import Any
 from langchain.prompts import PromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.pydantic_v1 import BaseModel, Field
 from dotenv import load_dotenv
-from .models import TestCase, TestSuite, ProcessedPRDChunk
 from core.agents.llm import create_llm_service
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 class AIProcessor:
     """AI处理器，用于生成测试用例"""
@@ -22,132 +19,97 @@ class AIProcessor:
         # 延迟加载环境变量（仅在初始化时执行，不在模块级别）
         load_dotenv()
 
-        # 初始化语言模型，默认使用 Qwen 模型
+        # 初始化语言模型，使用 Zhipu (GLM) 模型
         if not api_key:
-            api_key = os.getenv("DASHSCOPE_API_KEY")
+            api_key = os.getenv("ZHIPU_API_KEY")
         if not api_key:
-            logger.warning("DASHSCOPE_API_KEY not found in environment variables or parameters")
-            raise ValueError("API Key is required. Please provide DASHSCOPE_API_KEY in environment or pass it as parameter.")
+            logger.warning("ZHIPU_API_KEY not found in environment variables or parameters")
+            raise ValueError("API Key is required. Please provide ZHIPU_API_KEY in environment or pass it as parameter.")
 
         # 模型名称配置，支持从环境变量读取
         if not model_name:
-            model_name = os.getenv("QWEN_MODEL_NAME", "qwen3-coder-plus")
+            model_name = os.getenv("ZHIPU_MODEL_NAME", "glm-4.7-flash")
 
         # Temperature 配置，支持从环境变量读取
         if temperature is None:
             temperature = float(os.getenv("LLM_TEMPERATURE", "0.3"))
 
-        # 使用 Qwen LLM 服务
+        # 使用 Zhipu LLM 服务
         self.llm_service = create_llm_service(
-            provider="qwen",
+            provider="zhipu",
             model_name=model_name,
             api_key=api_key,
             temperature=temperature
         )
 
-        # 定义输出解析器
-        self.parser = JsonOutputParser()
-
-        # 定义Prompt模板
+        # 定义Prompt模板 - 要求返回Markdown格式
         self.prompt_template = PromptTemplate(
             input_variables=["prd_content"],
             template="""
-            你是一个专业的软件测试工程师，请根据以下产品需求文档内容生成详细的测试用例。
+你是一个专业的软件测试工程师，请根据以下产品需求文档(PRD)内容进行分析并生成测试用例。
 
-            要求：
-            1. 分析需求中的功能点和边界条件
-            2. 为每个功能点生成多个测试用例，包括正常情况、异常情况和边界值测试
-            3. 测试用例应包括标题、描述、前置条件、步骤、预期结果等字段
-            4. 指定测试用例的优先级（High/Medium/Low）和类型（Functional/Non-functional）
-            5. 包含具体的边界值示例
-            6. 考虑异常场景和错误处理
+## PRD内容
 
-            产品需求文档内容：
-            {prd_content}
+{prd_content}
 
-            请严格按照以下JSON格式输出结果：
-            {{
-                "test_suites": [
-                    {{
-                        "name": "测试套件名称",
-                        "description": "测试套件描述",
-                        "test_cases": [
-                            {{
-                                "title": "测试用例标题",
-                                "description": "测试用例详细描述",
-                                "preconditions": "前置条件（可选）",
-                                "steps": ["步骤1", "步骤2", ...],
-                                "expected_result": "预期结果",
-                                "priority": "High",
-                                "type": "Functional",
-                                "category": "UI"
-                            }}
-                        ]
-                    }}
-                ]
-            }}
+## 请按以下格式输出分析结果
 
-            注意事项：
-            1. 必须返回有效的JSON格式
-            2. 不要包含任何额外的文本或解释
-            3. 确保所有字段都符合要求的格式
-            4. 至少生成3个测试用例
-            5. 包含边界值测试用例
-            """
+### 1. 需求概述
+简要总结PRD中的主要功能点和测试范围。
+
+### 2. 测试策略
+说明测试的整体策略和方法。
+
+### 3. 测试用例
+
+#### 功能测试
+| 用例编号 | 用例标题 | 前置条件 | 测试步骤 | 预期结果 | 优先级 |
+|---------|---------|---------|---------|---------|--------|
+| TC-001 | ... | ... | ... | ... | High/Medium/Low |
+
+#### 边界值测试
+| 用例编号 | 测试点 | 边界值 | 预期结果 | 优先级 |
+|---------|-------|-------|---------|--------|
+| BV-001 | ... | ... | ... | ... |
+
+#### 异常场景测试
+| 用例编号 | 异常场景 | 测试步骤 | 预期结果 |
+|---------|---------|---------|---------|
+| EX-001 | ... | ... | ... |
+
+### 4. 测试数据建议
+列出需要的测试数据。
+
+### 5. 风险评估
+列出潜在的风险和注意事项。
+
+请使用Markdown格式输出，确保格式清晰、易于阅读。
+""")
+
+    async def analyze_prd(self, prd_content: str) -> str:
+        """分析PRD文档并返回Markdown格式的测试用例分析"""
+        logger.info("Analyzing PRD content")
+
+        response = await self.llm_service.generate(
+            prompt=self.prompt_template.format(prd_content=prd_content),
+            system_message="你是一个专业的软件测试工程师，擅长分析PRD文档。请使用Markdown格式输出详细的测试用例分析。"
         )
 
-    async def generate_test_cases(self, prd_content: str) -> dict:
-        """根据PRD内容生成测试用例"""
-        try:
-            logger.info("Generating test cases from PRD content")
-            # 使用 Qwen LLM 服务生成测试用例
-            response = await self.llm_service.generate(
-                prompt=self.prompt_template.format(prd_content=prd_content),
-                system_message="你是一个专业的软件测试工程师，擅长分析PRD文档并生成详细的测试用例。"
-            )
-            # 解析 JSON 响应
-            parsed_response = json.loads(response)
-            return parsed_response
-        except Exception as e:
-            logger.error(f"Error generating test cases: {str(e)}")
-            raise
+        logger.info("PRD analysis completed")
+        return response
 
-    async def process_prd_chunk(self, chunk_id: str, content: str, api_key: str = None) -> ProcessedPRDChunk:
-        """处理PRD块并生成测试用例"""
-        try:
-            # 直接调用异步方法
-            raw_output = await self.generate_test_cases(content)
+    async def process_document(self, file_path: str) -> dict[str, Any]:
+        """处理文档并返回分析结果"""
+        from .document_loader import DocumentLoader
 
-            # 解析生成的测试套件
-            test_suites = []
-            if 'test_suites' in raw_output:
-                for suite_data in raw_output['test_suites']:
-                    test_cases = []
-                    for case_data in suite_data.get('test_cases', []):
-                        test_case = TestCase(
-                            title=case_data.get('title', ''),
-                            description=case_data.get('description', ''),
-                            preconditions=case_data.get('preconditions'),
-                            steps=case_data.get('steps', []),
-                            expected_result=case_data.get('expected_result', ''),
-                            priority=case_data.get('priority', 'Medium'),
-                            type=case_data.get('type', 'Functional'),
-                            category=case_data.get('category')
-                        )
-                        test_cases.append(test_case)
+        # 加载文档
+        document_loader = DocumentLoader()
+        content = document_loader.load_document(file_path)
 
-                    test_suite = TestSuite(
-                        name=suite_data.get('name', ''),
-                        description=suite_data.get('description'),
-                        test_cases=test_cases
-                    )
-                    test_suites.append(test_suite)
+        # 分析文档
+        analysis = await self.analyze_prd(content)
 
-            return ProcessedPRDChunk(
-                chunk_id=chunk_id,
-                content=content,
-                test_suites=test_suites
-            )
-        except Exception as e:
-            logger.error(f"Error processing PRD chunk {chunk_id}: {str(e)}")
-            raise
+        return {
+            'content': content,
+            'analysis': analysis
+        }

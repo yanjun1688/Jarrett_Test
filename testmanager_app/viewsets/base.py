@@ -72,7 +72,7 @@ class QueryOptimizerMixin:
 
         继承类无需重写此方法，只需声明上面的字段列表即可
         """
-        queryset = super().get_queryset()  # type: ignore[misc]
+        queryset: QuerySet = super().get_queryset()  # type: ignore[misc]
 
         if self.select_related_fields:
             queryset = queryset.select_related(*self.select_related_fields)
@@ -113,7 +113,7 @@ class CommonFilterMixin:
         子类可以重写此方法来添加自定义过滤逻辑，
         但要记得调用 super().get_queryset() 来应用这里的通用过滤器
         """
-        queryset = super().get_queryset()  # type: ignore[misc]
+        queryset: QuerySet = super().get_queryset()  # type: ignore[misc]
 
         for field in self.filter_int_fields:
             value = self.request.query_params.get(field)  # type: ignore[attr-defined]

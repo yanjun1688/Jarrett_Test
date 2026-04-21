@@ -23,7 +23,7 @@ app = Celery('testmanager')
 
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
-@worker_init.connect  # type: ignore[untyped-decorator]
+@worker_init.connect
 def on_worker_init_handler(sender: Any | None = None, **kwargs: Any) -> None:
     """Worker进程初始化时的信号处理"""
     import asyncio
@@ -36,7 +36,7 @@ def on_worker_init_handler(sender: Any | None = None, **kwargs: Any) -> None:
 
 app.autodiscover_tasks(lambda: __import__('django.conf', fromlist=['settings']).settings.INSTALLED_APPS)
 
-@app.task(bind=True, ignore_result=True)  # type: ignore[untyped-decorator]
+@app.task(bind=True, ignore_result=True)
 def debug_task(self: Any) -> None:
     print(f'Request: {self.request!r}')
 

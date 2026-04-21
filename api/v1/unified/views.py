@@ -50,24 +50,30 @@ class UnifiedExecutionViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self) -> QuerySet[UnifiedExecution]:
         qs = UnifiedExecution.objects.select_related(
             'unified_script', 'unified_script__project',
-            'executed_by', 'content_type',
+            'project', 'executed_by', 'content_type',
         )
         unified_script = self.request.query_params.get('unified_script')
+        script_type = self.request.query_params.get('script_type')
         status_param = self.request.query_params.get('status')
         executed_by = self.request.query_params.get('executed_by')
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
+        project = self.request.query_params.get('project')
 
         if unified_script:
-            qs = qs.filter(unified_script_id=unified_script)
+            qs = qs.filter(unified_script_id=int(unified_script))
+        if script_type:
+            qs = qs.filter(script_type=script_type)
         if status_param:
             qs = qs.filter(status=status_param)
         if executed_by:
-            qs = qs.filter(executed_by_id=executed_by)
+            qs = qs.filter(executed_by_id=int(executed_by))
         if start_date:
             qs = qs.filter(started_at__gte=start_date)
         if end_date:
             qs = qs.filter(started_at__lte=end_date)
+        if project:
+            qs = qs.filter(project_id=project)
         return qs
 
     @action(detail=False, methods=['get'])
@@ -77,7 +83,7 @@ class UnifiedExecutionViewSet(viewsets.ReadOnlyModelViewSet):
         total = qs.count()
         by_status = qs.values('status').annotate(count=Count('id'))
         by_type = qs.values(
-            'unified_script__script_type',
+            'script_type',
         ).annotate(count=Count('id'))
 
         status_dict = {
@@ -96,7 +102,7 @@ class UnifiedExecutionViewSet(viewsets.ReadOnlyModelViewSet):
                 round(passed / total * 100, 2) if total > 0 else 0
             ),
             'by_type': {
-                item['unified_script__script_type']: item['count']
+                item['script_type']: item['count']
                 for item in by_type
             },
         })

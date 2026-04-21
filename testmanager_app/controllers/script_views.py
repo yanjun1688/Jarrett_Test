@@ -1,6 +1,6 @@
 """
 脚本相关视图
-包含：TestScriptViewSet, ScriptExecutionViewSet
+包含：TestScriptViewSet, ScriptExecutionViewSet (deprecated)
 """
 
 import logging
@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from core.models.test_management import TestExecution
 from testmanager_app.models import TestScript, ScriptExecution
 from testmanager_app.serializers import (
     TestScriptSerializer, TestScriptCreateSerializer,
@@ -75,17 +76,16 @@ class TestScriptViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, Base
     def execute(self, request, pk=None):
         """
         执行测试脚本（支持api/json/yaml类型）
-        
-        优化：
-        - 使用@api_exception_handler统一异常处理
-        - 移除重复的try-except块
+
+        使用统一的 TestExecution 模型记录执行结果（test_type='script'）
         """
         script = self.get_object()
         
-        # 创建执行记录
-        execution = ScriptExecution.objects.create(
-            script=script,
-            executor=request.user if request.user.is_authenticated else None,
+        # 创建 TestExecution 记录（替代 ScriptExecution）
+        execution = TestExecution.objects.create(
+            test_type='script',
+            test_script=script,
+            executed_by=request.user if request.user.is_authenticated else None,
             status='pending'
         )
         
@@ -97,16 +97,39 @@ class TestScriptViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, Base
                 result = self._execute_json_script(script)
             elif script.script_type == 'yaml':
                 result = self._execute_yaml_script(script)
-            # elif script.script_type == 'selenium':
-            #     result = self._execute_selenium_script(script)
             else:
                 raise ValueError(f"不支持的脚本类型: {script.script_type}")
             
             # 更新执行记录
-            execution.status = 'success' if result.get('success', False) else 'failed'
-            execution.output = '\n'.join(result.get('logs', []))
+            test_passed = result.get('success', False)
+            execution.status = 'passed' if test_passed else 'failed'
+            execution.api_logs = '\n'.join(result.get('logs', []))
+            execution.error_message = result.get('error', '')
+
+            # 构建步骤执行摘要
+            results_list = result.get('results', [])
+            total_steps = len(results_list)
+            passed_steps = sum(1 for r in results_list if r.get('success'))
+            failed_steps = total_steps - passed_steps
+
+            execution.step_results = {
+                'total': total_steps,
+                'passed': passed_steps,
+                'failed': failed_steps,
+                'details': results_list,
+            }
             execution.save()
-            
+
+            # 响应中包含 summary 和 execution_id
+            result['summary'] = {
+                'total_steps': total_steps,
+                'passed': passed_steps,
+                'failed': failed_steps,
+                'execution_id': execution.id,
+                'execution_status': execution.status,
+            }
+            result['execution_id'] = execution.id
+
             return Response(result, status=status.HTTP_200_OK)
             
         except Exception as e:
@@ -134,7 +157,12 @@ class TestScriptViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, Base
 
 
 class ScriptExecutionViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
-    """脚本执行记录API"""
+    """脚本执行记录API
+
+    DEPRECATED: 2026-04-21
+    请使用 TestExecution API (test_type='script') 替代。
+    此 ViewSet 保留用于向后兼容，查询历史 ScriptExecution 记录。
+    """
     queryset = ScriptExecution.objects.all()
     serializer_class = ScriptExecutionSerializer
 
