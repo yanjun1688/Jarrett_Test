@@ -152,8 +152,8 @@ async def execute_single_request_async(api_request: Any, user: Any = None) -> Di
                 'type': assertion.assertion_type,
                 'field_path': assertion.field_path,
                 'expected_value': assertion.expected_value,
-                'comparison_operator': assertion.comparison_operator,
-                'is_critical': assertion.is_critical
+                'comparison_operator': assertion.comparison,
+                'is_critical': assertion.is_critical,
             })
     elif 'assertions' in api_request_data:
         # 如果传入的是字典且包含断言
@@ -263,22 +263,39 @@ async def validate_assertion_async(
     """
     assertion_type = assertion.get('type')
     field_path = assertion.get('field_path', '')
-    expected_value = assertion.get('expected_value')
+    expected_value: Any = assertion.get('expected_value')
     comparison_operator = assertion.get('comparison_operator', 'equals')
     is_critical = assertion.get('is_critical', False)
 
     try:
+        actual_value: Any = None
         if assertion_type == 'status_code':
             actual_value = response.status_code
         elif assertion_type == 'response_time':
             actual_value = response_time
-        elif assertion_type == 'response_body':
-            actual_value = response_body
-        elif assertion_type == 'response_header':
+        elif assertion_type == 'response_body_field':
+            # 使用 field_path 从响应体中提取指定字段的值
+            if content_type == 'json' and isinstance(response_body, dict) and field_path:
+                # 支持点号分隔的嵌套路径，如 'data.id'
+                parts = field_path.split('.')
+                value: Any = response_body
+                for part in parts:
+                    if isinstance(value, dict):
+                        value = value.get(part)
+                    else:
+                        value = None
+                        break
+                actual_value = value
+            elif field_path:
+                # 非 JSON 响应体，尝试字符串匹配
+                actual_value = response_body
+            else:
+                actual_value = response_body
+        elif assertion_type == 'response_header_field':
             # 从响应头中获取字段值
             header_name = field_path
             actual_value = response.headers.get(header_name)
-        elif assertion_type == 'json_path':
+        elif assertion_type == 'jsonpath':
             # JSON路径断言
             if content_type != 'json':
                 return {
@@ -309,6 +326,16 @@ async def validate_assertion_async(
 
         # 执行比较
         passed = False
+        # 对数值类型断言做类型转换（expected_value 从数据库读出为字符串）
+        if assertion_type in ('status_code', 'response_time') and actual_value is not None:
+            try:
+                if assertion_type == 'status_code':
+                    expected_value = int(expected_value) if expected_value is not None else None
+                else:
+                    expected_value = float(expected_value) if expected_value is not None else None
+            except (ValueError, TypeError):
+                pass
+
         if comparison_operator == 'equals':
             passed = actual_value == expected_value
         elif comparison_operator == 'not_equals':

@@ -44,6 +44,7 @@ from testmanager_app import auth_views
 from testmanager_app import views as tm_views
 from test_ui_app import views as ui_views, agent_views as ui_agent_views
 from test_ai_agent import views as ai_agent_views
+from api.v1.unified import views as unified_views
 
 app_name = 'api'
 
@@ -69,6 +70,9 @@ router.register(r'feature-tests', tm_views.FeatureTestCaseViewSet, basename='fea
 
 router.register(r'ui-scripts', ui_views.UITestScriptViewSet, basename='ui-script')
 router.register(r'ui-executions', ui_views.UITestExecutionViewSet, basename='ui-execution')
+
+router.register(r'unified/scripts', unified_views.UnifiedScriptViewSet, basename='unified-script')
+router.register(r'unified/executions', unified_views.UnifiedExecutionViewSet, basename='unified-execution')
 
 auth_patterns = [
     path('login/', auth_views.LoginView.as_view(), name='auth-login'),

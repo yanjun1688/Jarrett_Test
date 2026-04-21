@@ -121,7 +121,6 @@ class TestExecution(models.Model):
     TEST_TYPE_CHOICES = [
         ('functional', '功能测试'),
         ('api', 'API测试'),
-        ('ui', 'UI测试'),
         ('flow', '流程测试'),
     ]
 

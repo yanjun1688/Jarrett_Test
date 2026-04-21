@@ -10,6 +10,7 @@ from .test_management import TestCase, TestExecution, TestFlow, TestFlowExecutio
 from .knowledge import KnowledgeBase, KnowledgeDocument
 from .agents import AgentConversation, AgentExecution
 from .chatbot_execution_log import ChatBotExecutionLog
+from .unified import UnifiedScript, UnifiedExecution, ScriptType, UnifiedStatus
 
 __all__ = [
     'Project',
@@ -23,4 +24,8 @@ __all__ = [
     'AgentConversation',
     'AgentExecution',
     'ChatBotExecutionLog',
+    'UnifiedScript',
+    'UnifiedExecution',
+    'ScriptType',
+    'UnifiedStatus',
 ]

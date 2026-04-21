@@ -167,12 +167,14 @@ class TestChainExecutor:
                 [
                     {
                         "type": "status_code",
-                        "expected": 200
+                        "expected": 200,
+                        "comparison": "equals"
                     },
                     {
                         "type": "jsonpath",
                         "expression": "$.code",
-                        "expected": 0
+                        "expected": 0,
+                        "comparison": "equals"
                     }
                 ]
         """
@@ -188,14 +190,16 @@ class TestChainExecutor:
             response_json = None
 
         for assertion in assertions:
+            actual = None
             try:
                 assertion_type = assertion.get('type')
                 expected = assertion.get('expected')
+                comparison = assertion.get('comparison', 'equals')
 
                 if assertion_type == 'status_code':
                     actual = response.status_code
-                    passed = actual == expected
-                    self.log(f"断言[状态码]: 期望={expected}, 实际={actual}, {'✅ 通过' if passed else '❌ 失败'}")
+                    passed = self._compare(actual, expected, comparison)
+                    self.log(f"断言[状态码]: 期望={expected}, 实际={actual}, 比较={comparison}, {'✅ 通过' if passed else '❌ 失败'}")
 
                 elif assertion_type == 'jsonpath' and response_json:
                     jsonpath_expr = assertion.get('expression')
@@ -204,8 +208,8 @@ class TestChainExecutor:
 
                     if matches:
                         actual = matches[0]
-                        passed = actual == expected
-                        self.log(f"断言[JSONPath]: {jsonpath_expr}, 期望={expected}, 实际={actual}, {'✅ 通过' if passed else '❌ 失败'}")
+                        passed = self._compare(actual, expected, comparison)
+                        self.log(f"断言[JSONPath]: {jsonpath_expr}, 期望={expected}, 实际={actual}, 比较={comparison}, {'✅ 通过' if passed else '❌ 失败'}")
                     else:
                         passed = False
                         self.log(f"断言[JSONPath]: {jsonpath_expr}, 未找到值, ❌ 失败")
@@ -218,7 +222,8 @@ class TestChainExecutor:
                     'type': assertion_type,
                     'passed': passed,
                     'expected': expected,
-                    'actual': actual if 'actual' in locals() else None
+                    'actual': actual,
+                    'comparison': comparison,
                 })
 
                 if not passed:
@@ -226,9 +231,54 @@ class TestChainExecutor:
 
             except Exception as e:
                 self.log(f"断言验证失败: {str(e)}")
+                results.append({
+                    'type': assertion.get('type'),
+                    'passed': False,
+                    'expected': assertion.get('expected'),
+                    'actual': actual,
+                    'error': str(e),
+                })
                 all_passed = False
 
         return all_passed, results
+
+    @staticmethod
+    def _compare(actual: Any, expected: Any, comparison: str) -> bool:
+        """执行比较操作
+
+        Args:
+            actual: 实际值
+            expected: 期望值
+            comparison: 比较方式 (equals, not_equals, contains, gt, gte, lt, lte)
+
+        Returns:
+            比较结果
+        """
+        if comparison == 'equals':
+            return actual == expected
+        elif comparison == 'not_equals':
+            return actual != expected
+        elif comparison == 'contains':
+            return str(expected) in str(actual)
+        elif comparison in ('gt', 'greater_than'):
+            if actual is not None and expected is not None:
+                return float(actual) > float(expected)
+            return False
+        elif comparison in ('gte', 'greater_than_or_equal'):
+            if actual is not None and expected is not None:
+                return float(actual) >= float(expected)
+            return False
+        elif comparison in ('lt', 'less_than'):
+            if actual is not None and expected is not None:
+                return float(actual) < float(expected)
+            return False
+        elif comparison in ('lte', 'less_than_or_equal'):
+            if actual is not None and expected is not None:
+                return float(actual) <= float(expected)
+            return False
+        else:
+            # 默认 equals
+            return actual == expected
 
     def execute_step(self, step):
         """
@@ -348,7 +398,7 @@ class TestChainExecutor:
                         }
 
             # 4. 执行测试步骤
-            test_steps = config.get('test_steps', [])
+            test_steps = config.get('steps') or config.get('test_steps', [])
             results = []
             all_passed = True
 

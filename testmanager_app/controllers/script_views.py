@@ -103,8 +103,8 @@ class TestScriptViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, Base
                 raise ValueError(f"不支持的脚本类型: {script.script_type}")
             
             # 更新执行记录
-            execution.status = 'completed' if result.get('success', False) else 'failed'
-            execution.result_data = result
+            execution.status = 'success' if result.get('success', False) else 'failed'
+            execution.output = '\n'.join(result.get('logs', []))
             execution.save()
             
             return Response(result, status=status.HTTP_200_OK)
@@ -112,7 +112,7 @@ class TestScriptViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, Base
         except Exception as e:
             logger.error(f"执行脚本失败: {str(e)}")
             execution.status = 'failed'
-            execution.result_data = {'error': str(e)}
+            execution.error_message = str(e)
             execution.save()
             
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

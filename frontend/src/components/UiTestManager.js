@@ -60,6 +60,8 @@ const UiTestManager = () => {
 
   // 轮询执行状态的 ref（用于清理）
   const pollingRef = React.useRef(null);
+  const pollingStartRef = React.useRef(null);
+  const POLLING_TIMEOUT_MS = 2 * 60 * 1000; // 2分钟超时
 
   // 停止轮询
   const stopPolling = useCallback(() => {
@@ -67,10 +69,19 @@ const UiTestManager = () => {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
+    pollingStartRef.current = null;
   }, []);
 
   // 轮询查询执行状态
   const pollExecutionStatus = useCallback(async (executionId) => {
+    // 超时保护
+    if (pollingStartRef.current && Date.now() - pollingStartRef.current > POLLING_TIMEOUT_MS) {
+      stopPolling();
+      setExecutingId(null);
+      notification.warning({ message: '执行超时', description: '轮询已超过2分钟，请检查 Celery worker 是否正常运行' });
+      return;
+    }
+
     try {
       const res = await uiTestsAPI.getExecutionLogs(executionId);
       const detail = res.data;
@@ -122,6 +133,7 @@ const UiTestManager = () => {
         notification.info({ message: '任务已提交，正在执行中...', duration: 2 });
         
         // 开始轮询执行状态（每 2 秒查询一次）
+        pollingStartRef.current = Date.now();
         pollingRef.current = setInterval(() => {
           pollExecutionStatus(executionId);
         }, 2000);
