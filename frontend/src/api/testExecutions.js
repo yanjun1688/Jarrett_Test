@@ -14,9 +14,4 @@ export const testExecutionsAPI = {
     const queryString = new URLSearchParams(params).toString();
     return apiClient.get(`/executions/${queryString ? `?${queryString}&test_type=api` : '?test_type=api'}`);
   },
-  
-  getUiTestLogs: (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return apiClient.get(`/executions/${queryString ? `?${queryString}&test_type=ui` : '?test_type=ui'}`);
-  },
 };

@@ -24,15 +24,20 @@ class ExecuteTestTool(BaseTool):
         super().__init__(
             name="execute_test",
             description="执行已有的测试用例或测试脚本。\n\n"
-                       "**执行方式：**\n\n"
-                       "1. **单步执行（推荐）**：用户说\"执行 XXX 脚本\"时，直接调用此工具\n"
+                       "**执行方式（按推荐优先级排列）：**\n\n"
+                       "1. **unified_script_id 执行（推荐）**：使用 query_test_scripts 返回的 "
+                       "unified_script_id\n"
+                       "   - 参数：unified_script_id（统一脚本ID，优先级最高）\n"
+                       "   - 系统根据脚本类型自动路由到对应执行逻辑（API/UI）\n\n"
+                       "2. **单步执行**：用户说\"执行 XXX 脚本\"时，直接调用此工具\n"
                        "   - 参数：script_name（脚本名称）、project_name（可选，项目名称）\n"
                        "   - 系统会自动查找并执行匹配的脚本\n\n"
-                       "2. **两步执行**：先调用 query_test_scripts 查询，确认后再执行\n"
+                       "3. **两步执行**：先调用 query_test_scripts 查询，确认后再执行\n"
                        "   - 步骤1：query_test_scripts 返回脚本列表和 ID\n"
-                       "   - 步骤2：用户确认后，调用 execute_test(test_script_id=ID)\n\n"
-                       "3. **执行 UI 测试脚本**：使用 test_id 参数\n\n"
-                       "**注意：** 当用户说\"执行这个脚本\"时，检查上下文中是否有脚本ID，如果有则直接用 test_script_id 执行。",
+                       "   - 步骤2：用户确认后，调用 execute_test(unified_script_id=ID)\n\n"
+                       "4. **执行 UI 测试脚本**：使用 test_id 参数\n\n"
+                       "**注意：** 当用户说\"执行这个脚本\"时，优先使用上下文中的 "
+                       "unified_script_id，其次使用 test_script_id。",
             version="1.3.0",
             timeout=120
         )
@@ -41,6 +46,10 @@ class ExecuteTestTool(BaseTool):
     
     def _build_parameters_schema(self) -> Dict[str, Any]:
         return {
+            "unified_script_id": {
+                "type": "integer",
+                "description": "UnifiedScript ID（从 query_test_scripts 返回结果获取，优先级最高）"
+            },
             "test_script_id": {
                 "type": "integer",
                 "description": "TestScript ID（从 query_test_scripts 返回结果获取，或从上下文中的脚本ID）"
@@ -79,11 +88,12 @@ class ExecuteTestTool(BaseTool):
     def _get_required_parameters(self) -> List[str]:
         return []
     
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs: Any) -> ToolResult:
         """
         执行测试
         
         Args:
+            unified_script_id: UnifiedScript ID（推荐，自动路由到对应执行逻辑）
             test_script_id: TestScript ID（从 query_test_scripts 获取）
             script_name: 脚本名称（单步执行，自动查找）
             project_name: 项目名称（配合 script_name 使用）
@@ -96,6 +106,7 @@ class ExecuteTestTool(BaseTool):
         Returns:
             执行结果（包含 execution_id）
         """
+        unified_script_id = kwargs.get('unified_script_id')
         test_script_id = kwargs.get("test_script_id")
         script_name = kwargs.get("script_name")
         project_name = kwargs.get("project_name")
@@ -106,11 +117,35 @@ class ExecuteTestTool(BaseTool):
         user_id = kwargs.get("user_id")
         execution_logger = kwargs.get("_execution_logger")
         
-        logger.info(f"[ExecuteTest] 收到执行请求: test_script_id={test_script_id}, script_name='{script_name}', project_name='{project_name}', test_id={test_id}, user_id={user_id}")
+        logger.info(
+            f'[ExecuteTest] 收到执行请求: unified_script_id={unified_script_id}, '
+            f'test_script_id={test_script_id}, script_name={script_name!r}, '
+            f'project_name={project_name!r}, test_id={test_id}, user_id={user_id}'
+        )
         
         if execution_logger:
-            log_type = 'api_test' if (test_script_id or script_name or test_type == "api") else 'ui_test'
-            await sync_to_async(execution_logger.start)(log_type, '执行测试', f'正在执行{"API" if test_script_id or script_name or test_type == "api" else "UI"}测试')
+            log_type = 'api_test' if (
+                test_script_id or script_name or test_type == 'api'
+            ) else 'ui_test'
+            await sync_to_async(execution_logger.start)(
+                log_type, '执行测试',
+                f'正在执行{"API" if test_script_id or script_name or test_type == "api" else "UI"}测试',
+            )
+        
+        # 优先级0: 使用 unified_script_id 路由（最高优先级）
+        if unified_script_id:
+            result = await self._execute_by_unified_script_id(
+                unified_script_id, user_id=user_id,
+            )
+            if execution_logger:
+                await sync_to_async(execution_logger.finish)({
+                    'status': 'success' if result.success else 'error',
+                    'unified_script_id': unified_script_id,
+                    'execution_id': (
+                        result.data.get('execution_id') if result.data else None
+                    ),
+                })
+            return result
         
         # 优先级1: 直接使用 test_script_id 执行
         if test_script_id:
@@ -215,6 +250,82 @@ class ExecuteTestTool(BaseTool):
                 error=f"Execution error: {str(e)}"
             )
     
+    async def _execute_by_unified_script_id(
+        self,
+        unified_script_id: int,
+        user_id: Optional[int] = None,
+    ) -> ToolResult:
+        """
+        通过 UnifiedScript ID 路由执行测试。
+
+        根据 UnifiedScript.script_type 自动路由到对应的执行逻辑：
+        - api  -> _execute_test_script (TestScript)
+        - ui   -> _execute_by_id (UITestScript)
+        - pressure / advanced_pressure -> 暂不支持提示
+        """
+        logger.info(
+            f'[ExecuteUnified] 使用 unified_script_id={unified_script_id} 路由执行'
+        )
+
+        try:
+            @sync_to_async
+            def _lookup_unified_script() -> tuple[str, int]:
+                from core.models.unified import UnifiedScript
+
+                us = UnifiedScript.objects.get(pk=unified_script_id)
+                return us.script_type, us.object_id
+
+            script_type, source_id = await _lookup_unified_script()
+            logger.info(
+                f'[ExecuteUnified] script_type={script_type}, source_id={source_id}'
+            )
+
+            if script_type == 'api':
+                return await self._execute_test_script(
+                    source_id, user_id=user_id,
+                )
+            elif script_type == 'ui':
+                return await self._execute_by_id(
+                    source_id, user_id=user_id,
+                )
+            elif script_type in ('pressure', 'advanced_pressure'):
+                type_display = '高级压测' if script_type == 'advanced_pressure' else '压测'
+                return ToolResult(
+                    success=False,
+                    data={},
+                    error=(
+                        f'{type_display}脚本暂不支持通过此工具执行，'
+                        f'请使用压测管理页面手动执行'
+                    ),
+                )
+            else:
+                return ToolResult(
+                    success=False,
+                    data={},
+                    error=f'未知的脚本类型: {script_type}',
+                )
+
+        except Exception as e:
+            error_msg = str(e)
+            if 'DoesNotExist' in error_msg:
+                logger.error(
+                    f'[ExecuteUnified] UnifiedScript 不存在: '
+                    f'id={unified_script_id}'
+                )
+                return ToolResult(
+                    success=False,
+                    data={},
+                    error=f'UnifiedScript 不存在: ID={unified_script_id}',
+                )
+            logger.error(
+                f'[ExecuteUnified] 路由执行失败: {error_msg}', exc_info=True,
+            )
+            return ToolResult(
+                success=False,
+                data={},
+                error=f'执行失败: {error_msg}',
+            )
+
     async def _execute_by_script_name_direct(self, script_name: str, project_name: Optional[str] = None, user_id: Optional[int] = None) -> ToolResult:
         """
         通过脚本名称单步查找并执行（用户说\"执行XXX脚本\"时的自动处理）

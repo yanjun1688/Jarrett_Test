@@ -243,6 +243,11 @@ class ApiAssertion(models.Model):
     field_path: models.CharField[str, str] = models.CharField(max_length=200, blank=True, verbose_name='字段路径')
     comparison: models.CharField[str, str] = models.CharField(max_length=20, choices=COMPARISON_CHOICES, verbose_name='比较方式')
     expected_value: models.CharField[str, str] = models.CharField(max_length=200, verbose_name='期望值')
+    is_critical: models.BooleanField[bool, bool] = models.BooleanField(
+        default=False,
+        verbose_name='是否关键断言',
+        help_text='关键断言失败时整个测试标记为失败',
+    )
     created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     
     class Meta(TypedModelMeta):

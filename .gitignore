@@ -78,6 +78,9 @@ media/ui_test_work/
 .playwright-mcp/
 .mypy_cache/
 
+# Hypothesis (property-based testing)
+.hypothesis/
+
 # Operating System
 .DS_Store
 .DS_Store?
@@ -97,11 +100,14 @@ logs/
 tmp*.yaml
 tmp*.py
 frontend/download-*/
+nul
 
 # Local scripts (not needed in repo)
 verify_recorder.py
 restart_server.ps1
 check_coverage.py
+skills-lock.json
+package-lock.json
 
 # Backups
 *.bak

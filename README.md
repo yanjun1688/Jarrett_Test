@@ -323,33 +323,81 @@ curl -X POST http://localhost:8000/api/logout/ \
 
 **YAML 导入示例：**
 ```yaml
-collection_name: "用户管理接口测试"
-requests:
-  - name: "登录接口"
-    url: "/api/auth/login"
-    method: "POST"
-    headers:
-      Content-Type: "application/json"
-    body:
-      username: "admin"
-      password: "123456"
+name: 用户管理接口测试
+description: 登录获取 token，然后用 token 获取用户信息
+variables:
+  base_url: https://api.example.com
+steps:
+  - name: 登录接口
+    request:
+      method: POST
+      url: "{{base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      json:
+        username: admin
+        password: "123456"
+    extract:
+      - name: auth_token
+        jsonpath: "$.token"
     assertions:
-      - type: "status_code"
+      - type: status_code
         expected: 200
-      - type: "json_path"
-        path: "$.token"
-        exists: true
-    variables:
-      - name: "auth_token"
-        source: "json"
-        path: "$.token"
-  
-  - name: "获取用户信息"
-    url: "/api/users/me"
-    method: "GET"
-    headers:
-      Authorization: "Bearer {{auth_token}}"
+        comparison: equals
+      - type: jsonpath
+        expression: "$.token"
+        expected: "some-token-value"
+        comparison: not_equals
+
+  - name: 获取用户信息
+    request:
+      method: GET
+      url: "{{base_url}}/api/users/me"
+      headers:
+        Authorization: "Bearer {{auth_token}}"
+    assertions:
+      - type: status_code
+        expected: 200
+        comparison: equals
+      - type: jsonpath
+        expression: "$.username"
+        expected: admin
+        comparison: equals
 ```
+
+**YAML 字段说明：**
+
+| 字段 | 说明 | 必填 |
+|------|------|------|
+| `name` | 脚本名称 | ✅ |
+| `description` | 脚本描述 | ❌ |
+| `variables` | 初始变量（字典格式，支持 `{{var}}` 模板） | ❌ |
+| `steps` | 测试步骤列表 | ✅ |
+| `setup` | 前置步骤（失败则中止） | ❌ |
+| `teardown` | 后置步骤（无论成功失败都执行） | ❌ |
+| `stop_on_failure` | 步骤失败时是否中止（默认 true） | ❌ |
+
+**步骤字段：**
+
+| 字段 | 说明 | 必填 |
+|------|------|------|
+| `name` | 步骤名称 | ✅ |
+| `request.method` | HTTP 方法 | ✅ |
+| `request.url` | 请求 URL（支持 `{{var}}` 模板） | ✅ |
+| `request.headers` | 请求头（支持模板） | ❌ |
+| `request.json` | JSON 请求体 | ❌ |
+| `request.data` | 表单数据 | ❌ |
+| `extract` | 变量提取规则 `[{name, jsonpath}]` | ❌ |
+| `assertions` | 断言列表 | ❌ |
+
+**断言字段：**
+
+| 字段 | 说明 | 必填 |
+|------|------|------|
+| `type` | 断言类型：`status_code` 或 `jsonpath` | ✅ |
+| `expected` | 期望值 | ✅ |
+| `comparison` | 比较方式：`equals`、`not_equals`、`contains`、`gt`、`gte`、`lt`、`lte` | ✅ |
+| `expression` | JSONPath 表达式（type=jsonpath 时必填） | 条件必填 |
 
 ### UI 自动化测试流程
 

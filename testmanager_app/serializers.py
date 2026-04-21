@@ -47,13 +47,14 @@ class TestCaseCreateSerializer(serializers.ModelSerializer[TestCase]):
     """测试用例创建序列化器（用于创建和更新操作）"""
     class Meta:
         model = TestCase
-        fields = ['title', 'project', 'module', 'priority', 'precondition', 'steps', 'expected_result']
+        fields = ['id', 'title', 'project', 'module', 'priority', 'precondition', 'steps', 'expected_result']
+        read_only_fields = ['id']
 
 
 class TestExecutionSerializer(serializers.ModelSerializer[TestExecution]):
-    testcase_title = serializers.CharField(source='testcase.title', read_only=True)
-    api_request_name = serializers.CharField(source='api_request.name', read_only=True)
-    executor_name = serializers.CharField(source='executor.username', read_only=True)
+    testcase_title = serializers.CharField(source='testcase.title', read_only=True, default=None)
+    api_request_name = serializers.CharField(source='api_request.name', read_only=True, default=None)
+    executor_name = serializers.CharField(source='executed_by.username', read_only=True, default=None)
 
     class Meta:
         model = TestExecution
@@ -68,10 +69,10 @@ class TestExecutionCreateSerializer(serializers.ModelSerializer[TestExecution]):
 
 class TestExecutionListSerializer(serializers.ModelSerializer[TestExecution]):
     """轻量级执行记录序列化器，用于列表展示，优化性能"""
-    api_request_name = serializers.CharField(source='api_request.name', read_only=True)
-    api_request_url = serializers.CharField(source='api_request.url', read_only=True)
-    api_request_method = serializers.CharField(source='api_request.method', read_only=True)
-    executor_name = serializers.CharField(source='executor.username', read_only=True)
+    api_request_name = serializers.CharField(source='api_request.name', read_only=True, default=None)
+    api_request_url = serializers.CharField(source='api_request.url', read_only=True, default=None)
+    api_request_method = serializers.CharField(source='api_request.method', read_only=True, default=None)
+    executor_name = serializers.CharField(source='executed_by.username', read_only=True, default=None)
     
     class Meta:
         model = TestExecution
@@ -215,7 +216,7 @@ class ApiAssertionCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = ApiAssertion
-        fields = ['api_request', 'assertion_type', 'field_path', 'comparison', 'expected_value']
+        fields = ['api_request', 'assertion_type', 'field_path', 'comparison', 'expected_value', 'is_critical']
     
     def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
         """验证字段路径的条件必填"""
@@ -629,12 +630,13 @@ class AdvancedPressureTestConfigCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = AdvancedPressureTestConfig
         fields = [
-            'name', 'description', 'project',
+            'id', 'name', 'description', 'project',
             'scenario', 'host', 'user_count', 'spawn_rate', 'duration_seconds',
             'use_distributed', 'worker_count',
             'web_ui_port', 'enable_web_ui',
             'tags', 'exclude_tags'
         ]
+        read_only_fields = ['id']
     
     def validate_scenario(self, value: Dict) -> Dict:
         """验证场景配置"""

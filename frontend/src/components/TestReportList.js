@@ -1,7 +1,7 @@
 import React, { useReducer, useEffect, useCallback, useState, useMemo, useRef } from 'react';
 import axios from 'axios';
 import apiClient from '../api/axios';
-import { Row, Col, Card, Statistic, Progress, Typography, Space, notification, Tabs, Table, Tag, Button, Spin } from 'antd';
+import { Row, Col, Card, Statistic, Progress, Typography, Space, notification, Tabs, Table, Tag, Button, Spin, Select, Empty } from 'antd';
 import ExecutionPieChart from './ExecutionPieChart';
 import { testExecutionsAPI } from '../api/testExecutions';
 import { uiTestsAPI } from '../api/uiTests';
@@ -67,6 +67,9 @@ function TestReportList() {
 
   const [state, dispatch] = useReducer(reducer, initialState);
   const { statistics, loading } = state;
+  
+  // 当前选中的项目索引
+  const [selectedProjectIndex, setSelectedProjectIndex] = useState(undefined);
   
   // 根据URL参数设置默认tab
   const [activeTab, setActiveTab] = useState(() => {
@@ -176,18 +179,17 @@ function TestReportList() {
     }
   }, [normalizeExecutionRecord]);
 
-  // 获取UI测试日志列表
+  // 获取UI测试日志列表（使用 UITestExecution 模型）
   const fetchUiTestLogs = useCallback(async (page = 1, pageSize = 20) => {
     setUiLogsLoading(true);
     try {
-      const response = await testExecutionsAPI.getUiTestLogs({
+      const response = await uiTestsAPI.getExecutions({
         page,
         page_size: pageSize,
       });
       
       const { results, count } = response.data;
-      const normalizedData = (results || []).map(record => normalizeExecutionRecord(record, 'ui'));
-      setUiLogs(normalizedData);
+      setUiLogs(results || []);
       setUiLogsPagination(prev => ({
         ...prev,
         current: page,
@@ -201,7 +203,7 @@ function TestReportList() {
     } finally {
       setUiLogsLoading(false);
     }
-  }, [normalizeExecutionRecord]);
+  }, []);
 
   // 获取ChatBot执行日志列表
   const fetchChatbotLogs = useCallback(async (page = 1, pageSize = 20) => {
@@ -356,13 +358,13 @@ function TestReportList() {
     },
   ], [handleViewApiLog]);
 
-  // UI测试日志表格列定义 - 使用统一配置
+  // UI测试日志表格列定义 - 使用 UITestExecution 模型字段
   const uiLogsColumns = useMemo(() => [
     {
       title: '脚本名称',
-      dataIndex: 'test_name',
-      key: 'test_name',
-      render: (text) => <strong>{text}</strong>,
+      dataIndex: 'script_name',
+      key: 'script_name',
+      render: (text) => <strong>{text || '-'}</strong>,
     },
     {
       title: '执行状态',
@@ -385,15 +387,15 @@ function TestReportList() {
     },
     {
       title: '执行人',
-      dataIndex: 'executor_name',
-      key: 'executor_name',
+      dataIndex: 'executed_by_username',
+      key: 'executed_by_username',
       width: 100,
       render: (name) => name || '-',
     },
     {
       title: '执行时间',
-      dataIndex: 'executed_at',
-      key: 'executed_at',
+      dataIndex: 'created_at',
+      key: 'created_at',
       width: 180,
       render: (text) => text ? new Date(text).toLocaleString() : '-',
     },
@@ -427,72 +429,96 @@ function TestReportList() {
           {loading && statistics.length === 0 ? (
             <Card loading={true} />
           ) : (
-            statistics.map((stat, index) => (
-              <Card key={index} title={`项目统计: ${stat.project_name}`} className="test-report-stat-card">
-                <Row gutter={[16, 24]}>
-                  <Col xs={24} sm={12} md={6}>
-                    <Statistic title="总执行数" value={stat.total_executions || 0} />
-                  </Col>
-                  <Col xs={24} sm={12} md={6}>
-                    <Statistic title="成功/通过" value={stat.total_passed || 0} valueStyle={{ color: '#3f8600' }} />
-                  </Col>
-                  <Col xs={24} sm={12} md={6}>
-                    <Statistic title="失败" value={stat.total_failed || 0} valueStyle={{ color: '#cf1322' }} />
-                  </Col>
-                  <Col xs={24} sm={12} md={6}>
-                    <Statistic title="总成功率" value={stat.total_pass_rate || 0} suffix="%" />
-                  </Col>
-                </Row>
-                
-                <Title level={5} style={{ marginTop: 24, marginBottom: 16 }}>分类型统计</Title>
-                <Row gutter={[16, 24]}>
-                  <Col xs={24} md={8}>
-                    <Card size="small" title="API测试" bordered={false}>
-                      <Statistic title="执行数" value={stat.api_tests?.total || 0} />
-                      <Statistic title="通过数" value={stat.api_tests?.passed || 0} valueStyle={{ color: '#3f8600', fontSize: 16 }} />
-                      <Statistic title="失败数" value={stat.api_tests?.failed || 0} valueStyle={{ color: '#cf1322', fontSize: 16 }} />
-                      <Progress percent={stat.api_tests?.pass_rate || 0} size="small" status={stat.api_tests?.pass_rate >= 80 ? 'success' : 'normal'} />
-                    </Card>
-                  </Col>
-                  <Col xs={24} md={8}>
-                    <Card size="small" title="UI测试" bordered={false}>
-                      <Statistic title="执行数" value={stat.ui_tests?.total || 0} />
-                      <Statistic title="成功数" value={stat.ui_tests?.success || 0} valueStyle={{ color: '#3f8600', fontSize: 16 }} />
-                      <Statistic title="失败数" value={stat.ui_tests?.failed || 0} valueStyle={{ color: '#cf1322', fontSize: 16 }} />
-                      <Progress percent={stat.ui_tests?.success_rate || 0} size="small" status={stat.ui_tests?.success_rate >= 80 ? 'success' : 'normal'} />
-                    </Card>
-                  </Col>
-                  <Col xs={24} md={8}>
-                    <Card size="small" title="ChatBot执行" bordered={false}>
-                      <Statistic title="执行数" value={stat.chatbot_executions?.total || 0} />
-                      <Statistic title="成功数" value={stat.chatbot_executions?.success || 0} valueStyle={{ color: '#3f8600', fontSize: 16 }} />
-                      <Statistic title="失败数" value={stat.chatbot_executions?.error || 0} valueStyle={{ color: '#cf1322', fontSize: 16 }} />
-                      <Progress percent={stat.chatbot_executions?.success_rate || 0} size="small" status={stat.chatbot_executions?.success_rate >= 80 ? 'success' : 'normal'} />
-                    </Card>
-                  </Col>
-                </Row>
-                
-                <Row gutter={[16, 24]} className="test-report-stat-row">
-                  <Col xs={24} md={8} className="test-report-progress-center" style={{ height: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <Title level={5}>总体通过率</Title>
-                    <Progress type="circle" percent={stat.total_pass_rate || 0} width={200} />
-                  </Col>
-                  <Col xs={24} md={16} style={{ height: 300 }}>
-                    <ExecutionPieChart
-                      data={{
-                        passed_executions: stat.total_passed || 0,
-                        failed_executions: stat.total_failed || 0,
-                        blocked_executions: stat.api_tests?.blocked || 0,
-                        skipped_executions: stat.api_tests?.skipped || 0,
-                      }}
-                      height={300}
-                      title="执行结果分布"
-                      showLabels={true}
-                    />
-                  </Col>
-                </Row>
+            <>
+              <Card style={{ marginBottom: 16 }}>
+                <Space align="center">
+                  <span>选择项目：</span>
+                  <Select
+                    placeholder="请选择要查看的项目"
+                    style={{ width: 300 }}
+                    allowClear
+                    value={selectedProjectIndex}
+                    onChange={(value) => setSelectedProjectIndex(value)}
+                    options={statistics.map((stat, index) => ({
+                      label: stat.project_name,
+                      value: index,
+                    }))}
+                  />
+                </Space>
               </Card>
-            ))
+              {selectedProjectIndex !== undefined && selectedProjectIndex !== null ? (() => {
+                const stat = statistics[selectedProjectIndex];
+                if (!stat) return null;
+                return (
+                  <Card title={`项目统计: ${stat.project_name}`} className="test-report-stat-card">
+                    <Row gutter={[16, 24]}>
+                      <Col xs={24} sm={12} md={6}>
+                        <Statistic title="总执行数" value={stat.total_executions || 0} />
+                      </Col>
+                      <Col xs={24} sm={12} md={6}>
+                        <Statistic title="成功/通过" value={stat.total_passed || 0} valueStyle={{ color: '#3f8600' }} />
+                      </Col>
+                      <Col xs={24} sm={12} md={6}>
+                        <Statistic title="失败" value={stat.total_failed || 0} valueStyle={{ color: '#cf1322' }} />
+                      </Col>
+                      <Col xs={24} sm={12} md={6}>
+                        <Statistic title="总成功率" value={stat.total_pass_rate || 0} suffix="%" />
+                      </Col>
+                    </Row>
+                    
+                    <Title level={5} style={{ marginTop: 24, marginBottom: 16 }}>分类型统计</Title>
+                    <Row gutter={[16, 24]}>
+                      <Col xs={24} md={8}>
+                        <Card size="small" title="API测试" bordered={false}>
+                          <Statistic title="执行数" value={stat.api_tests?.total || 0} />
+                          <Statistic title="通过数" value={stat.api_tests?.passed || 0} valueStyle={{ color: '#3f8600', fontSize: 16 }} />
+                          <Statistic title="失败数" value={stat.api_tests?.failed || 0} valueStyle={{ color: '#cf1322', fontSize: 16 }} />
+                          <Progress percent={stat.api_tests?.pass_rate || 0} size="small" status={stat.api_tests?.pass_rate >= 80 ? 'success' : 'normal'} />
+                        </Card>
+                      </Col>
+                      <Col xs={24} md={8}>
+                        <Card size="small" title="UI测试" bordered={false}>
+                          <Statistic title="执行数" value={stat.ui_tests?.total || 0} />
+                          <Statistic title="成功数" value={stat.ui_tests?.success || 0} valueStyle={{ color: '#3f8600', fontSize: 16 }} />
+                          <Statistic title="失败数" value={stat.ui_tests?.failed || 0} valueStyle={{ color: '#cf1322', fontSize: 16 }} />
+                          <Progress percent={stat.ui_tests?.success_rate || 0} size="small" status={stat.ui_tests?.success_rate >= 80 ? 'success' : 'normal'} />
+                        </Card>
+                      </Col>
+                      <Col xs={24} md={8}>
+                        <Card size="small" title="ChatBot执行" bordered={false}>
+                          <Statistic title="执行数" value={stat.chatbot_executions?.total || 0} />
+                          <Statistic title="成功数" value={stat.chatbot_executions?.success || 0} valueStyle={{ color: '#3f8600', fontSize: 16 }} />
+                          <Statistic title="失败数" value={stat.chatbot_executions?.error || 0} valueStyle={{ color: '#cf1322', fontSize: 16 }} />
+                          <Progress percent={stat.chatbot_executions?.success_rate || 0} size="small" status={stat.chatbot_executions?.success_rate >= 80 ? 'success' : 'normal'} />
+                        </Card>
+                      </Col>
+                    </Row>
+                    
+                    <Row gutter={[16, 24]} className="test-report-stat-row">
+                      <Col xs={24} md={8} className="test-report-progress-center" style={{ height: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                        <Title level={5}>总体通过率</Title>
+                        <Progress type="circle" percent={stat.total_pass_rate || 0} width={200} />
+                      </Col>
+                      <Col xs={24} md={16} style={{ height: 300 }}>
+                        <ExecutionPieChart
+                          data={{
+                            passed_executions: stat.total_passed || 0,
+                            failed_executions: stat.total_failed || 0,
+                            blocked_executions: stat.api_tests?.blocked || 0,
+                            skipped_executions: stat.api_tests?.skipped || 0,
+                          }}
+                          height={300}
+                          title="执行结果分布"
+                          showLabels={true}
+                        />
+                      </Col>
+                    </Row>
+                  </Card>
+                );
+              })() : (
+                <Empty description="请先选择一个项目查看统计数据" />
+              )}
+            </>
           )}
         </TabPane>
         
