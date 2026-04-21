@@ -6,38 +6,25 @@ import {
   Button,
   Space,
   Typography,
-  Table,
-  Tag,
-  Collapse,
-  Descriptions,
   message,
   Spin,
   Empty,
-  Modal,
-  Form,
-  Input,
-  Checkbox,
 } from 'antd';
 import {
   UploadOutlined,
   FileTextOutlined,
   CheckCircleOutlined,
   LoadingOutlined,
-  SaveOutlined,
 } from '@ant-design/icons';
 import { processPRD } from '../api/aiAgent';
-import { featureTestsAPI } from '../api/featureTests';
+import ChatBotMessageRenderer from './ChatBotMessageRenderer';
 
-const { Title, Text, Paragraph } = Typography;
-const { Panel } = Collapse;
+const { Title, Paragraph } = Typography;
 
 function AiTestCaseAnalysis() {
   const [loading, setLoading] = useState(false);
-  const [testSuites, setTestSuites] = useState([]);
+  const [analysisResult, setAnalysisResult] = useState('');
   const [fileList, setFileList] = useState([]);
-  const [selectedTestCases, setSelectedTestCases] = useState(new Set());
-  const [saveModalVisible, setSaveModalVisible] = useState(false);
-  const [saveForm] = Form.useForm();
 
   // 处理文件上传和分析
   const handleProcessPRD = async (file) => {
@@ -47,17 +34,16 @@ function AiTestCaseAnalysis() {
     }
 
     setLoading(true);
-    setTestSuites([]);
-    setSelectedTestCases(new Set());
+    setAnalysisResult('');
 
     try {
       const response = await processPRD(file);
-      
-      if (response.success && response.data && response.data.test_suites) {
-        setTestSuites(response.data.test_suites);
-        message.success(`成功生成 ${response.data.test_suites_count} 个测试套件`);
+
+      if (response.success && response.data && response.data.analysis) {
+        setAnalysisResult(response.data.analysis);
+        message.success('PRD分析完成');
       } else {
-        message.error('处理失败：未返回测试用例数据');
+        message.error('处理失败：未返回分析结果');
       }
     } catch (error) {
       logger.error('处理PRD失败:', error);
@@ -82,195 +68,9 @@ function AiTestCaseAnalysis() {
     },
     onRemove: () => {
       setFileList([]);
-      setTestSuites([]);
-      setSelectedTestCases(new Set());
+      setAnalysisResult('');
     },
     maxCount: 1,
-  };
-
-  // 处理复选框选择
-  const handleCheckboxChange = (suiteIndex, caseIndex, checked) => {
-    const key = `${suiteIndex}-${caseIndex}`;
-    const newSelected = new Set(selectedTestCases);
-    if (checked) {
-      newSelected.add(key);
-    } else {
-      newSelected.delete(key);
-    }
-    setSelectedTestCases(newSelected);
-  };
-
-  // 处理全选/取消全选
-  const handleSelectAll = (suiteIndex, checked) => {
-    const newSelected = new Set(selectedTestCases);
-    const suite = testSuites[suiteIndex];
-    if (suite && suite.test_cases) {
-      suite.test_cases.forEach((_, caseIndex) => {
-        const key = `${suiteIndex}-${caseIndex}`;
-        if (checked) {
-          newSelected.add(key);
-        } else {
-          newSelected.delete(key);
-        }
-      });
-    }
-    setSelectedTestCases(newSelected);
-  };
-
-  // 打开保存弹窗
-  const handleOpenSaveModal = () => {
-    if (selectedTestCases.size === 0) {
-      message.warning('请至少选择一个测试用例');
-      return;
-    }
-    setSaveModalVisible(true);
-    saveForm.resetFields();
-  };
-
-  // 保存到功能测试模块
-  const handleSaveToFeatureTests = async () => {
-    try {
-      const values = await saveForm.validateFields();
-      const version = values.version || '';
-
-      // 收集选中的测试用例
-      const testCasesToSave = [];
-      testSuites.forEach((suite, suiteIndex) => {
-        if (suite.test_cases) {
-          suite.test_cases.forEach((testCase, caseIndex) => {
-            const key = `${suiteIndex}-${caseIndex}`;
-            if (selectedTestCases.has(key)) {
-              // 将AI生成的测试用例转换为功能测试用例格式
-              testCasesToSave.push({
-                title: testCase.title,
-                pre_steps: testCase.preconditions || '',
-                steps: Array.isArray(testCase.steps) 
-                  ? testCase.steps.map((step, idx) => `${idx + 1}. ${step}`).join('\n')
-                  : testCase.steps || '',
-                expected_result: testCase.expected_result || '',
-                version: version,
-              });
-            }
-          });
-        }
-      });
-
-      // 批量保存
-      const savePromises = testCasesToSave.map((testCase) =>
-        featureTestsAPI.create(testCase)
-      );
-
-      await Promise.all(savePromises);
-      message.success(`成功保存 ${testCasesToSave.length} 个测试用例到功能测试模块`);
-      setSaveModalVisible(false);
-      setSelectedTestCases(new Set());
-    } catch (error) {
-      logger.error('保存失败:', error);
-      message.error('保存失败：' + (error.message || '未知错误'));
-    }
-  };
-
-  // 测试用例表格列定义（带复选框）
-  const getTestCaseColumns = (suiteIndex) => [
-    {
-      title: (
-        <Checkbox
-          checked={
-            testSuites[suiteIndex]?.test_cases?.every((_, caseIndex) =>
-              selectedTestCases.has(`${suiteIndex}-${caseIndex}`)
-            ) && testSuites[suiteIndex]?.test_cases?.length > 0
-          }
-          indeterminate={
-            testSuites[suiteIndex]?.test_cases?.some((_, caseIndex) =>
-              selectedTestCases.has(`${suiteIndex}-${caseIndex}`)
-            ) &&
-            !testSuites[suiteIndex]?.test_cases?.every((_, caseIndex) =>
-              selectedTestCases.has(`${suiteIndex}-${caseIndex}`)
-            )
-          }
-          onChange={(e) => handleSelectAll(suiteIndex, e.target.checked)}
-        />
-      ),
-      key: 'checkbox',
-      width: 60,
-      render: (_, record, caseIndex) => (
-        <Checkbox
-          checked={selectedTestCases.has(`${suiteIndex}-${caseIndex}`)}
-          onChange={(e) => handleCheckboxChange(suiteIndex, caseIndex, e.target.checked)}
-        />
-      ),
-    },
-    {
-      title: '标题',
-      dataIndex: 'title',
-      key: 'title',
-      width: 200,
-      render: (text) => <Text strong>{text}</Text>,
-    },
-    {
-      title: '优先级',
-      dataIndex: 'priority',
-      key: 'priority',
-      width: 100,
-      render: (priority) => {
-        const colorMap = {
-          High: 'red',
-          Medium: 'orange',
-          Low: 'green',
-        };
-        return <Tag color={colorMap[priority] || 'default'}>{priority}</Tag>;
-      },
-    },
-    {
-      title: '类型',
-      dataIndex: 'type',
-      key: 'type',
-      width: 120,
-      render: (type) => <Tag>{type}</Tag>,
-    },
-    {
-      title: '分类',
-      dataIndex: 'category',
-      key: 'category',
-      width: 100,
-      render: (category) => category || '-',
-    },
-    {
-      title: '描述',
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true,
-    },
-  ];
-
-  // 展开行配置 - 显示测试用例详情
-  const expandedRowRender = (record) => {
-    return (
-      <div style={{ padding: '16px', background: '#fafafa' }}>
-        <Descriptions column={1} bordered size="small">
-          <Descriptions.Item label="描述">
-            <Paragraph>{record.description}</Paragraph>
-          </Descriptions.Item>
-          {record.preconditions && (
-            <Descriptions.Item label="前置条件">
-              <Text>{record.preconditions}</Text>
-            </Descriptions.Item>
-          )}
-          <Descriptions.Item label="测试步骤">
-            <ol style={{ margin: 0, paddingLeft: '20px' }}>
-              {record.steps && record.steps.map((step, index) => (
-                <li key={index} style={{ marginBottom: '8px' }}>
-                  <Text>{step}</Text>
-                </li>
-              ))}
-            </ol>
-          </Descriptions.Item>
-          <Descriptions.Item label="预期结果">
-            <Text>{record.expected_result}</Text>
-          </Descriptions.Item>
-        </Descriptions>
-      </div>
-    );
   };
 
   return (
@@ -307,16 +107,6 @@ function AiTestCaseAnalysis() {
             >
               {loading ? 'AI分析中...' : '开始分析'}
             </Button>
-            {testSuites.length > 0 && (
-              <Button
-                type="primary"
-                icon={<SaveOutlined />}
-                onClick={handleOpenSaveModal}
-                disabled={selectedTestCases.size === 0}
-              >
-                保存选中项 ({selectedTestCases.size})
-              </Button>
-            )}
           </Space>
         </Space>
       </Card>
@@ -326,87 +116,23 @@ function AiTestCaseAnalysis() {
           <div style={{ textAlign: 'center', padding: '40px' }}>
             <Spin size="large" />
             <div style={{ marginTop: '16px' }}>
-              <Text>AI正在分析PRD文档，请稍候...</Text>
+              <Paragraph>AI正在分析PRD文档，请稍候...</Paragraph>
             </div>
           </div>
         </Card>
       )}
 
-      {!loading && testSuites.length > 0 && (
-        <div>
-          <Title level={3}>生成的测试用例</Title>
-          <Paragraph type="secondary">
-            请勾选需要保存到功能测试模块的测试用例，然后点击"保存选中项"按钮
-          </Paragraph>
-          <Collapse defaultActiveKey={['0']} style={{ marginBottom: '16px' }}>
-            {testSuites.map((suite, suiteIndex) => (
-              <Panel
-                header={
-                  <Space>
-                    <Text strong>{suite.name}</Text>
-                    <Tag>{suite.test_cases?.length || 0} 个测试用例</Tag>
-                    <Tag color="blue">
-                      已选 {suite.test_cases?.filter((_, caseIndex) =>
-                        selectedTestCases.has(`${suiteIndex}-${caseIndex}`)
-                      ).length || 0} 个
-                    </Tag>
-                  </Space>
-                }
-                key={suiteIndex}
-              >
-                {suite.description && (
-                  <Paragraph type="secondary" style={{ marginBottom: '16px' }}>
-                    {suite.description}
-                  </Paragraph>
-                )}
-                <Table
-                  columns={getTestCaseColumns(suiteIndex)}
-                  dataSource={suite.test_cases?.map((tc, index) => ({
-                    ...tc,
-                    key: `${suiteIndex}-${index}`,
-                  }))}
-                  pagination={false}
-                  expandable={{
-                    expandedRowRender,
-                    expandRowByClick: true,
-                  }}
-                  size="small"
-                />
-              </Panel>
-            ))}
-          </Collapse>
-        </div>
-      )}
-
-      {!loading && testSuites.length === 0 && fileList.length > 0 && (
-        <Card>
-          <Empty description="暂无测试用例数据，请点击'开始分析'按钮" />
+      {!loading && analysisResult && (
+        <Card title="AI测试用例分析结果">
+          <ChatBotMessageRenderer content={analysisResult} />
         </Card>
       )}
 
-      {/* 保存到功能测试模块的弹窗 */}
-      <Modal
-        title="保存到功能测试模块"
-        open={saveModalVisible}
-        onOk={handleSaveToFeatureTests}
-        onCancel={() => setSaveModalVisible(false)}
-        okText="保存"
-        cancelText="取消"
-        width={500}
-      >
-        <Form form={saveForm} layout="vertical">
-          <Form.Item
-            name="version"
-            label="版本号（可选）"
-            rules={[{ max: 50, message: '版本号不能超过50字符' }]}
-          >
-            <Input placeholder="例如：v1.0.0" maxLength={50} />
-          </Form.Item>
-          <Paragraph type="secondary">
-            将保存 <Text strong>{selectedTestCases.size}</Text> 个选中的测试用例到功能测试模块
-          </Paragraph>
-        </Form>
-      </Modal>
+      {!loading && !analysisResult && fileList.length > 0 && (
+        <Card>
+          <Empty description="暂无分析结果，请点击'开始分析'按钮" />
+        </Card>
+      )}
     </div>
   );
 }

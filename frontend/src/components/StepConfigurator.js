@@ -246,7 +246,6 @@ const StepConfigurator = ({ steps = [], onChange, title = "测试步骤" }) => {
                   >
                     <Option value="status_code">状态码</Option>
                     <Option value="jsonpath">JSON响应验证</Option>
-                    <Option value="response_time">响应时间验证</Option>
                   </Select>
                 </Form.Item>
 
@@ -292,34 +291,9 @@ const StepConfigurator = ({ steps = [], onChange, title = "测试步骤" }) => {
                 )}
 
                 {assertion.type === 'response_time' && (
-                  <>
-                    <Form.Item label="最大响应时间(毫秒)">
-                      <InputNumber
-                        value={assertion.max_time}
-                        onChange={(value) => {
-                          const updatedAssertions = [...step.assertions];
-                          updatedAssertions[assertIndex].max_time = value;
-                          configureStepParams(index, { assertions: updatedAssertions });
-                        }}
-                        style={{ width: '100%' }}
-                      />
-                    </Form.Item>
-                    <Form.Item label="比较类型">
-                      <Select
-                        value={assertion.operator || 'lt'}
-                        onChange={(value) => {
-                          const updatedAssertions = [...step.assertions];
-                          updatedAssertions[assertIndex].operator = value;
-                          configureStepParams(index, { assertions: updatedAssertions });
-                        }}
-                      >
-                        <Option value="lt">小于</Option>
-                        <Option value="lte">小于等于</Option>
-                        <Option value="gt">大于</Option>
-                        <Option value="gte">大于等于</Option>
-                      </Select>
-                    </Form.Item>
-                  </>
+                  <div style={{ color: '#999', fontStyle: 'italic' }}>
+                    响应时间断言暂不支持，请使用状态码或JSON响应验证
+                  </div>
                 )}
               </Card>
             ))}

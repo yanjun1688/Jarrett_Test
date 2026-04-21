@@ -102,7 +102,12 @@ class TestScript(models.Model):
 
 
 class ScriptExecution(models.Model):
-    """脚本执行记录模型"""
+    """脚本执行记录模型
+
+    DEPRECATED: 2026-04-21
+    请使用 TestExecution (test_type='script') 替代。
+    此模型保留用于向后兼容和历史数据查询。
+    """
     STATUS_CHOICES: List[tuple[str, str]] = [
         ('pending', '待执行'),
         ('running', '执行中'),
@@ -745,6 +750,12 @@ class PressureTestExecution(models.Model):
         help_text='每次请求的详细结果，用于后续分析'
     )
 
+    logs: models.TextField[str, str] = models.TextField(
+        blank=True,
+        verbose_name='执行日志',
+        help_text='压测执行过程的完整日志'
+    )
+
     class Meta(TypedModelMeta):
         verbose_name = '压测执行记录'
         verbose_name_plural = '压测执行记录'
@@ -1055,6 +1066,12 @@ class AdvancedPressureTestExecution(models.Model):
         null=True, 
         blank=True, 
         verbose_name='错误日志'
+    )
+
+    logs: models.TextField[str, str] = models.TextField(
+        blank=True,
+        verbose_name='执行日志',
+        help_text='高级压测执行过程的完整日志'
     )
     
     class Meta(TypedModelMeta):

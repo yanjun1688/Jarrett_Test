@@ -339,8 +339,8 @@ class ExecuteTestTool(BaseTool):
         try:
             @sync_to_async
             def find_and_execute():
-                from testmanager_app.models import TestScript, ScriptExecution
-                from core.models import Project
+                from testmanager_app.models import TestScript
+                from core.models import Project, TestExecution as TE
                 from testmanager_app.services.execution_engine.script_engine import TestChainExecutor
                 
                 filters = {'is_active': True, 'name': script_name}
@@ -373,16 +373,17 @@ class ExecuteTestTool(BaseTool):
                 
                 logger.info(f"[ExecuteDirect] 找到脚本: id={script.id}, name='{script.name}', type='{script.script_type}'")
                 
-                execution = ScriptExecution.objects.create(
-                    script=script,
-                    executor_id=user_id,
+                execution = TE.objects.create(
+                    test_type='script',
+                    test_script=script,
+                    executed_by_id=user_id,
                     status='pending'
                 )
                 logger.info(f"[ExecuteDirect] 创建执行记录: execution_id={execution.id}")
                 
-                execution.status = 'running'
-                execution.started_at = timezone.now()
-                execution.save(update_fields=['status', 'started_at'])
+                execution.status = 'pending'
+                execution.executed_at = timezone.now()
+                execution.save(update_fields=['status', 'executed_at'])
                 
                 engine = TestChainExecutor()
                 logger.info(f"[ExecuteDirect] 开始执行脚本...")
@@ -403,11 +404,19 @@ class ExecuteTestTool(BaseTool):
                 else:
                     logs_str = str(logs)
                 
-                execution.status = 'success' if success else 'failed'
-                execution.finished_at = timezone.now()
-                execution.output = logs_str[:10000] if logs_str else ''
+                execution.status = 'passed' if success else 'failed'
+                execution.api_logs = logs_str[:10000] if logs_str else ''
                 if not success and result.get('error'):
-                    execution.error_message = result.get('error')
+                    execution.error_message = result.get('error', '')
+
+                # 保存步骤结果
+                results_list = result.get('results', [])
+                execution.step_results = {
+                    'total': len(results_list),
+                    'passed': sum(1 for r in results_list if r.get('success')),
+                    'failed': sum(1 for r in results_list if not r.get('success')),
+                    'details': results_list,
+                }
                 execution.save()
                 
                 logger.info(f"[ExecuteDirect] 执行记录已更新: execution_id={execution.id}, status={execution.status}")
@@ -476,23 +485,25 @@ class ExecuteTestTool(BaseTool):
         try:
             @sync_to_async
             def _create_execute_and_update():
-                from testmanager_app.models import TestScript, ScriptExecution
+                from testmanager_app.models import TestScript
+                from core.models import TestExecution as TE
                 from testmanager_app.services.execution_engine.script_engine import TestChainExecutor
                 
                 logger.info(f"[ExecuteTestScript] 正在查询脚本: id={test_script_id}")
                 script = TestScript.objects.get(id=test_script_id, is_active=True)
                 logger.info(f"[ExecuteTestScript] 找到脚本: id={script.id}, name='{script.name}', type='{script.script_type}'")
                 
-                execution = ScriptExecution.objects.create(
-                    script=script,
-                    executor_id=user_id,
+                execution = TE.objects.create(
+                    test_type='script',
+                    test_script=script,
+                    executed_by_id=user_id,
                     status='pending'
                 )
                 logger.info(f"[ExecuteTestScript] 创建执行记录: execution_id={execution.id}")
                 
-                execution.status = 'running'
-                execution.started_at = timezone.now()
-                execution.save(update_fields=['status', 'started_at'])
+                execution.status = 'pending'
+                execution.executed_at = timezone.now()
+                execution.save(update_fields=['status', 'executed_at'])
                 
                 engine = TestChainExecutor()
                 logger.info(f"[ExecuteTestScript] 创建执行引擎，开始执行...")
@@ -516,11 +527,19 @@ class ExecuteTestTool(BaseTool):
                 else:
                     logs_str = str(logs)
                 
-                execution.status = 'success' if success else 'failed'
-                execution.finished_at = timezone.now()
-                execution.output = logs_str[:10000] if logs_str else ''
+                execution.status = 'passed' if success else 'failed'
+                execution.api_logs = logs_str[:10000] if logs_str else ''
                 if not success and result.get('error'):
-                    execution.error_message = result.get('error')
+                    execution.error_message = result.get('error', '')
+
+                # 保存步骤结果
+                results_list = result.get('results', [])
+                execution.step_results = {
+                    'total': len(results_list),
+                    'passed': sum(1 for r in results_list if r.get('success')),
+                    'failed': sum(1 for r in results_list if not r.get('success')),
+                    'details': results_list,
+                }
                 execution.save()
                 
                 logger.info(f"[ExecuteTestScript] 执行记录已更新: execution_id={execution.id}, status={execution.status}")

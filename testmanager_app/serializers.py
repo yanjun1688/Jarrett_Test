@@ -54,6 +54,7 @@ class TestCaseCreateSerializer(serializers.ModelSerializer[TestCase]):
 class TestExecutionSerializer(serializers.ModelSerializer[TestExecution]):
     testcase_title = serializers.CharField(source='testcase.title', read_only=True, default=None)
     api_request_name = serializers.CharField(source='api_request.name', read_only=True, default=None)
+    test_script_name = serializers.CharField(source='test_script.name', read_only=True, default=None)
     executor_name = serializers.CharField(source='executed_by.username', read_only=True, default=None)
 
     class Meta:
@@ -64,7 +65,11 @@ class TestExecutionSerializer(serializers.ModelSerializer[TestExecution]):
 class TestExecutionCreateSerializer(serializers.ModelSerializer[TestExecution]):
     class Meta:
         model = TestExecution
-        fields = ['test_type', 'testcase', 'api_request', 'status', 'actual_result', 'comments', 'duration', 'api_response_data', 'api_logs']
+        fields = [
+            'test_type', 'testcase', 'api_request', 'test_script',
+            'status', 'actual_result', 'comments', 'duration',
+            'api_response_data', 'api_logs', 'error_message', 'step_results',
+        ]
 
 
 class TestExecutionListSerializer(serializers.ModelSerializer[TestExecution]):
@@ -72,14 +77,18 @@ class TestExecutionListSerializer(serializers.ModelSerializer[TestExecution]):
     api_request_name = serializers.CharField(source='api_request.name', read_only=True, default=None)
     api_request_url = serializers.CharField(source='api_request.url', read_only=True, default=None)
     api_request_method = serializers.CharField(source='api_request.method', read_only=True, default=None)
+    test_script_name = serializers.CharField(source='test_script.name', read_only=True, default=None)
     executor_name = serializers.CharField(source='executed_by.username', read_only=True, default=None)
     
     class Meta:
         model = TestExecution
         fields = [
-            'id', 'test_type', 'api_request', 'api_request_name', 
-            'api_request_url', 'api_request_method', 'status', 
-            'actual_result', 'executed_at', 'executor_name'
+            'id', 'test_type',
+            'test_script', 'test_script_name',
+            'api_request', 'api_request_name',
+            'api_request_url', 'api_request_method',
+            'status', 'actual_result', 'executed_at', 'executor_name',
+            'error_message', 'step_results',
         ]
 
 
@@ -294,7 +303,7 @@ class RequestCollectionCreateSerializer(serializers.ModelSerializer):
         collection_requests_data = validated_data.pop('collection_requests', [])
         requests_ids = validated_data.pop('requests', [])
 
-        instance = super().create(validated_data)
+        instance: RequestCollection = super().create(validated_data)
 
         if collection_requests_data:
             self._create_collection_requests(instance, collection_requests_data)
@@ -578,7 +587,8 @@ class PressureTestExecutionSerializer(serializers.ModelSerializer):
             'total_requests', 'success_count', 'failed_count', 'error_rate',
             'min_response_time', 'max_response_time', 'avg_response_time',
             'p50_response_time', 'p90_response_time', 'p95_response_time', 'p99_response_time',
-            'throughput', 'peak_concurrent', 'server_metrics'
+            'throughput', 'peak_concurrent', 'server_metrics',
+            'logs'
         ]
 
 
@@ -602,8 +612,7 @@ class AdvancedPressureTestConfigSerializer(serializers.ModelSerializer):
     
     project_name = serializers.CharField(source='project.name', read_only=True)
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
-    scenario_steps_count = serializers.SerializerMethodField()
-    
+    scenario_steps_count = serializers.SerializerMethodField()    
     class Meta:
         model = AdvancedPressureTestConfig
         fields = [
@@ -684,7 +693,8 @@ class AdvancedPressureTestExecutionSerializer(serializers.ModelSerializer):
             'p50_response_time', 'p90_response_time', 'p95_response_time', 'p99_response_time',
             'throughput', 'current_users', 'peak_users',
             'worker_count', 'worker_status',
-            'web_ui_url'
+            'web_ui_url',
+            'logs'
         ]
         read_only_fields = [
             'started_at', 'finished_at', 'duration_seconds',
@@ -692,7 +702,8 @@ class AdvancedPressureTestExecutionSerializer(serializers.ModelSerializer):
             'min_response_time', 'max_response_time', 'avg_response_time',
             'p50_response_time', 'p90_response_time', 'p95_response_time', 'p99_response_time',
             'throughput', 'current_users', 'peak_users',
-            'worker_count', 'worker_status'
+            'worker_count', 'worker_status',
+            'logs'
         ]
     
     def get_web_ui_url(self, obj: AdvancedPressureTestExecution) -> Optional[str]:
@@ -746,7 +757,7 @@ class AdvancedPressureTestResultSerializer(serializers.Serializer):
     success = serializers.BooleanField()
     error_message = serializers.CharField(required=False, allow_blank=True)
     timestamp = serializers.DateTimeField()
-    context = serializers.SerializerMethodField()
+    context = serializers.SerializerMethodField()  # type: ignore[assignment]
     
     def get_context(self, obj: Any) -> Dict[str, Any]:
         return getattr(obj, 'context', {})

@@ -81,7 +81,7 @@ def api_exception_handler(func: F) -> F:
             ...
     """
     @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
+    def wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa
         # 获取请求对象和执行的函数名
         request: Any = None
         func_name: str = func.__name__
@@ -149,7 +149,7 @@ def api_exception_handler(func: F) -> F:
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    return wrapper
+    return wrapper  # type: ignore[return-value]
 
 
 def async_api_exception_handler(func: F) -> F:
@@ -162,7 +162,7 @@ def async_api_exception_handler(func: F) -> F:
             ...
     """
     @wraps(func)
-    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa
         request: Any = None
         func_name: str = func.__name__
 
@@ -203,4 +203,4 @@ def async_api_exception_handler(func: F) -> F:
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    return wrapper
+    return wrapper  # type: ignore[return-value]

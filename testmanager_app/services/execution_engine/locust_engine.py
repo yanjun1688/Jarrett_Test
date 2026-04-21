@@ -1042,6 +1042,25 @@ class LocustEngine:
             # CSV方案：不存储单次请求结果，仅存储聚合统计
             # raw_results 保持为空列表（节省存储空间）
             execution.raw_results = []
+
+            # 生成执行日志摘要
+            log_lines = [
+                f"[高级压测执行完成] 配置: {self.config.name}",
+                f"状态: {status}",
+                f"用户数: {self.config.user_count}, 生成速率: {self.config.spawn_rate}/s",
+                f"持续时间: {self.config.duration_seconds}s",
+                f"总请求数: {stats.get('total_requests', 0)}",
+                f"成功: {stats.get('success_count', 0)}, 失败: {stats.get('failed_count', 0)}",
+                f"错误率: {stats.get('error_rate', 0):.2f}%",
+                f"平均响应时间: {stats.get('avg_response_time', 0):.2f}ms",
+                f"P95响应时间: {stats.get('p95_response_time', 0):.2f}ms",
+                f"吞吐量: {stats.get('throughput', 0):.2f} RPS",
+                f"峰值用户数: {stats.get('peak_users', 0)}",
+                f"Worker数量: {self.config.worker_count if self.config.use_distributed else 1}",
+            ]
+            if error:
+                log_lines.append(f"\n--- 错误日志 ---\n{error}")
+            execution.logs = '\n'.join(log_lines)
             
             logger.info("[LocustEngine._update_execution_complete] Calling execution.save()")
             execution.save()

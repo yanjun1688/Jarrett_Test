@@ -23,14 +23,16 @@ class TestChainExecutor:
     def __init__(self, base_context: Optional[Dict[str, Any]] = None) -> None:
         self.context = base_context or {}
         self.logs: List[str] = []
-        self.session: Optional[httpx.AsyncClient] = None
+        self.session: Optional[httpx.Client] = None
 
     def log(self, message: str) -> None:
         """记录日志"""
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"[{timestamp}] {message}"
         self.logs.append(log_entry)
-        logger.info(log_entry)
+        # Windows GBK 编码无法输出 emoji，替换为 ASCII 安全字符后再写日志
+        safe_entry = log_entry.encode('ascii', errors='replace').decode('ascii')
+        logger.info(safe_entry)
 
     
     
@@ -255,9 +257,9 @@ class TestChainExecutor:
             比较结果
         """
         if comparison == 'equals':
-            return actual == expected
+            return bool(actual == expected)
         elif comparison == 'not_equals':
-            return actual != expected
+            return bool(actual != expected)
         elif comparison == 'contains':
             return str(expected) in str(actual)
         elif comparison in ('gt', 'greater_than'):
@@ -278,7 +280,7 @@ class TestChainExecutor:
             return False
         else:
             # 默认 equals
-            return actual == expected
+            return bool(actual == expected)
 
     def execute_step(self, step):
         """

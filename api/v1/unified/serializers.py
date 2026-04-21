@@ -36,10 +36,7 @@ class UnifiedScriptSerializer(serializers.ModelSerializer[UnifiedScript]):
 class UnifiedExecutionSerializer(serializers.ModelSerializer[UnifiedExecution]):
     """统一执行记录序列化器（只读）"""
     unified_script_name = serializers.CharField(
-        source='unified_script.name', read_only=True,
-    )
-    script_type = serializers.CharField(
-        source='unified_script.script_type', read_only=True,
+        source='unified_script.name', read_only=True, default=None,
     )
     executed_by_name = serializers.CharField(
         source='executed_by.username', read_only=True, default=None,
@@ -47,15 +44,20 @@ class UnifiedExecutionSerializer(serializers.ModelSerializer[UnifiedExecution]):
     status_display = serializers.CharField(
         source='get_status_display', read_only=True,
     )
+    project_name = serializers.CharField(
+        source='project.name', read_only=True, default=None,
+    )
 
     class Meta:
         model = UnifiedExecution
         fields = [
-            'id', 'unified_script', 'unified_script_name', 'script_type',
+            'id', 'unified_script', 'unified_script_name',
+            'script_name', 'script_type',
+            'project', 'project_name',
             'status', 'status_display',
             'executed_by', 'executed_by_name',
             'started_at', 'completed_at', 'duration_seconds',
-            'error_message',
+            'error_message', 'logs',
             'content_type', 'object_id',
         ]
         read_only_fields = fields

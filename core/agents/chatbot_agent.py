@@ -14,7 +14,6 @@ Chatbot Agent - Native Function Calling 架构
 # pyright: reportAttributeAccessIssue=false, reportArgumentType=false
 from typing import Dict, Any, Optional, List
 from datetime import datetime
-from pathlib import Path
 import logging
 import re
 import os
@@ -30,6 +29,8 @@ from core.agents.capability import (
 )
 from core.prompt import get_prompt_builder
 from core.context.token_economics import TokenEconomicsContextStore, TokenCalculator
+from core.services.conversation_service import get_token_economics_store
+from asgiref.sync import sync_to_async
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class ChatbotAgent(BaseAgent):
         knowledge_rag_agent: Optional[KnowledgeRAGAgent] = None,
         tool_orchestrator: Optional[ToolOrchestrator] = None,
         config: Optional[Dict[str, Any]] = None,
-        context_store_dir: Optional[Path] = None
+        context_store: Optional[TokenEconomicsContextStore] = None,
     ):
         """
         Initialize Chatbot Agent
@@ -60,7 +61,7 @@ class ChatbotAgent(BaseAgent):
             knowledge_rag_agent: Knowledge RAG agent for knowledge retrieval
             tool_orchestrator: Tool orchestrator for tool execution
             config: Agent configuration
-            context_store_dir: Directory for TokenEconomicsContextStore
+            context_store: 外部注入的 TokenEconomicsContextStore（可选，默认使用单例）
         """
         super().__init__(agent_id="chatbot_agent", config=config)
 
@@ -73,20 +74,23 @@ class ChatbotAgent(BaseAgent):
 
         model_name = config.get("model_name", "gpt-4") if config else "gpt-4"
 
-        self.context_store_dir = context_store_dir or Path("context_data")
-        if not self.context_store_dir.exists():
-            self.context_store_dir.mkdir(parents=True, exist_ok=True)
-
-        self.context_store = TokenEconomicsContextStore(
-            root_dir=self.context_store_dir,
-            model_name=model_name
-        )
+        # 使用外部注入或全局单例 TokenEconomicsContextStore
+        if context_store:
+            self.context_store = context_store
+        else:
+            self.context_store = get_token_economics_store(
+                model_name=model_name,
+                llm_service=llm_service,
+            )
 
         self.prompt_builder = get_prompt_builder(context_store=self.context_store, model_name=model_name)
 
         self.capability_registry = global_capability_registry
         self.capability_injector = global_capability_injector
-        
+
+        self._mcp_tools: List[Dict[str, Any]] = []
+        self._mcp_initialized: bool = False
+
         self._register_chatbot_tools()
         self._register_capabilities()
         self._register_skills()
@@ -309,14 +313,22 @@ class ChatbotAgent(BaseAgent):
         """
         Execute the chatbot agent (Native Function Calling)
 
-        流程：
-        1. 构建 tool definitions
-        2. 构建 prompt（system prompt + 对话历史）
-        3. LLM + function calling（一次调用）
-        4. 处理结果：tool_calls → 执行工具；否则直接返回文本
+        Agent 层统一管理：
+        1. 写入用户消息到 context_store
+        2. 获取分层压缩历史（热/温/冷区）
+        3. 构建完整 prompt（build_for_chatbot）
+        4. LLM + function calling
+        5. 写入 assistant 回复到 context_store
+        6. 返回结果
 
         Args:
-            input_data: Input data containing message, context, etc.
+            input_data: {
+                "message": str,
+                "conversation_id": str,
+                "user_id": int/str,
+                "project_id": Optional[int],
+                "context": { "provider", "model", "temperature", "max_tokens" }
+            }
 
         Returns:
             Response dictionary with success, message, tool_used, tool_result
@@ -327,7 +339,7 @@ class ChatbotAgent(BaseAgent):
         self._internal_logs = []
 
         from core.services.chatbot_execution_logger import get_chatbot_logger
-        conversation_id = input_data.get("conversation_id") or input_data.get("context", {}).get("conversation_id")
+        conversation_id = input_data.get("conversation_id")
         if conversation_id:
             self._execution_logger = get_chatbot_logger(conversation_id)
         else:
@@ -339,40 +351,71 @@ class ChatbotAgent(BaseAgent):
         message = input_data["message"]
         project_id = input_data.get("project_id")
         context = input_data.get("context", {})
-        conversation_id = input_data.get("conversation_id") or context.get("conversation_id")
-        user_id = context.get("user_id")
-        conversation_history = input_data.get("conversation_history") or context.get("conversation_history", [])
+        user_id = input_data.get("user_id") or context.get("user_id")
 
         logger.info(f"[ChatBot] ========== 开始处理消息 ==========")
         logger.info(f"[ChatBot] 用户消息: {message}")
         logger.info(f"[ChatBot] 会话ID: {conversation_id}")
 
-        # Step 1: 构建 tool definitions
+        # Step 1: 写入用户消息到 context_store（sync_to_async 避免阻塞事件循环）
+        if self.context_store and conversation_id and user_id:
+            try:
+                await sync_to_async(self.context_store.append_message)(
+                    session_id=str(conversation_id),
+                    user_id=str(user_id),
+                    role='user',
+                    content=message,
+                )
+                logger.info(f"[ChatBot] 用户消息已写入 ContextStore")
+            except Exception as e:
+                logger.warning(f"[ChatBot] 写入用户消息失败: {e}")
+
+        # Step 2: 构建 tool definitions
         tool_definitions = self._get_all_tool_definitions()
         logger.info(f"[ChatBot] Tool definitions: {len(tool_definitions)} 个")
 
-        # Step 2: 构建 prompt（含对话历史）
-        # 获取对话历史（从 ContextStore 分层压缩）
-        history_messages = []
+        # Step 3: 获取 skills 列表
+        skills_data: List[Dict[str, Any]] = []
+        for skill in self.capability_registry.get_all_skills():
+            skills_data.append({
+                "name": skill.name,
+                "description": skill.description,
+                "version": getattr(skill, 'version', '1.0.0'),
+            })
+
+        # Step 4: 构建完整 prompt（build_for_chatbot 内部调用 ContextStore 获取分层历史）
+        # sync_to_async 因为 build_for_chatbot 内部调用 ContextStore 做文件 I/O
+        prompts = await sync_to_async(self.prompt_builder.build_for_chatbot)(
+            message=message,
+            intent='chatbot',
+            knowledge=[],
+            tools=tool_definitions,
+            skills=skills_data,
+            session_id=str(conversation_id) if conversation_id else None,
+            user_id=str(user_id) if user_id else None,
+        )
+
+        system_prompt = prompts["system_prompt"]
+        sys_tokens = prompts["system_prompt_tokens"]
+        history_token_info = prompts.get("history_tokens", {})
+        logger.info(f"[ChatBot] System prompt: {sys_tokens} tokens")
+        logger.info(f"[ChatBot] History token info: {history_token_info}")
+
+        # 获取对话历史用于 LLM 调用（从 ContextStore 分层压缩）
+        history_messages: List[Dict[str, Any]] = []
         if self.context_store and conversation_id and user_id:
             try:
-                history_messages = self.context_store.get_messages_for_llm(
+                history_messages = await sync_to_async(
+                    self.context_store.get_messages_for_llm
+                )(
                     session_id=str(conversation_id),
                     user_id=str(user_id)
                 )
-                logger.info(f"[ChatBot] 对话历史: {len(history_messages)} 条（ContextStore）")
+                logger.info(f"[ChatBot] 对话历史: {len(history_messages)} 条（ContextStore 分层压缩）")
             except Exception as e:
                 logger.warning(f"[ChatBot] ContextStore 获取失败: {e}")
 
-        if not history_messages and conversation_history:
-            history_messages = conversation_history[-10:]  # fallback: 最近10条
-            logger.info(f"[ChatBot] 对话历史: {len(history_messages)} 条（fallback）")
-
-        # 构建 system prompt
-        system_prompt, sys_tokens = self.prompt_builder.build_system_prompt({})
-        logger.info(f"[ChatBot] System prompt: {sys_tokens} tokens")
-
-        # Step 3: LLM + function calling（一次调用）
+        # Step 5: LLM + function calling（一次调用）
         llm_start = time.time()
         logger.info(f"[ChatBot] 调用 LLM + function calling...")
         logger.info(f"[ChatBot] Tool names: {[t['function']['name'] for t in tool_definitions]}")
@@ -395,9 +438,12 @@ class ChatbotAgent(BaseAgent):
                     prompt=message,
                     system_message=system_prompt,
                 )
+                fallback_text = fallback_response if isinstance(fallback_response, str) else str(fallback_response)
+                # 写入 assistant 回复
+                await self._write_assistant_message(conversation_id, user_id, fallback_text)
                 return {
                     "success": True,
-                    "message": fallback_response if isinstance(fallback_response, str) else str(fallback_response),
+                    "message": fallback_text,
                     "tool_used": False,
                     "tool_result": None,
                     "conversation_id": conversation_id,
@@ -406,13 +452,13 @@ class ChatbotAgent(BaseAgent):
                 logger.error(f"[ChatBot] 降级调用也失败: {e2}", exc_info=True)
                 return {
                     "success": False,
-                    "message": f"LLM 调用失败，请稍后重试",
+                    "message": "LLM 调用失败，请稍后重试",
                     "error": f"LLM 调用失败: {str(e2)}",
                     "tool_used": False,
                     "tool_result": None,
                 }
 
-        # Step 4: 处理结果
+        # Step 6: 处理结果
         tool_calls = result.get("tool_calls")
 
         if tool_calls:
@@ -428,12 +474,16 @@ class ChatbotAgent(BaseAgent):
                 "tool_result": None,
             }
 
+        # Step 7: 写入 assistant 回复到 context_store
+        assistant_text = response.get("text", "")
+        await self._write_assistant_message(conversation_id, user_id, assistant_text)
+
         # 构建返回结果
         self._state["execution_count"] = self._state.get("execution_count", 0) + 1
 
-        final_result = {
+        final_result: Dict[str, Any] = {
             "success": True,
-            "message": response.get("text", ""),
+            "message": assistant_text,
             "tool_used": response.get("tool_used", False),
         }
 
@@ -449,10 +499,29 @@ class ChatbotAgent(BaseAgent):
 
         logger.info(f"[ChatBot] ========== 处理完成 ==========")
         logger.info(f"[ChatBot] 总耗时: {time.time() - start_time:.2f}s")
-        text = response.get('text', '')[:100].replace('\n', ' ').replace('\r', '')
+        text = assistant_text[:100].replace('\n', ' ').replace('\r', '')
         logger.info(f"[ChatBot] 响应摘要: {text}...")
 
         return final_result
+
+    async def _write_assistant_message(
+        self,
+        conversation_id: Optional[str],
+        user_id: Optional[Any],
+        content: str,
+    ) -> None:
+        """写入 assistant 回复到 context_store（async，避免阻塞事件循环）"""
+        if self.context_store and conversation_id and user_id and content:
+            try:
+                await sync_to_async(self.context_store.append_message)(
+                    session_id=str(conversation_id),
+                    user_id=str(user_id),
+                    role='assistant',
+                    content=content,
+                )
+                logger.info(f"[ChatBot] Assistant 回复已写入 ContextStore")
+            except Exception as e:
+                logger.warning(f"[ChatBot] 写入 assistant 回复失败: {e}")
 
     def _extract_tool_call_info(self, tc) -> Dict[str, Any]:
         """
@@ -638,7 +707,7 @@ class ChatbotAgent(BaseAgent):
                         
                         text = "\n".join(parts)
                     else:
-                        text = data.get("result") or data.get("message") or str(data)
+                        text = data.get("result") or data.get("message") or data.get("answer") or str(data)
                 else:
                     text = str(data)
                 

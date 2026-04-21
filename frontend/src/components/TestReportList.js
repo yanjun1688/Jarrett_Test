@@ -3,9 +3,9 @@ import axios from 'axios';
 import apiClient from '../api/axios';
 import { Row, Col, Card, Statistic, Progress, Typography, Space, notification, Tabs, Table, Tag, Button, Spin, Select, Empty } from 'antd';
 import ExecutionPieChart from './ExecutionPieChart';
+import { unifiedAPI } from '../api/unified';
 import { testExecutionsAPI } from '../api/testExecutions';
 import { uiTestsAPI } from '../api/uiTests';
-import { chatbotAPI } from '../api/chatbot';
 import { EXECUTION_STATUS } from '../constants';
 import ExecutionLogModal from './ExecutionLogModal';
 import '../css/TestReportList.css';
@@ -39,32 +39,6 @@ function reducer(state, action) {
 }
 
 function TestReportList() {
-  // 统一数据规范化函数
-  const normalizeExecutionRecord = useCallback((record, type) => {
-    const testName = type === 'api' 
-      ? record.api_request_name 
-      : type === 'ui' 
-        ? record.script_name 
-        : record.title;
-    
-    const executorName = type === 'api' 
-      ? record.executor_name 
-      : type === 'ui' 
-        ? record.executed_by_username 
-        : null;
-    
-    const executedTime = type === 'ui' && record.created_at 
-      ? record.created_at 
-      : record.executed_at;
-
-    return {
-      ...record,
-      test_name: testName,
-      executor_name: executorName,
-      executed_at: executedTime,
-    };
-  }, []);
-
   const [state, dispatch] = useReducer(reducer, initialState);
   const { statistics, loading } = state;
   
@@ -152,18 +126,17 @@ function TestReportList() {
     };
   }, [fetchData]);
 
-  // 获取API测试日志列表
   const fetchApiTestLogs = useCallback(async (page = 1, pageSize = 20) => {
     setApiLogsLoading(true);
     try {
-      const response = await testExecutionsAPI.getApiTestLogs({
+      const response = await unifiedAPI.getExecutions({
+        script_type: 'api',
         page,
         page_size: pageSize,
       });
       
       const { results, count } = response.data;
-      const normalizedData = (results || []).map(record => normalizeExecutionRecord(record, 'api'));
-      setApiLogs(normalizedData);
+      setApiLogs(results || []);
       setApiLogsPagination(prev => ({
         ...prev,
         current: page,
@@ -177,13 +150,13 @@ function TestReportList() {
     } finally {
       setApiLogsLoading(false);
     }
-  }, [normalizeExecutionRecord]);
+  }, []);
 
-  // 获取UI测试日志列表（使用 UITestExecution 模型）
   const fetchUiTestLogs = useCallback(async (page = 1, pageSize = 20) => {
     setUiLogsLoading(true);
     try {
-      const response = await uiTestsAPI.getExecutions({
+      const response = await unifiedAPI.getExecutions({
+        script_type: 'ui',
         page,
         page_size: pageSize,
       });
@@ -205,22 +178,22 @@ function TestReportList() {
     }
   }, []);
 
-  // 获取ChatBot执行日志列表
   const fetchChatbotLogs = useCallback(async (page = 1, pageSize = 20) => {
     setChatbotLogsLoading(true);
     try {
-      const response = await chatbotAPI.getExecutionLogs({
+      const response = await unifiedAPI.getExecutions({
+        script_type: 'chatbot',
         page,
         page_size: pageSize,
       });
       
-      const { logs, total } = response.data.data;
-      setChatbotLogs(logs || []);
+      const { results, count } = response.data;
+      setChatbotLogs(results || []);
       setChatbotLogsPagination(prev => ({
         ...prev,
         current: page,
         pageSize,
-        total: total || 0,
+        total: count || 0,
       }));
     } catch (error) {
       if (!axios.isCancel(error)) {
@@ -237,7 +210,6 @@ function TestReportList() {
     fetchChatbotLogsRef.current = fetchChatbotLogs;
   }, [fetchChatbotLogs]);
 
-  // 查看API测试详细日志
   const handleViewApiLog = useCallback(async (record) => {
     setSelectedLog(record);
     setLogType('api');
@@ -246,8 +218,35 @@ function TestReportList() {
     setLogDetail(null);
     
     try {
-      const response = await testExecutionsAPI.getById(record.id);
-      setLogDetail(response.data);
+      const response = await unifiedAPI.getExecutionById(record.id);
+      const unifiedData = response.data;
+      const logsArray = unifiedData.logs ? unifiedData.logs.split('\n').filter(l => l.trim()) : [];
+      
+      let apiSpecific = {};
+      if (unifiedData.content_type && unifiedData.object_id) {
+        try {
+          const sourceResponse = await testExecutionsAPI.getById(unifiedData.object_id);
+          const sourceData = sourceResponse.data;
+          apiSpecific = {
+            response_status: sourceData.api_response_data?.status_code || sourceData.response_status,
+            response_time: sourceData.duration,
+            response_body: sourceData.api_response_data,
+            assertions: sourceData.assertions || [],
+          };
+        } catch (e) {
+          console.warn('获取源详情失败:', e);
+        }
+      }
+      
+      setLogDetail({
+        logs: logsArray,
+        execution_duration: unifiedData.duration_seconds,
+        error_message: unifiedData.error_message,
+        status: unifiedData.status,
+        started_at: unifiedData.started_at,
+        completed_at: unifiedData.completed_at,
+        ...apiSpecific,
+      });
     } catch (error) {
       notification.error({ message: '获取日志详情失败', description: error.message });
     } finally {
@@ -255,7 +254,6 @@ function TestReportList() {
     }
   }, []);
   
-  // 查看UI测试详细日志
   const handleViewUiLog = useCallback(async (record) => {
     setSelectedLog(record);
     setLogType('ui');
@@ -264,8 +262,60 @@ function TestReportList() {
     setLogDetail(null);
     
     try {
-      const response = await uiTestsAPI.getExecutionLogs(record.id);
-      setLogDetail(response.data);
+      const response = await unifiedAPI.getExecutionById(record.id);
+      const unifiedData = response.data;
+      const logsArray = unifiedData.logs ? unifiedData.logs.split('\n').filter(l => l.trim()) : [];
+      
+      let uiSpecific = {};
+      if (unifiedData.content_type && unifiedData.object_id) {
+        try {
+          const sourceResponse = await uiTestsAPI.getExecutionLogs(unifiedData.object_id);
+          const sourceData = sourceResponse.data;
+          uiSpecific = {
+            screenshots: sourceData.screenshots || [],
+            result_summary: sourceData.result_summary || {},
+          };
+        } catch (e) {
+          console.warn('获取源详情失败:', e);
+        }
+      }
+      
+      setLogDetail({
+        logs: logsArray,
+        execution_duration: unifiedData.duration_seconds,
+        error_message: unifiedData.error_message,
+        status: unifiedData.status,
+        started_at: unifiedData.started_at,
+        completed_at: unifiedData.completed_at,
+        ...uiSpecific,
+      });
+    } catch (error) {
+      notification.error({ message: '获取日志详情失败', description: error.message });
+    } finally {
+      setLogDetailLoading(false);
+    }
+  }, []);
+  
+  const handleViewChatbotLog = useCallback(async (record) => {
+    setSelectedLog(record);
+    setLogType('chatbot');
+    setLogModalVisible(true);
+    setLogDetailLoading(true);
+    setLogDetail(null);
+    
+    try {
+      const response = await unifiedAPI.getExecutionById(record.id);
+      const unifiedData = response.data;
+      const logsArray = unifiedData.logs ? unifiedData.logs.split('\n').filter(l => l.trim()) : [];
+      
+      setLogDetail({
+        logs: logsArray,
+        execution_duration: unifiedData.duration_seconds,
+        error_message: unifiedData.error_message,
+        status: unifiedData.status,
+        started_at: unifiedData.started_at,
+        completed_at: unifiedData.completed_at,
+      });
     } catch (error) {
       notification.error({ message: '获取日志详情失败', description: error.message });
     } finally {
@@ -283,35 +333,12 @@ function TestReportList() {
     fetchUiTestLogs(pagination.current, pagination.pageSize);
   };
 
-  // API测试日志表格列定义 - 使用统一配置
   const apiLogsColumns = useMemo(() => [
     {
-      title: 'API名称',
-      dataIndex: 'test_name',
-      key: 'test_name',
-      render: (text) => <strong>{text}</strong>,
-    },
-    {
-      title: '请求方法',
-      dataIndex: 'api_request_method',
-      key: 'api_request_method',
-      width: 100,
-      render: (method) => {
-        const colors = {
-          GET: 'blue',
-          POST: 'green',
-          PUT: 'orange',
-          PATCH: 'purple',
-          DELETE: 'red',
-        };
-        return <Tag color={colors[method] || 'default'}>{method}</Tag>;
-      },
-    },
-    {
-      title: '请求URL',
-      dataIndex: 'api_request_url',
-      key: 'api_request_url',
-      ellipsis: true,
+      title: '脚本名称',
+      dataIndex: 'script_name',
+      key: 'script_name',
+      render: (text) => <strong>{text || '-'}</strong>,
     },
     {
       title: '执行状态',
@@ -327,6 +354,7 @@ function TestReportList() {
           'pending': { color: 'default', text: '待执行' },
           'blocked': { color: 'warning', text: '阻塞' },
           'skipped': { color: 'default', text: '跳过' },
+          'stopped': { color: 'default', text: '已停止' },
         };
         const config = statusMap[status] || { color: 'default', text: status };
         return <Tag color={config.color}>{config.text}</Tag>;
@@ -334,15 +362,22 @@ function TestReportList() {
     },
     {
       title: '执行人',
-      dataIndex: 'executor_name',
-      key: 'executor_name',
+      dataIndex: 'executed_by_name',
+      key: 'executed_by_name',
       width: 100,
       render: (name) => name || '-',
     },
     {
+      title: '执行时长',
+      dataIndex: 'duration_seconds',
+      key: 'duration_seconds',
+      width: 100,
+      render: (duration) => duration ? `${duration.toFixed(2)}秒` : '-',
+    },
+    {
       title: '执行时间',
-      dataIndex: 'executed_at',
-      key: 'executed_at',
+      dataIndex: 'started_at',
+      key: 'started_at',
       width: 180,
       render: (text) => text ? new Date(text).toLocaleString() : '-',
     },
@@ -358,7 +393,6 @@ function TestReportList() {
     },
   ], [handleViewApiLog]);
 
-  // UI测试日志表格列定义 - 使用 UITestExecution 模型字段
   const uiLogsColumns = useMemo(() => [
     {
       title: '脚本名称',
@@ -380,6 +414,7 @@ function TestReportList() {
           'pending': { color: 'default', text: '待执行' },
           'blocked': { color: 'warning', text: '阻塞' },
           'skipped': { color: 'default', text: '跳过' },
+          'stopped': { color: 'default', text: '已停止' },
         };
         const config = statusMap[status] || { color: 'default', text: status };
         return <Tag color={config.color}>{config.text}</Tag>;
@@ -387,15 +422,22 @@ function TestReportList() {
     },
     {
       title: '执行人',
-      dataIndex: 'executed_by_username',
-      key: 'executed_by_username',
+      dataIndex: 'executed_by_name',
+      key: 'executed_by_name',
       width: 100,
       render: (name) => name || '-',
     },
     {
+      title: '执行时长',
+      dataIndex: 'duration_seconds',
+      key: 'duration_seconds',
+      width: 100,
+      render: (duration) => duration ? `${duration.toFixed(2)}秒` : '-',
+    },
+    {
       title: '执行时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
+      dataIndex: 'started_at',
+      key: 'started_at',
       width: 180,
       render: (text) => text ? new Date(text).toLocaleString() : '-',
     },
@@ -569,24 +611,11 @@ function TestReportList() {
             <Table
               columns={[
                 {
-                  title: '类型',
-                  dataIndex: 'log_type',
-                  key: 'log_type',
-                  width: 100,
-                  render: (type) => {
-                    const typeMap = {
-                      'skill': <Tag color="purple">Skill</Tag>,
-                      'api_test': <Tag color="blue">API测试</Tag>,
-                      'ui_test': <Tag color="green">UI测试</Tag>,
-                    };
-                    return typeMap[type] || <Tag>{type}</Tag>;
-                  },
-                },
-                {
                   title: '标题',
-                  dataIndex: 'title',
-                  key: 'title',
+                  dataIndex: 'script_name',
+                  key: 'script_name',
                   width: 250,
+                  render: (text) => <strong>{text || '-'}</strong>,
                 },
                 {
                   title: '执行状态',
@@ -595,20 +624,39 @@ function TestReportList() {
                   width: 100,
                   render: (status) => {
                     const statusMap = {
-                      'success': { color: 'success', text: '成功' },
-                      'error': { color: 'error', text: '失败' },
-                      'unknown': { color: 'default', text: '未知' },
+                      'passed': { color: 'success', text: '通过' },
+                      'failed': { color: 'error', text: '失败' },
+                      'pending': { color: 'default', text: '待执行' },
+                      'running': { color: 'processing', text: '执行中' },
+                      'stopped': { color: 'default', text: '已停止' },
                     };
-                    const config = statusMap[status] || statusMap['unknown'];
+                    const config = statusMap[status] || { color: 'default', text: status };
                     return <Tag color={config.color}>{config.text}</Tag>;
                   },
                 },
                 {
+                  title: '执行时长',
+                  dataIndex: 'duration_seconds',
+                  key: 'duration_seconds',
+                  width: 100,
+                  render: (duration) => duration ? `${duration.toFixed(2)}秒` : '-',
+                },
+                {
                   title: '执行时间',
-                  dataIndex: 'created_at',
-                  key: 'created_at',
+                  dataIndex: 'started_at',
+                  key: 'started_at',
                   width: 180,
                   render: (text) => text ? new Date(text).toLocaleString() : '-',
+                },
+                {
+                  title: '操作',
+                  key: 'action',
+                  width: 100,
+                  render: (_, record) => (
+                    <Button type="link" size="small" onClick={() => handleViewChatbotLog(record)}>
+                      查看日志
+                    </Button>
+                  ),
                 },
               ]}
               dataSource={chatbotLogs}
@@ -643,36 +691,35 @@ function TestReportList() {
             setLogDetail(null);
             setLogType('api');
           }}
-          title={logType === 'api' 
-            ? `API测试执行日志 - ${selectedLog?.api_request_name || ''}` 
-            : `UI测试执行日志 - ${selectedLog?.script_name || ''}`}
+          title={
+            logType === 'api' 
+              ? `API测试执行日志 - ${selectedLog?.script_name || ''}` 
+              : logType === 'ui'
+              ? `UI测试执行日志 - ${selectedLog?.script_name || ''}`
+              : `ChatBot执行日志 - ${selectedLog?.script_name || ''}`
+          }
           executionType={logType}
-          status={selectedLog?.status || 'pending'}
-          totalCount={logType === 'ui' 
-            ? (logDetail?.result_summary?.total_actions || 0) 
-            : 1}
-          passedCount={logType === 'ui' 
-            ? (logDetail?.result_summary?.passed_actions || 0) 
-            : (selectedLog?.status === 'passed' ? 1 : 0)}
-          failedCount={logType === 'ui' 
-            ? (logDetail?.result_summary?.failed_actions || 0) 
-            : (selectedLog?.status === 'failed' ? 1 : 0)}
-          executionDuration={logDetail?.execution_duration_ms 
-            ? logDetail.execution_duration_ms / 1000 
-            : logDetail?.response_time}
+          status={logDetail?.status || selectedLog?.status || 'pending'}
+          totalCount={logDetail?.result_summary?.total_actions || 1}
+          passedCount={logDetail?.result_summary?.passed_actions || (logDetail?.status === 'passed' ? 1 : 0)}
+          failedCount={logDetail?.result_summary?.failed_actions || (logDetail?.status === 'failed' ? 1 : 0)}
+          executionDuration={logDetail?.execution_duration}
           responseStatus={logType === 'api' ? logDetail?.response_status : undefined}
           responseTime={logType === 'api' ? logDetail?.response_time : undefined}
-          responseBody={logType === 'api' && logDetail?.api_response_data 
-            ? JSON.stringify(logDetail.api_response_data) 
+          responseBody={logType === 'api' && logDetail?.response_body 
+            ? (typeof logDetail.response_body === 'object' 
+              ? JSON.stringify(logDetail.response_body, null, 2) 
+              : logDetail.response_body)
             : undefined}
           assertions={logType === 'api' ? logDetail?.assertions : undefined}
           screenshots={logType === 'ui' ? logDetail?.screenshots : undefined}
           logs={logDetail?.logs}
           errorMessage={logDetail?.error_message}
-          startTime={selectedLog?.executed_at 
-            ? new Date(selectedLog.executed_at).toLocaleString() 
-            : selectedLog?.created_at 
-            ? new Date(selectedLog.created_at).toLocaleString() 
+          startTime={logDetail?.started_at 
+            ? new Date(logDetail.started_at).toLocaleString() 
+            : undefined}
+          endTime={logDetail?.completed_at 
+            ? new Date(logDetail.completed_at).toLocaleString() 
             : undefined}
         />
       )}

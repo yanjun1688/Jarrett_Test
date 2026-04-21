@@ -72,7 +72,7 @@ def _is_in_async_context() -> bool:
         return False
 
 
-def _run_async_safely(coro) -> Any:
+def _run_async_safely(coro: Any) -> Any:
     """
     在同步上下文中执行协程
     
@@ -122,7 +122,7 @@ async def execute_single_request_async(api_request: Any, user: Any = None) -> Di
         api_request_obj = None
     else:
         # 如果是模型实例，需要同步提取属性，避免在异步上下文中访问模型属性
-        def _extract_api_request_data_sync(api_req):
+        def _extract_api_request_data_sync(api_req: Any) -> Dict[str, Any]:
             """同步函数：从模型对象提取数据字典"""
             return {
                 'id': api_req.id,
@@ -142,7 +142,7 @@ async def execute_single_request_async(api_request: Any, user: Any = None) -> Di
     assertions = []
     if api_request_obj:
         # 如果是模型实例，异步获取断言
-        def _get_assertions_sync(api_req):
+        def _get_assertions_sync(api_req: Any) -> List[Any]:
             return list(api_req.assertions.all())
 
         assertions_list = await sync_to_async(_get_assertions_sync)(api_request_obj)
@@ -408,7 +408,7 @@ async def execute_batch_requests_async(api_requests: List[Any], max_concurrent: 
     """
     semaphore = asyncio.Semaphore(max_concurrent)
     
-    async def execute_with_semaphore(api_request):
+    async def execute_with_semaphore(api_request: Any) -> Dict[str, Any]:
         async with semaphore:
             return await execute_single_request_async(api_request)
     
@@ -416,9 +416,9 @@ async def execute_batch_requests_async(api_requests: List[Any], max_concurrent: 
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
     # 处理异常结果
-    processed_results = []
+    processed_results: List[Dict[str, Any]] = []
     for i, result in enumerate(results):
-        if isinstance(result, Exception):
+        if isinstance(result, BaseException):
             processed_results.append({
                 'success': False,
                 'error': str(result),
@@ -447,7 +447,8 @@ def execute_single_request_sync(api_request: Any, user: Any = None) -> Dict[str,
     返回:
         dict: 执行结果
     """
-    return _run_async_safely(execute_single_request_async(api_request, user))
+    result: Dict[str, Any] = _run_async_safely(execute_single_request_async(api_request, user))
+    return result
 
 
 def execute_batch_requests_sync(api_requests: List[Any], max_concurrent: int = 10) -> List[Dict[str, Any]]:
@@ -463,7 +464,8 @@ def execute_batch_requests_sync(api_requests: List[Any], max_concurrent: int = 1
     返回:
         List[Dict]: 执行结果列表
     """
-    return _run_async_safely(execute_batch_requests_async(api_requests, max_concurrent))
+    result: List[Dict[str, Any]] = _run_async_safely(execute_batch_requests_async(api_requests, max_concurrent))
+    return result
 
 
 # ==================== 工具函数 ====================

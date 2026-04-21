@@ -30,6 +30,7 @@ from shared.utils import get_npx_command
 logger = logging.getLogger(__name__)
 
 SKILL_DIR = Path(settings.BASE_DIR) / "skills"
+AGENT_SKILL_DIR = Path(settings.BASE_DIR) / ".agents" / "skills"
 
 
 class SkillRemoteSearchView(APIView):
@@ -63,6 +64,8 @@ class SkillRemoteSearchView(APIView):
                 [npx_cmd, 'skills', 'find', keyword, '--json'],
                 capture_output=True,
                 text=True,
+                encoding='utf-8',
+                errors='replace',
                 timeout=60
             )
             
@@ -117,18 +120,23 @@ class SkillRemoteSearchView(APIView):
 
 
 class SkillLocalListView(APIView):
-    """获取本地已安装技能列表"""
+    """获取本地已安装技能列表（内置 + 用户安装）"""
     permission_classes = [IsAuthenticated]
     
     def get(self, request: Request) -> Response:
         try:
-            loader = SkillLoader(skill_dir=str(SKILL_DIR))
+            loader = SkillLoader(
+                skill_dir=str(SKILL_DIR),
+                extra_skill_dirs=[str(AGENT_SKILL_DIR)]
+            )
             skill_names = loader.scan_skills()
             
             skills = []
             for name in skill_names:
                 info = loader.get_skill_info(name)
                 if info:
+                    skill_path = Path(info.get('path', ''))
+                    info['source'] = 'builtin' if skill_path.is_relative_to(SKILL_DIR) else 'user_installed'
                     skills.append(info)
             
             return Response({
@@ -138,6 +146,75 @@ class SkillLocalListView(APIView):
             
         except Exception as e:
             logger.error(f"Get local skills error: {str(e)}", exc_info=True)
+            return Response({
+                "success": False,
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class SkillInstallView(APIView):
+    """安装远程技能到本地（.agent/skills/ 目录）"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request: Request) -> Response:
+        skill_name = request.data.get('skill_name')
+        if not skill_name:
+            return Response({
+                "success": False,
+                "error": "请提供 skill_name"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not re.match(r'^[a-zA-Z0-9@/._\-]+$', skill_name):
+            return Response({
+                "success": False,
+                "error": "skill_name 包含非法字符"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            npx_cmd = get_npx_command()
+            if not npx_cmd:
+                return Response({
+                    "success": False,
+                    "error": "npx not found in PATH"
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            result = subprocess.run(
+                [npx_cmd, 'skills', 'add', skill_name],
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                timeout=120,
+                cwd=str(settings.BASE_DIR)
+            )
+            
+            if result.returncode != 0:
+                return Response({
+                    "success": False,
+                    "error": result.stderr or "安装失败"
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            skill_basename = skill_name.split('/')[-1].split('@')[0]
+            installed_path = AGENT_SKILL_DIR / skill_basename
+            
+            return Response({
+                "success": True,
+                "data": {
+                    "skill_name": skill_name,
+                    "skill_basename": skill_basename,
+                    "installed_path": str(installed_path),
+                    "source": "user_installed",
+                    "message": f"Skill {skill_name} 安装成功"
+                }
+            })
+            
+        except subprocess.TimeoutExpired:
+            return Response({
+                "success": False,
+                "error": "安装超时，请稍后重试"
+            }, status=status.HTTP_504_GATEWAY_TIMEOUT)
+        except Exception as e:
+            logger.error(f"Install skill error: {str(e)}", exc_info=True)
             return Response({
                 "success": False,
                 "error": str(e)
@@ -173,16 +250,25 @@ class SkillExecuteView(APIView):
         
         start_time = time.time()
         
-        skill_path = SKILL_DIR / skill_name / "SKILL.md"
-        if not skill_path.exists():
+        skill_path = None
+        skill_source = None
+        
+        for skill_dir in [SKILL_DIR, AGENT_SKILL_DIR]:
+            candidate_path = skill_dir / skill_name / "SKILL.md"
+            if candidate_path.exists():
+                skill_path = candidate_path
+                skill_source = 'builtin' if skill_dir == SKILL_DIR else 'user_installed'
+                break
+        
+        if not skill_path:
             return Response({
                 "success": False,
-                "error": f"Skill {skill_name} not found"
+                "error": f"Skill {skill_name} not found in builtin or user_installed skills"
             }, status=status.HTTP_404_NOT_FOUND)
         
-        # 路径遍历防护
         try:
-            if not skill_path.resolve().is_relative_to(SKILL_DIR.resolve()):
+            if not skill_path.resolve().is_relative_to(SKILL_DIR.resolve()) and \
+               not skill_path.resolve().is_relative_to(AGENT_SKILL_DIR.resolve()):
                 return Response({
                     "success": False,
                     "error": "Invalid skill name"

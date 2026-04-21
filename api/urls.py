@@ -120,6 +120,7 @@ ui_test_patterns = [
 skills_patterns = [
     path('remote-search/', skill_api_views.SkillRemoteSearchView.as_view(), name='skill-remote-search'),
     path('local/', skill_api_views.SkillLocalListView.as_view(), name='skill-local'),
+    path('install/', skill_api_views.SkillInstallView.as_view(), name='skill-install'),
     path('execute/', skill_api_views.SkillExecuteView.as_view(), name='skill-execute'),
 ]
 

@@ -88,7 +88,7 @@ class CacheMixin:
         - 缓存时间可配置
         """
         if not self.cache_list:
-            return super().list(request, *args, **kwargs)  # type: ignore[misc]
+            return super().list(request, *args, **kwargs)  # type: ignore[misc, no-any-return]
         
         cache_key = self._get_list_cache_key()
         
@@ -99,7 +99,7 @@ class CacheMixin:
             return Response(cached_response)
         
         # 缓存未命中，执行查询
-        response = super().list(request, *args, **kwargs)  # type: ignore[misc]
+        response: Response = super().list(request, *args, **kwargs)  # type: ignore[misc]
         
         # 存入缓存（只缓存成功响应）
         if response.status_code == 200:
@@ -118,7 +118,7 @@ class CacheMixin:
         - 缓存时间可配置
         """
         if not self.cache_retrieve:
-            return super().retrieve(request, *args, **kwargs)  # type: ignore[misc]
+            return super().retrieve(request, *args, **kwargs)  # type: ignore[misc, no-any-return]
         
         pk = kwargs.get('pk')
         cache_key = self._get_retrieve_cache_key(pk)
@@ -130,7 +130,7 @@ class CacheMixin:
             return Response(cached_response)
         
         # 缓存未命中，执行查询
-        response = super().retrieve(request, *args, **kwargs)  # type: ignore[misc]
+        response: Response = super().retrieve(request, *args, **kwargs)  # type: ignore[misc]
         
         # 存入缓存（只缓存成功响应）
         if response.status_code == 200:

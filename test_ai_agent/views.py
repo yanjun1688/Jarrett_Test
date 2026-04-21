@@ -11,7 +11,6 @@ from django.http import JsonResponse
 from django.utils.text import get_valid_filename
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.authentication import SessionAuthentication
 from asgiref.sync import sync_to_async, async_to_sync
 
 logger = logging.getLogger(__name__)
@@ -20,15 +19,9 @@ _MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 _ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.txt', '.md', '.doc'}
 
 
-class CsrfExemptSessionAuthentication(SessionAuthentication):
-    def enforce_csrf(self, request):
-        return None
-
-
 class ProcessPRDView(APIView):
     """处理PRD文档并生成测试用例的视图"""
     permission_classes = [IsAuthenticated]
-    authentication_classes = [CsrfExemptSessionAuthentication]
     
     def post(self, request: Request) -> JsonResponse:
         """处理POST请求，接收PRD文档并生成测试用例"""
@@ -112,46 +105,18 @@ class ProcessPRDView(APIView):
             }, status=500)
     
     async def process_document(self, file_path):
-        """处理文档并生成测试用例"""
+        """处理文档并生成测试用例分析"""
         # 延迟导入，避免在模块级别执行任何代码（Celery兼容性）
-        from .document_loader import DocumentLoader
         from .ai_processor import AIProcessor
 
         # 初始化处理器，使用默认配置
-        document_loader = DocumentLoader()
         ai_processor = AIProcessor()
-        
-        # 加载文档
-        content = document_loader.load_document(file_path)
-        
-        # 处理文档内容（这里简化为整个文档作为一个块）
-        processed_chunk = await ai_processor.process_prd_chunk("chunk_1", content)
-        
-        # 将Pydantic模型转换为字典，以便JSON序列化
-        test_suites_data = []
-        for suite in processed_chunk.test_suites:
-            test_cases_data = []
-            for case in suite.test_cases:
-                test_cases_data.append({
-                    'title': case.title,
-                    'description': case.description,
-                    'preconditions': case.preconditions,
-                    'steps': case.steps,
-                    'expected_result': case.expected_result,
-                    'priority': case.priority,
-                    'type': case.type,
-                    'category': case.category
-                })
-            test_suites_data.append({
-                'name': suite.name,
-                'description': suite.description,
-                'test_cases': test_cases_data
-            })
-        
-        # 返回处理结果（包含完整的test_suites数据）
+
+        # 处理文档并获取分析结果
+        result = await ai_processor.process_document(file_path)
+
         return {
-            'chunk_id': processed_chunk.chunk_id,
-            'test_suites_count': len(processed_chunk.test_suites),
-            'test_suites': test_suites_data
+            'analysis': result['analysis'],
+            'document_content': result['content'][:500] + '...' if len(result['content']) > 500 else result['content']
         }
 

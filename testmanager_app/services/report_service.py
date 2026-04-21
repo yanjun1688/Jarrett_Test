@@ -96,7 +96,7 @@ class ReportService:
         """
         try:
             # 使用自定义 QuerySet 方法进行查询和聚合
-            stats = TestExecution.objects.by_project_and_date_range(
+            stats = TestExecution.objects.by_project_and_date_range(  # type: ignore[attr-defined]
                 project, start_date, end_date
             ).aggregate_stats()
 

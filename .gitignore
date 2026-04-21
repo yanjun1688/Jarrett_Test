@@ -107,7 +107,7 @@ verify_recorder.py
 restart_server.ps1
 check_coverage.py
 skills-lock.json
-package-lock.json
+/package-lock.json
 
 # Backups
 *.bak
@@ -119,18 +119,22 @@ backups/
 !README.md
 docs/
 
-# Test directories
-testmanager_app/tests/
-testmanager_app/test_scripts/
+# Test directories (only filter actual test code directories)
 tests/
+**/tests/
+tests/e2e/
+tests/unit/
+tests/integration/
 
-# Temporary data directories
-context_data/
-data/test_*/
-ocsd/
-
-# Debug files
+# Temporary test scripts (local debug)
+validate_*.py
 debug_*.py
+tmp*.py
+
+# App-level test files (not in tests/ directory)
+testmanager_app/test_*.py
+test_ui_app/test_*.py
+test_ai_agent/test_*.py
 
 # MCP builder temp
 =mcp-builder/
@@ -140,11 +144,8 @@ agent-browser.json
 pyrightconfig.json
 pyright_errors.json
 
-# Test files
-test_*.py
-tests/
-**/tests/
-validate_*.py
+# Context data (runtime)
+context_data/
 
 # Start scripts (local only)
 start.py

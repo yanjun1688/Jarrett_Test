@@ -361,7 +361,7 @@ class TestExecutionService:
         # 处理异常结果
         final_results: List[Dict[str, Any]] = []
         for idx, result in enumerate(results):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 req_id = request_ids[idx] if idx < len(request_ids) else None
                 logger.error(f"Request {req_id} failed with exception: {str(result)}", exc_info=True)
                 final_results.append({

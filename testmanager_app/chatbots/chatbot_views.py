@@ -142,6 +142,10 @@ class EnhancedChatBotView(APIView):
     async def _async_post(self, request: Request) -> Response:
         """
         处理聊天消息
+
+        职责边界：
+        - API 层只负责 HTTP 请求/响应、会话创建/权限校验
+        - 历史管理、存储、prompt 构建全部由 ChatbotAgent 内部处理
         """
         try:
             data: Any = request.data
@@ -151,87 +155,67 @@ class EnhancedChatBotView(APIView):
                     "success": False,
                     "error": "消息内容不能为空"
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             provider: str = str(data.get('provider', 'qwen'))
             model = data.get('model')
             temperature: float = float(data.get('temperature', 0.7))
             max_tokens: int = int(data.get('max_tokens', 2048))
-            system_message: str = str(data.get('system_message', ''))
             conversation_id: Optional[str] = data.get('conversation_id')
             project_id_raw = data.get('project_id')
             project_id: Optional[int] = int(project_id_raw) if project_id_raw else None
-            stream: bool = bool(data.get('stream', False))
-            
-            conversation, error, is_new = await sync_to_async(ConversationService.get_or_create_conversation)(
+
+            # 会话创建/获取（API 层职责：权限校验 + 会话索引管理）
+            conversation, error, is_new = await sync_to_async(
+                ConversationService.get_or_create_conversation
+            )(
                 user=request.user,
                 conversation_id=conversation_id,
                 project_id=project_id
             )
-            
+
             if error or conversation is None:
                 return Response({
                     "success": False,
                     "error": error or "会话创建失败"
                 }, status=status.HTTP_400_BAD_REQUEST if error and "上限" in error else status.HTTP_404_NOT_FOUND)
-            
+
             conv_id_str = str(conversation.conversation_id)
-            
-            await sync_to_async(ConversationService.add_message)(
-                conversation_id=conv_id_str,
-                user=request.user,
-                role="user",
-                content=message
-            )
-            
-            conversation_history = await sync_to_async(ConversationService.get_messages_for_llm)(
-                conversation_id=conv_id_str,
-                user=request.user
-            )
-            
-            metadata, _ = await sync_to_async(ConversationService.get_metadata)(
-                conversation_id=conv_id_str,
-                user=request.user
-            )
-            
+
+            # 获取 LLM 服务 + Agent
             llm_service = get_llm_service(provider)
-            
+
             import time
             start_time = time.time()
-            
+
             chatbot_agent = get_chatbot_agent(llm_service)
             await chatbot_agent.initialize()
             logger.info(f"Agent initialized in {time.time() - start_time:.2f}s")
-            
+
+            # 只传最小必要信息给 Agent，历史/存储/prompt 由 Agent 内部管理
             input_data = {
                 "message": message,
+                "conversation_id": conv_id_str,
+                "user_id": request.user.id,
                 "project_id": project_id,
-                "conversation_history": conversation_history,
                 "context": {
-                    "user_id": request.user.id,
                     "provider": provider,
                     "model": model,
                     "temperature": temperature,
                     "max_tokens": max_tokens,
-                    "conversation_id": conv_id_str,
-                    "session_metadata": metadata
                 }
             }
             exec_start = time.time()
             result = await chatbot_agent.execute(input_data)
             logger.info(f"Agent execution took {time.time() - exec_start:.2f}s")
-            
+
             assistant_message = result.get("message", "")
-            await sync_to_async(ConversationService.add_message)(
-                conversation_id=conv_id_str,
-                user=request.user,
-                role="assistant",
-                content=assistant_message,
-                metadata={
-                    "intent": result.get("intent"),
-                    "tool_used": result.get("tool_used", False)
-                }
-            )
-            
+
+            # 更新会话标题（API 层职责：MySQL 索引维护）
+            if is_new or not conversation.title:
+                conversation.title = message[:30]
+                await sync_to_async(conversation.save)(update_fields=["title", "updated_at"])
+
+            # pending_tests 业务逻辑（API 层职责：业务元数据）
             if result.get("tool_result") and result.get("tool_used"):
                 tool_result = result.get("tool_result")
                 if isinstance(tool_result, dict):
@@ -241,7 +225,7 @@ class EnhancedChatBotView(APIView):
                             user=request.user,
                             tests={"api": tool_result}
                         )
-            
+
             response_data = {
                 "success": result.get("success", True),
                 "response": assistant_message,
@@ -255,9 +239,9 @@ class EnhancedChatBotView(APIView):
                 "timestamp": result.get("timestamp"),
                 "conversation_id": conv_id_str
             }
-            
+
             return Response(response_data, status=status.HTTP_200_OK)
-        
+
         except Exception as e:
             logger.error(f"ChatBot API error: {str(e)}", exc_info=True)
             return Response({

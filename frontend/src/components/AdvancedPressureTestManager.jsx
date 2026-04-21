@@ -34,6 +34,8 @@ const AdvancedPressureTestManager = () => {
   const [historyVisible, setHistoryVisible] = useState(false);
   const [executions, setExecutions] = useState([]);
   const [webUiVisible, setWebUiVisible] = useState(false);
+  const [logModalVisible, setLogModalVisible] = useState(false);
+  const [logModalContent, setLogModalContent] = useState('');
   const [webUiUrl, setWebUiUrl] = useState(null);
 
   const getToken = () => localStorage.getItem('authToken');
@@ -89,6 +91,17 @@ const AdvancedPressureTestManager = () => {
       }
     } catch (error) {
       message.error('加载历史失败: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleViewLogs = async (executionId) => {
+    try {
+      const response = await advancedPressureTestAPI.execution.getById(executionId);
+      const detail = response.data?.data || response.data;
+      setLogModalContent(detail?.logs || detail?.error_log || '暂无执行日志');
+      setLogModalVisible(true);
+    } catch (error) {
+      message.error('加载日志失败: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -504,6 +517,9 @@ const AdvancedPressureTestManager = () => {
             { title: '总请求', dataIndex: 'total_requests', key: 'total_requests' },
             { title: '成功率', key: 'success_rate', render: (_, r) => r.total_requests > 0 ? `${((r.success_count / r.total_requests) * 100).toFixed(1)}%` : '0%' },
             { title: '开始时间', dataIndex: 'started_at', key: 'started_at' },
+            { title: '操作', key: 'action', render: (_, r) => (
+              <Button size="small" onClick={() => handleViewLogs(r.id)}>日志</Button>
+            )},
           ]}
           locale={{ emptyText: '暂无执行记录' }}
         />
@@ -527,6 +543,21 @@ const AdvancedPressureTestManager = () => {
             />
           </div>
         )}
+      </Modal>
+
+      {/* 执行日志弹窗 */}
+      <Modal
+        title="执行日志"
+        open={logModalVisible}
+        onCancel={() => setLogModalVisible(false)}
+        footer={[<Button key="close" onClick={() => setLogModalVisible(false)}>关闭</Button>]}
+        width={800}
+      >
+        <Card style={{ background: '#f5f5f5', maxHeight: 500, overflow: 'auto' }}>
+          <pre style={{ fontFamily: 'monospace', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>
+            {logModalContent}
+          </pre>
+        </Card>
       </Modal>
     </div>
   );

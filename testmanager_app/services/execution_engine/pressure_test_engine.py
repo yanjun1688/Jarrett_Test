@@ -320,6 +320,31 @@ class PressureTestEngine:
                 }
                 for r in self.metrics.results
             ]
+
+            # 生成执行日志摘要
+            log_lines = [
+                f"[压测执行完成] 配置: {self.config.name}",
+                f"模式: {self.config.get_pressure_mode_display()}",
+                f"目标: {self.config.api_request.method} {self.config.api_request.url}",
+                f"状态: {status}",
+                f"总请求数: {stats.get('total_requests', 0)}",
+                f"成功: {stats.get('success_count', 0)}, 失败: {stats.get('failed_count', 0)}",
+                f"错误率: {stats.get('error_rate', 0):.2f}%",
+                f"平均响应时间: {stats.get('avg_response_time', 0):.2f}ms",
+                f"P95响应时间: {stats.get('p95_response_time', 0):.2f}ms",
+                f"吞吐量: {stats.get('throughput', 0):.2f} RPS",
+                f"峰值并发: {self.metrics.peak_concurrent}",
+            ]
+            # 追加失败请求摘要（最多前10条）
+            failed_results = [r for r in self.metrics.results if not r.success]
+            if failed_results:
+                log_lines.append(f"\n--- 失败请求摘要 (共{len(failed_results)}条，显示前10条) ---")
+                for r in failed_results[:10]:
+                    log_lines.append(
+                        f"  #{r.index}: status={r.status_code}, "
+                        f"time={r.response_time_ms:.2f}ms, error={r.error_message}"
+                    )
+            execution.logs = '\n'.join(log_lines)
             
             execution.save()
         

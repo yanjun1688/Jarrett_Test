@@ -23,6 +23,8 @@ class ScriptType(models.TextChoices):
     UI = 'ui', 'UI测试'
     PRESSURE = 'pressure', '压测'
     ADVANCED_PRESSURE = 'advanced_pressure', '高级压测'
+    SCRIPT = 'script', '测试脚本'
+    CHATBOT = 'chatbot', 'ChatBot执行'
 
 
 class UnifiedStatus(models.TextChoices):
@@ -108,16 +110,34 @@ class UnifiedScript(models.Model):
 class UnifiedExecution(models.Model):
     """统一执行记录注册表 - 桥接所有类型的执行记录"""
 
-    # 关联到 UnifiedScript
-    unified_script: models.ForeignKey[UnifiedScript, UnifiedScript] = models.ForeignKey(
+    # 关联到 UnifiedScript（可为空，如 TestExecution 无对应 UnifiedScript）
+    unified_script: models.ForeignKey[Optional[UnifiedScript], Optional[UnifiedScript]] = models.ForeignKey(
         UnifiedScript,
         on_delete=models.CASCADE,
         related_name='executions',
         verbose_name='统一脚本',
         db_index=True,
+        null=True,
+        blank=True,
     )
 
     # 反规范化字段
+    script_name: models.CharField[str, str] = models.CharField(
+        max_length=200, blank=True, verbose_name='脚本/配置名称',
+    )
+    script_type: models.CharField[str, str] = models.CharField(
+        max_length=30, choices=ScriptType.choices,
+        blank=True, verbose_name='脚本类型', db_index=True,
+    )
+    project: models.ForeignKey[Optional[Project], Optional[Project]] = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='unified_executions',
+        verbose_name='所属项目',
+        null=True,
+        blank=True,
+        db_index=True,
+    )
     status: models.CharField[str, str] = models.CharField(
         max_length=20, choices=UnifiedStatus.choices,
         default=UnifiedStatus.PENDING,
@@ -149,6 +169,9 @@ class UnifiedExecution(models.Model):
     error_message: models.TextField[str, str] = models.TextField(
         blank=True, verbose_name='错误信息',
     )
+    logs: models.TextField[str, str] = models.TextField(
+        blank=True, verbose_name='执行日志',
+    )
 
     # GenericForeignKey 指向源执行记录
     content_type: models.ForeignKey[ContentType, ContentType] = models.ForeignKey(
@@ -178,4 +201,5 @@ class UnifiedExecution(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f'{self.unified_script.name} - {self.get_status_display()}'
+        name = self.script_name or (self.unified_script.name if self.unified_script else '未知')
+        return f'{name} - {self.get_status_display()}'

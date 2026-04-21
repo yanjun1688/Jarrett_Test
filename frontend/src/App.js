@@ -11,7 +11,6 @@ import {
   LogoutOutlined,
   RobotOutlined,
   PlayCircleOutlined,
-  BranchesOutlined,
   BookOutlined,
   ThunderboltOutlined,
   CloudServerOutlined,
@@ -79,11 +78,6 @@ const menuItems = [
     key: '/ai-test-analysis',
     icon: <RobotOutlined />,
     label: <Link to="/ai-test-analysis">AI分析用例</Link>,
-  },
-  {
-    key: '/test-flows',
-    icon: <BranchesOutlined />,
-    label: <Link to="/test-flows">测试流程</Link>,
   },
   {
     key: '/knowledge-base',

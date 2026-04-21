@@ -1,8 +1,9 @@
 import React, { useReducer, useEffect, useCallback, useState } from 'react';
 import apiClient from '../api/axios';
 import { Table, Button, Upload, Card, Space, Typography, Tag, notification, Descriptions, Modal, Input, Form, Select, Collapse, Tabs, Divider } from 'antd';
-import { UploadOutlined, EditOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { UploadOutlined, EditOutlined, QuestionCircleOutlined, FileTextOutlined } from '@ant-design/icons';
 import { usePermissions } from '../hooks/usePermissions';
+import { unifiedExecutionsAPI } from '../api/unifiedExecutions';
 import VariablesConfigurator from './VariablesConfigurator';
 import StepConfigurator from './StepConfigurator';
 
@@ -62,7 +63,7 @@ function TestScriptList() {
   const [editVisualFormData, setEditVisualFormData] = useState({
     variables: {},
     setup: [],
-    test_steps: [],
+    steps: [],
     teardown: []
   });
   const [editComposeContent, setEditComposeContent] = useState('');
@@ -77,7 +78,7 @@ function TestScriptList() {
     project: '',
     variables: {},
     setup: [],
-    test_steps: [],
+    steps: [],
     teardown: []
   });
   const { hasCrudPermission } = usePermissions();
@@ -85,6 +86,8 @@ function TestScriptList() {
   const [uploadProjectForm] = Form.useForm();
   const [pendingUploadFile, setPendingUploadFile] = useState(null);
   const [pendingScriptType, setPendingScriptType] = useState('yaml');
+  const [logModalVisible, setLogModalVisible] = useState(false);
+  const [logModalData, setLogModalData] = useState({ logs: [], loading: false, scriptName: '' });
 
   const fetchScripts = useCallback(async () => {
     dispatch({ type: 'FETCH_START' });
@@ -119,12 +122,45 @@ function TestScriptList() {
     try {
       const response = await apiClient.post(`/test-scripts/${scriptId}/execute/`);
       dispatch({ type: 'EXECUTE_SUCCESS', payload: response.data });
-      notification.success({ message: '脚本执行成功' });
+
+      // 根据脚本内部测试用例的实际执行结果展示通知
+      if (response.data.success) {
+        notification.success({ message: '脚本执行完成', description: '所有测试用例通过' });
+      } else {
+        // 统计失败步骤信息
+        const results = response.data.results || [];
+        const failedCount = results.filter(r => !r.success).length;
+        const totalCount = results.length;
+        const description = totalCount > 0
+          ? `${totalCount} 个步骤中有 ${failedCount} 个失败`
+          : response.data.error || '测试用例执行失败，请查看日志';
+        notification.warning({
+          message: '脚本执行完成，存在失败用例',
+          description,
+          duration: 6,
+        });
+      }
+
       fetchScripts(); // Refresh list to update status
     } catch (error) {
-      const errorMsg = error.response?.data?.detail || error.message;
-      dispatch({ type: 'EXECUTE_ERROR', payload: { status: 'error', output: '', error_message: errorMsg } });
-      notification.error({ message: '脚本执行失败', description: errorMsg });
+      const errorMsg = error.response?.data?.detail || error.response?.data?.error || error.message;
+      dispatch({ type: 'EXECUTE_ERROR', payload: { success: false, output: '', error_message: errorMsg } });
+      notification.error({ message: '脚本执行异常', description: errorMsg });
+    }
+  };
+
+  const handleViewLogs = async (scriptId, scriptName) => {
+    setLogModalData({ logs: [], loading: true, scriptName });
+    setLogModalVisible(true);
+    try {
+      const response = await unifiedExecutionsAPI.getAll({ script_type: 'script' });
+      const allExecutions = response.data?.results || response.data || [];
+      // 过滤出当前脚本的执行记录（通过 script_name 匹配）
+      const scriptExecutions = allExecutions.filter(e => e.script_name === scriptName);
+      setLogModalData({ logs: scriptExecutions, loading: false, scriptName });
+    } catch (error) {
+      notification.error({ message: '获取执行日志失败', description: error.message });
+      setLogModalData({ logs: [], loading: false, scriptName });
     }
   };
 
@@ -156,7 +192,7 @@ function TestScriptList() {
       setEditVisualFormData({
         variables: parsed.variables || {},
         setup: parsed.setup || [],
-        test_steps: parsed.test_steps || [],
+        steps: parsed.steps || parsed.test_steps || [],
         teardown: parsed.teardown || [],
       });
       setEditComposeContent(content);
@@ -165,7 +201,7 @@ function TestScriptList() {
       setEditVisualFormData({
         variables: {},
         setup: [],
-        test_steps: [],
+        steps: [],
         teardown: [],
       });
     }
@@ -185,7 +221,7 @@ function TestScriptList() {
           variables: editVisualFormData.variables,
         };
         if (editVisualFormData.setup?.length) scriptObj.setup = editVisualFormData.setup;
-        if (editVisualFormData.test_steps?.length) scriptObj.test_steps = editVisualFormData.test_steps;
+        if (editVisualFormData.steps?.length) scriptObj.steps = editVisualFormData.steps;
         if (editVisualFormData.teardown?.length) scriptObj.teardown = editVisualFormData.teardown;
         scriptContent = JSON.stringify(scriptObj, null, 2);
       } else {
@@ -259,8 +295,8 @@ function TestScriptList() {
           scriptObj.setup = visualFormData.setup;
         }
 
-        if (visualFormData.test_steps && visualFormData.test_steps.length > 0) {
-          scriptObj.test_steps = visualFormData.test_steps;
+        if (visualFormData.steps && visualFormData.steps.length > 0) {
+          scriptObj.steps = visualFormData.steps;
         }
 
         if (visualFormData.teardown && visualFormData.teardown.length > 0) {
@@ -293,7 +329,7 @@ function TestScriptList() {
         project: '',
         variables: {},
         setup: [],
-        test_steps: [],
+        steps: [],
         teardown: []
       });
       fetchScripts();
@@ -322,8 +358,8 @@ function TestScriptList() {
       scriptObj.setup = visualFormData.setup;
     }
 
-    if (visualFormData.test_steps && visualFormData.test_steps.length > 0) {
-      scriptObj.test_steps = visualFormData.test_steps;
+    if (visualFormData.steps && visualFormData.steps.length > 0) {
+      scriptObj.steps = visualFormData.steps;
     }
 
     if (visualFormData.teardown && visualFormData.teardown.length > 0) {
@@ -345,6 +381,9 @@ function TestScriptList() {
         <Space>
           <Button onClick={() => handleExecuteScript(record.id)} loading={executingId === record.id}>
             执行
+          </Button>
+          <Button icon={<FileTextOutlined />} onClick={() => handleViewLogs(record.id, record.name)}>
+            日志
           </Button>
           <Button icon={<EditOutlined />} onClick={() => handlePreview(record)}>
             编辑
@@ -375,139 +414,94 @@ function TestScriptList() {
             header={
               <Space>
                 <QuestionCircleOutlined style={{ color: '#1890ff' }} />
-                <strong>测试脚本功能使用说明</strong>
+                <strong>测试脚本使用说明</strong>
               </Space>
             } 
             key="usage-guide"
           >
             <div style={{ padding: '16px 0' }}>
               <Typography.Paragraph>
-                <Title level={4}>📖 功能概述</Title>
+                <Title level={4}>功能概述</Title>
                 <p>
-                  测试脚本是一个<strong>高级功能</strong>，支持通过 YAML/JSON 格式编写复杂的测试链路。
-                  它提供了比请求集合更强大的功能，包括 setup/teardown、变量初始化、灵活的断言配置等。
+                  测试脚本支持通过 <strong>YAML</strong> 或 <strong>JSON</strong> 格式编写 API 测试链路。
+                  支持变量管理、Setup/Teardown 阶段、变量提取和断言验证。
                 </p>
               </Typography.Paragraph>
 
               <Typography.Paragraph>
-                <Title level={4}>🎯 适用场景</Title>
-                <ul>
-                  <li>需要复杂测试流程的场景（如登录→创建数据→验证→清理）</li>
-                  <li>需要前置准备和后置清理的测试（setup/teardown）</li>
-                  <li>需要版本控制和CI/CD集成的测试</li>
-                  <li>需要灵活配置和复杂逻辑的测试场景</li>
-                </ul>
-              </Typography.Paragraph>
-
-              <Typography.Paragraph>
-                <Title level={4}>📝 脚本格式</Title>
-                <p>测试脚本支持 <strong>YAML</strong> 和 <strong>JSON</strong> 两种格式，推荐使用 YAML（更易读）。</p>
-                
-                <Title level={5}>基本结构：</Title>
-                <pre style={{ background: '#f5f5f5', padding: '12px', borderRadius: '4px', overflow: 'auto' }}>
-{`name: 测试名称
+                <Title level={4}>脚本结构（YAML 格式）</Title>
+                <pre style={{ background: '#f5f5f5', padding: '12px', borderRadius: '4px', overflow: 'auto', fontSize: 13 }}>
+{`name: 用户登录测试
 description: 测试描述
 variables:
   base_url: "https://api.example.com"
-  username: "testuser"
 
 setup:
-  - name: 登录
+  - name: 前置登录
     request:
       method: POST
       url: "{{base_url}}/login"
       json:
-        username: "{{username}}"
-        password: "password123"
+        username: test
+        password: "123"
     extract:
       - name: token
         jsonpath: "$.data.token"
     assertions:
       - type: status_code
         expected: 200
+        comparison: equals
 
-test_steps:
+steps:
   - name: 获取用户信息
     request:
       method: GET
-      url: "{{base_url}}/user/info"
+      url: "{{base_url}}/user"
       headers:
         Authorization: "Bearer {{token}}"
     assertions:
-      - type: status_code
-        expected: 200
       - type: jsonpath
         expression: "$.code"
         expected: 0
+        comparison: equals
 
 teardown:
-  - name: 登出
+  - name: 清理数据
     request:
       method: POST
-      url: "{{base_url}}/logout"
-      headers:
-        Authorization: "Bearer {{token}}"`}
+      url: "{{base_url}}/logout"`}
                 </pre>
               </Typography.Paragraph>
 
               <Typography.Paragraph>
-                <Title level={4}>🔧 核心功能</Title>
-                
-                <Title level={5}>1. 变量管理</Title>
+                <Title level={4}>核心功能</Title>
                 <ul>
-                  <li><strong>初始化变量</strong>：在 <code>variables</code> 中定义初始变量</li>
-                  <li><strong>变量提取</strong>：使用 <code>extract</code> 从响应中提取变量（JSONPath）</li>
-                  <li><strong>模板渲染</strong>：使用 <code>{`{{variable}}`}</code> 在请求中使用变量</li>
-                </ul>
-
-                <Title level={5}>2. Setup/Teardown</Title>
-                <ul>
-                  <li><strong>Setup</strong>：在测试步骤前执行，用于准备测试环境（如登录、创建数据）</li>
-                  <li><strong>Teardown</strong>：在测试步骤后执行，无论成功失败都会执行，用于清理（如登出、删除数据）</li>
-                  <li>如果 Setup 失败，测试步骤不会执行，但 Teardown 仍会执行</li>
-                </ul>
-
-                <Title level={5}>3. 断言验证</Title>
-                <ul>
-                  <li><strong>状态码断言</strong>：<code>type: status_code, expected: 200</code></li>
-                  <li><strong>JSONPath断言</strong>：<code>type: jsonpath, expression: "$.code", expected: 0</code></li>
-                  <li>断言失败会导致步骤失败，根据 <code>stop_on_failure</code> 决定是否继续</li>
-                </ul>
-
-                <Title level={5}>4. 执行控制</Title>
-                <ul>
-                  <li><strong>stop_on_failure</strong>：步骤失败时是否停止执行（默认 true）</li>
-                  <li>所有步骤按顺序执行，支持变量传递</li>
+                  <li><strong>变量管理</strong>：在 <code>variables</code> 中定义初始变量，使用 <code>{"{{var}}"}</code> 模板语法引用</li>
+                  <li><strong>变量提取</strong>：通过 <code>extract</code> + JSONPath 从响应中提取值供后续步骤使用</li>
+                  <li><strong>Setup/Teardown</strong>：前置准备和后置清理阶段，Setup 失败则跳过测试步骤，Teardown 始终执行</li>
+                  <li><strong>断言验证</strong>：<code>status_code</code> 状态码断言、<code>jsonpath</code> JSON 路径断言，必须指定 <code>comparison</code> 比较方式</li>
                 </ul>
               </Typography.Paragraph>
 
               <Typography.Paragraph>
-                <Title level={4}>💡 使用技巧</Title>
+                <Title level={4}>断言配置</Title>
+                <p>断言必须包含三个字段：<code>type</code>、<code>expected</code>、<code>comparison</code></p>
                 <ul>
-                  <li>使用有意义的步骤名称，便于调试和日志查看</li>
-                  <li>合理使用变量，避免硬编码</li>
-                  <li>在 Setup 中完成登录等前置操作，提取 token 等认证信息</li>
-                  <li>在 Teardown 中清理测试数据，保持环境干净</li>
-                  <li>使用 JSONPath 精确提取需要的变量值</li>
-                  <li>为关键步骤添加断言，确保测试的可靠性</li>
+                  <li><strong>type</strong>：<code>status_code</code> 或 <code>jsonpath</code></li>
+                  <li><strong>expected</strong>：期望值</li>
+                  <li><strong>comparison</strong>：<code>equals</code>、<code>not_equals</code>、<code>contains</code>、<code>gt</code>、<code>gte</code>、<code>lt</code>、<code>lte</code></li>
+                  <li>JSONPath 断言还需 <code>expression</code> 字段指定路径</li>
                 </ul>
               </Typography.Paragraph>
 
               <Typography.Paragraph>
-                <Title level={4}>🔄 与请求集合的对比</Title>
-                <p>
-                  <strong>测试脚本</strong>适合复杂场景和版本控制，<strong>请求集合</strong>适合UI管理和快速配置。
-                  两者功能相似，但测试脚本提供了更灵活的配置方式和更强大的功能。
-                </p>
-                <p>
-                  <strong>提示</strong>：如果只是简单的顺序执行和变量传递，建议使用请求集合的链式执行模式。
-                  只有在需要 setup/teardown、复杂逻辑或版本控制时，才使用测试脚本。
-                </p>
-              </Typography.Paragraph>
-
-              <Typography.Paragraph>
-                <Title level={4}>📚 示例脚本</Title>
-                <p>完整的示例脚本可以在创建脚本时参考模板，或查看系统提供的示例。</p>
+                <Title level={4}>操作方式</Title>
+                <ul>
+                  <li><strong>可视化编辑器</strong>：通过表单配置变量、步骤，点击"生成代码预览"查看 JSON</li>
+                  <li><strong>代码编辑器</strong>：直接编写 JSON 格式脚本内容</li>
+                  <li><strong>上传脚本</strong>：上传已有的 .json 或 .yaml 文件</li>
+                  <li><strong>查看日志</strong>：点击"日志"按钮查看脚本执行历史记录</li>
+                </ul>
               </Typography.Paragraph>
             </div>
           </Panel>
@@ -601,8 +595,8 @@ teardown:
                     
                     <Divider style={{ background: '#e6f7ff', fontWeight: 600 }}>测试执行步骤</Divider>
                     <StepConfigurator 
-                      steps={editVisualFormData.test_steps || []}
-                      onChange={(steps) => updateEditVisualFormField('test_steps', steps)}
+                      steps={editVisualFormData.steps || []}
+                      onChange={(steps) => updateEditVisualFormField('steps', steps)}
                       title="主测试步骤"
                     />
                     
@@ -695,8 +689,8 @@ teardown:
                     
                     <Divider style={{ background: '#e6f7ff', fontWeight: 600 }}>测试执行步骤</Divider>
                     <StepConfigurator 
-                      steps={visualFormData.test_steps || []}
-                      onChange={(steps) => updateVisualFormField('test_steps', steps)}
+                      steps={visualFormData.steps || []}
+                      onChange={(steps) => updateVisualFormField('steps', steps)}
                       title="主测试步骤"
                     />
                     
@@ -755,12 +749,13 @@ teardown:
                                   {
                                     type: "jsonpath",
                                     expression: "$.code",
-                                    expected: 200
+                                    expected: 200,
+                                    comparison: "equals"
                                   }
                                 ]
                               }
                             ],
-                            test_steps: [
+                            steps: [
                               {
                                 id: "test-qry",
                                 name: "查询项目列表",
@@ -777,7 +772,8 @@ teardown:
                                   {
                                     type: "jsonpath",
                                     expression: "$.code",
-                                    expected: 200
+                                    expected: 200,
+                                    comparison: "equals"
                                   }
                                 ]
                               }
@@ -794,7 +790,7 @@ teardown:
               <Tabs.TabPane tab="代码编辑器" key="code">
                 <TextArea
                   rows={20}
-                  placeholder={'在此处输入YAML或JSON格式的测试脚本，例如:\n\nname: 用户下单流程测试\ndescription: 完整用户注册-登录-下单流程\n\nvariables:\n  username: test_user_001\n  password: 123456\n\ntest_steps:\n  - name: 用户注册\n    request:\n      method: POST\n      url: https://api.example.com/register\n      json:\n        username: {{username}}\n        password: {{password}}\n    extract:\n      - name: user_id\n        jsonpath: $.data.user_id\n    assertions:\n      - type: status_code\n        expected: 200'}
+                  placeholder={'在此处输入YAML或JSON格式的测试脚本，例如:\n\nname: 用户下单流程测试\ndescription: 完整用户注册-登录-下单流程\n\nvariables:\n  username: test_user_001\n  password: 123456\n\nsteps:\n  - name: 用户注册\n    request:\n      method: POST\n      url: https://api.example.com/register\n      json:\n        username: {{username}}\n        password: {{password}}\n    extract:\n      - name: user_id\n        jsonpath: $.data.user_id\n    assertions:\n      - type: status_code\n        expected: 200\n        comparison: equals'}
                   style={{ fontFamily: 'monospace', fontSize: 13 }}
                   value={composeContent}
                   onChange={(e) => setComposeContent(e.target.value)}
@@ -839,6 +835,53 @@ teardown:
             </Select>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 执行日志弹窗 */}
+      <Modal
+        title={`执行日志 - ${logModalData.scriptName}`}
+        open={logModalVisible}
+        onCancel={() => setLogModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setLogModalVisible(false)}>关闭</Button>
+        ]}
+        width={900}
+      >
+        {logModalData.loading ? (
+          <div style={{ textAlign: 'center', padding: 40 }}>加载中...</div>
+        ) : logModalData.logs.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>暂无执行记录</div>
+        ) : (
+          logModalData.logs.map((exec) => (
+            <Card
+              key={exec.id}
+              size="small"
+              style={{ marginBottom: 12 }}
+              title={
+                <Space>
+                  <Tag color={exec.status === 'passed' ? 'green' : exec.status === 'failed' ? 'red' : 'default'}>
+                    {exec.status_display || exec.status}
+                  </Tag>
+                  <span>{exec.started_at ? new Date(exec.started_at).toLocaleString() : '未知时间'}</span>
+                  {exec.duration_seconds && <span style={{ color: '#999' }}>耗时: {exec.duration_seconds.toFixed(2)}s</span>}
+                </Space>
+              }
+            >
+              {exec.error_message && (
+                <div style={{ color: '#ff4d4f', marginBottom: 8 }}>错误: {exec.error_message}</div>
+              )}
+              {exec.logs ? (
+                <Card style={{ background: '#f5f5f5', maxHeight: 300, overflow: 'auto' }}>
+                  <pre style={{ fontFamily: 'monospace', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>
+                    {exec.logs}
+                  </pre>
+                </Card>
+              ) : (
+                <div style={{ color: '#999' }}>无日志</div>
+              )}
+            </Card>
+          ))
+        )}
       </Modal>
     </Space>
   );
