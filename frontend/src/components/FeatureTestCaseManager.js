@@ -86,7 +86,6 @@ function FeatureTestCaseManager() {
   const columns = [
     { title: '标题', dataIndex: 'title', key: 'title', render: wrap },
     { title: '所属项目', dataIndex: 'project_name', key: 'project_name', render: (name) => name || '-' },
-    { title: '版本号', dataIndex: 'version', key: 'version', render: wrap },
     { title: '是否通过', dataIndex: 'is_passed', key: 'is_passed', render: (val) => {
       if (val === true) return <span style={{ color: '#52c41a' }}>✅ 通过</span>;
       if (val === false) return <span style={{ color: '#ff4d4f' }}>❌ 未通过</span>;
@@ -114,18 +113,20 @@ function FeatureTestCaseManager() {
     <Space direction="vertical" style={{ width: '100%' }} size="large">
       <Space>
         <Select
-          placeholder="选择项目搜索"
+          placeholder="选择项目"
           style={{ width: 200 }}
           allowClear
           value={selectedProjectId || undefined}
-          onChange={(value) => setSelectedProjectId(value || '')}
+          onChange={(value) => {
+            setSelectedProjectId(value || '');
+            fetchList(value || '');
+          }}
           loading={projectsLoading}
         >
           {projects.map(p => (
             <Option key={p.id} value={String(p.id)}>{p.name}</Option>
           ))}
         </Select>
-        <Button onClick={handleSearch} type="primary">搜索</Button>
         <Button onClick={openCreate} style={{ marginLeft: 16 }}>新增用例</Button>
       </Space>
 

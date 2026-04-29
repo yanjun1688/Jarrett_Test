@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any, List
 import logging
 from asgiref.sync import sync_to_async
 
-from ..llm.base_llm import BaseLLMService, LLMProvider
+from ..llm.base_llm import BaseLLMService, LLMProvider, create_llm_service
 from ..rag.rag_retriever_service import RAGRetriever, DjangoORMRAGRetriever
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ class KnowledgeRAGAgent:
             rag_retriever: RAG检索器（可选）
         """
         if llm_service is None:
-            llm_service = BaseLLMService(provider=LLMProvider.OPENAI)
+            llm_service = create_llm_service(provider='openai')
 
         self.llm_service = llm_service
         self.rag_retriever = rag_retriever
@@ -70,7 +70,8 @@ class KnowledgeRAGAgent:
         query: str,
         top_k: int = 5,
         document_type: Optional[str] = None,
-        use_llm: bool = True
+        use_llm: bool = True,
+        knowledge_base_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         查询知识库
@@ -80,6 +81,7 @@ class KnowledgeRAGAgent:
             top_k: 返回结果数量
             document_type: 文档类型过滤
             use_llm: 是否使用LLM生成回答
+            knowledge_base_id: 知识库ID过滤（可选）
 
         Returns:
             查询结果
@@ -100,10 +102,13 @@ class KnowledgeRAGAgent:
 
         try:
             # 检索文档
-            if document_type:
-                documents = await self.rag_retriever.retrieve_by_type(query, document_type, top_k)
-            else:
-                documents = await self.rag_retriever.retrieve(query, top_k)
+            doc_types_list = [document_type] if document_type else None
+            documents = await self.rag_retriever.retrieve(
+                query, 
+                top_k, 
+                knowledge_base_id=knowledge_base_id,
+                doc_types=doc_types_list
+            )
 
             if not documents:
                 return {
@@ -535,8 +540,8 @@ class KnowledgeRAGAgent:
         try:
             # 构建元素文档
             documents = []
-            element_ids = []
-            
+            element_ids: List[str] = []
+
             for element in elements:
                 element_id = element.get("id", f"elem_{len(element_ids)}")
                 element_ids.append(element_id)

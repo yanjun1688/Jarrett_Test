@@ -4,7 +4,8 @@ Test Management Models
 This module contains test case, test execution, and test flow models.
 """
 
-from typing import Any, Dict
+from __future__ import annotations
+from typing import Any, Dict, Optional
 from django.db import models
 from django.contrib.auth.models import User
 from django.db.models import Q, Count, Manager, QuerySet
@@ -14,7 +15,7 @@ from .project import Project, Module
 
 
 class TestCase(models.Model):
-    """统一测试用例模型"""
+    """统一测试用例模型 - 扩展支持AI生成"""
     
     PRIORITY_CHOICES = [
         ('low', '低'),
@@ -22,6 +23,11 @@ class TestCase(models.Model):
         ('high', '高'),
         ('critical', '紧急'),
     ]
+    
+    class Source(models.TextChoices):
+        CHATBOT = 'chatbot', 'Chatbot生成'
+        MANUAL_UPLOAD = 'manual_upload', '手动上传PRD'
+        MANUAL_CREATE = 'manual_create', '手动创建'
     
     title = models.CharField(max_length=200, verbose_name='用例标题')
     project = models.ForeignKey(
@@ -34,7 +40,9 @@ class TestCase(models.Model):
         Module,
         on_delete=models.CASCADE,
         related_name='testcases',
-        verbose_name='所属模块'
+        verbose_name='所属模块',
+        null=True,
+        blank=True
     )
     priority = models.CharField(
         max_length=10,
@@ -56,11 +64,50 @@ class TestCase(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
     
+    source = models.CharField(
+        max_length=20,
+        choices=Source.choices,
+        default=Source.MANUAL_CREATE,
+        verbose_name='来源',
+        db_index=True
+    )
+    
+    prd_document = models.ForeignKey(
+        'core.KnowledgeDocument',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name='关联PRD文档'
+    )
+    
+    conversation = models.ForeignKey(
+        'core.AgentConversation',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name='生成会话'
+    )
+    
+    quality_score = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='质量评分'
+    )
+    
+    generation_metadata = models.JSONField(
+        default=dict,
+        verbose_name='生成元数据'
+    )
+    
     class Meta:
         verbose_name = '测试用例'
         verbose_name_plural = '测试用例'
         ordering = ['-created_at']
         db_table = 'core_test_case'
+        indexes = [
+            models.Index(fields=['project', 'source']),
+            models.Index(fields=['prd_document']),
+        ]
     
     def __str__(self) -> str:
         return self.title

@@ -75,9 +75,9 @@ const menuItems = [
     label: <Link to="/ui-tests">UI测试</Link>,
   },
   {
-    key: '/ai-test-analysis',
+    key: '/ai-test-generator',
     icon: <RobotOutlined />,
-    label: <Link to="/ai-test-analysis">AI分析用例</Link>,
+    label: <Link to="/ai-test-generator">AI生成测试</Link>,
   },
   {
     key: '/knowledge-base',

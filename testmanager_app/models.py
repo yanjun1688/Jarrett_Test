@@ -70,6 +70,11 @@ class TestScript(models.Model):
         ('yaml', 'YAML配置'),
     ]
 
+    class Source(models.TextChoices):
+        CHATBOT = 'chatbot', 'Chatbot生成'
+        MANUAL_UPLOAD = 'manual_upload', '手动上传'
+        MANUAL_CREATE = 'manual_create', '手动创建'
+
     name: models.CharField[str, str] = models.CharField(max_length=100, verbose_name='脚本名称')
     description: models.TextField[str, str] = models.TextField(blank=True, verbose_name='脚本描述')
     script_type: models.CharField[str, str] = models.CharField(max_length=20, choices=SCRIPT_TYPE_CHOICES, default='api', verbose_name='脚本类型')
@@ -90,12 +95,23 @@ class TestScript(models.Model):
     )
     created_at: models.DateTimeField[datetime, datetime] = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     is_active: models.BooleanField[bool, bool] = models.BooleanField(default=True, verbose_name='是否激活')
+    
+    source = models.CharField(
+        max_length=20,
+        choices=Source.choices,
+        default=Source.MANUAL_CREATE,
+        verbose_name='来源',
+        db_index=True
+    )
 
     class Meta(TypedModelMeta):
         verbose_name = '测试脚本'
         verbose_name_plural = '测试脚本'
         ordering = ['-created_at']
         db_table = 'test_script'
+        indexes = [
+            models.Index(fields=['project', 'source']),
+        ]
 
     def __str__(self) -> str:
         return self.name

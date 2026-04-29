@@ -403,8 +403,11 @@ class OpenAICompatibleService(BaseLLMService):
             "model": self.config.model_name,
             "messages": messages,
             "temperature": kwargs.get('temperature', self.config.temperature),
-            "max_tokens": kwargs.get('max_tokens', self.config.max_tokens),
         }
+
+        max_tokens = kwargs.get('max_tokens', self.config.max_tokens)
+        if max_tokens is not None:
+            params['max_tokens'] = max_tokens
 
         if 'top_p' in kwargs:
             params['top_p'] = kwargs['top_p']

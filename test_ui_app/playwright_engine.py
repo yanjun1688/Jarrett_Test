@@ -14,21 +14,21 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Windows上Playwright需要ProactorEventLoopPolicy（默认）
-# 不要设置SelectorEventLoopPolicy，会导致NotImplementedError（不支持子进程）
+# Windows 上 Playwright 创建浏览器子进程依赖 create_subprocess_exec，
+# 只有 ProactorEventLoopPolicy（基于 IOCP）支持，SelectorEventLoopPolicy 会 raise NotImplementedError。
+# 因此不做策略切换，保持项目入口点（manage.py/__init__/asgi/celery）已统一设置的 ProactorEventLoopPolicy。
 
 
 def create_windows_compatible_event_loop() -> asyncio.AbstractEventLoop:
     """
     创建与Windows兼容的事件循环（用于Playwright）
-    
-    在Windows上，Playwright需要ProactorEventLoopPolicy（默认）来支持子进程创建。
-    SelectorEventLoopPolicy不支持子进程，会导致NotImplementedError。
-    
+
+    Windows 上使用 ProactorEventLoopPolicy（基于 IOCP）以支持 Playwright 浏览器子进程创建。
+    SelectorEventLoopPolicy 在 Windows 上不支持 create_subprocess_exec，会导致 NotImplementedError。
+
     Returns:
         asyncio.AbstractEventLoop: 配置正确的事件循环
     """
-    # 使用默认策略（Windows上是ProactorEventLoopPolicy）
     policy = asyncio.get_event_loop_policy()
     loop = policy.new_event_loop()
     asyncio.set_event_loop(loop)

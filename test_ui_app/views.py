@@ -450,6 +450,7 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def preview_page(self, request: Request) -> Response:
         """
+        @deprecated 元素选择功能已废弃。
         预览页面并返回截图(用于元素选择)
         
         参数:
@@ -497,6 +498,7 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def select_element(self, request: Request) -> Response:
         """
+        @deprecated 元素选择功能已废弃。
         根据坐标或选择器获取元素定位信息
         
         请求体:

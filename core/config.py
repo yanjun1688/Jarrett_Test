@@ -28,6 +28,7 @@ class JTestSettings(BaseSettings):
     chunk_size: int = Field(default=1000, ge=100, description="分块大小")
     chunk_overlap: int = Field(default=200, ge=0, description="分块重叠")
     top_k: int = Field(default=5, ge=1, description="检索top K结果")
+    embedding_batch_size: int = Field(default=32, ge=1, description="Embedding批处理大小")
     
     # ChromaDB配置
     chromadb_path: str = Field(

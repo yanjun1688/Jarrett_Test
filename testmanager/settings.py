@@ -15,10 +15,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 import os
+import sys
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Force UTF-8 encoding for stdout/stderr on Windows to avoid GBK codec errors
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # type: ignore[union-attr]
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')  # type: ignore[union-attr]
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -60,7 +66,6 @@ INSTALLED_APPS = [
     "corsheaders",
     "channels",
     "testmanager_app",
-    "test_ai_agent",
     "test_ui_app",
     "core",  # 核心模块
 ]
@@ -300,7 +305,7 @@ else:
         },
     }
 
-# Logging configuration - use console handler with minimal formatting to avoid blocking
+# Logging configuration
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -314,47 +319,48 @@ LOGGING = {
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'simple',
-            'level': 'DEBUG',
             'stream': 'ext://sys.stdout',
         },
-        'console_stderr': {
+        'console_utf8': {
             'class': 'logging.StreamHandler',
             'formatter': 'simple',
-            'level': 'WARNING',
+            'stream': 'ext://sys.stdout',
         },
     },
     'root': {
-        'handlers': ['console'],
+        'handlers': ['console_utf8'],
         'level': 'INFO',
     },
     'loggers': {
         'django': {
-            'handlers': ['console'],
+            'handlers': ['console_utf8'],
             'level': 'INFO',
             'propagate': False,
         },
         'test_ui_app': {
-            'handlers': ['console'],
+            'handlers': ['console_utf8'],
             'level': 'INFO',
             'propagate': False,
         },
         'testmanager_app': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        'test_ai_agent': {
-            'handlers': ['console'],
+            'handlers': ['console_utf8'],
             'level': 'INFO',
             'propagate': False,
         },
         'channels_redis': {
-            'handlers': ['console'],
+            'handlers': ['console_utf8'],
             'level': 'ERROR',
             'propagate': False,
         },
     },
 }
+
+# Windows UTF-8 控制台支持
+import sys
+import io
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -398,6 +404,19 @@ MCP_SERVERS = {
         "transport": "stdio",
         "command": "npx",
         "args": ["-y", "@playwright/mcp@latest"],
+        "auto_reconnect": True,
+        "health_check_interval": 60,
+        "max_reconnect_attempts": 3,
+        "reconnect_delay": 5,
+    },
+    "skill-manager": {  # 新增: Skill 管理 MCP Server
+        "transport": "stdio",
+        "command": "python",
+        "args": ["-m", "skills.mcp-skill-manager.main"],
+        "env": {
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONUTF8": "1"
+        },
         "auto_reconnect": True,
         "health_check_interval": 60,
         "max_reconnect_attempts": 3,

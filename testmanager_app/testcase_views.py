@@ -68,6 +68,7 @@ class TestExecutionViewSet(QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
     """
     queryset = TestExecution.objects.all()
     serializer_class = TestExecutionSerializer
+    filter_int_fields = ['api_request']
 
     select_related_fields = ['test_case', 'api_request', 'executed_by']
 

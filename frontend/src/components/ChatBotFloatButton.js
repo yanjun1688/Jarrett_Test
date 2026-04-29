@@ -5,8 +5,7 @@
 import React, { useState } from 'react';
 import { Button, Badge } from 'antd';
 import { MessageOutlined } from '@ant-design/icons';
-import ChatBotDrawer from './ChatBotDrawer';
-import './ChatBotFloatButton.css';
+import ChatBotDrawer from './ChatBot/ChatBotDrawer';
 import './ChatBotFloatButton.css';
 
 const ChatBotFloatButton = ({

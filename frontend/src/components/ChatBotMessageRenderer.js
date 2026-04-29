@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import { Button, Space } from 'antd';
+import OptionList from './ChatBot/OptionList';
+import ConfirmDialog from './ChatBot/ConfirmDialog';
 import './ChatBotMessageRenderer.css';
 
 const parseMCPTextContent = (text) => {
@@ -36,10 +39,28 @@ const parseMCPTextContent = (text) => {
   return text;
 };
 
-const ChatBotMessageRenderer = ({ content }) => {
+const parseToolResultData = (toolResult) => {
+  if (!toolResult) return null;
+  
+  try {
+    if (typeof toolResult === 'string') {
+      const parsed = JSON.parse(toolResult);
+      return parsed?.data || null;
+    }
+    return toolResult?.data || null;
+  } catch {
+    return null;
+  }
+};
+
+const ChatBotMessageRenderer = ({ content, onOptionSelect, onSendMessage }) => {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingData, setPendingData] = useState(null);
+  
   if (!content) return null;
   
   let markdownText = '';
+  let toolResultData = null;
   
   if (typeof content === 'string') {
     markdownText = parseMCPTextContent(content);
@@ -62,12 +83,15 @@ const ChatBotMessageRenderer = ({ content }) => {
     if (result) {
       if (result.message || result.response) {
         progressMd += '---\n\n' + parseMCPTextContent(result.message || result.response);
-      } else if (result.tool_result) {
-        const toolResult = result.tool_result;
-        const resultText = typeof toolResult === 'string' 
-          ? parseMCPTextContent(toolResult) 
-          : (toolResult?.data?.result ? parseMCPTextContent(toolResult.data.result) : JSON.stringify(toolResult, null, 2));
-        progressMd += '---\n\n' + resultText;
+      }
+      if (result.tool_result) {
+        toolResultData = parseToolResultData(result.tool_result);
+        if (!toolResultData) {
+          const resultText = typeof result.tool_result === 'string' 
+            ? parseMCPTextContent(result.tool_result) 
+            : JSON.stringify(result.tool_result, null, 2);
+          progressMd += '---\n\n' + resultText;
+        }
       }
     }
     
@@ -86,11 +110,14 @@ const ChatBotMessageRenderer = ({ content }) => {
     let md = parseMCPTextContent(message || response || '');
     
     if (tool_result) {
-      const toolResultText = typeof tool_result === 'string' 
-        ? parseMCPTextContent(tool_result) 
-        : (tool_result?.data?.result ? parseMCPTextContent(tool_result.data.result) : JSON.stringify(tool_result, null, 2));
-      if (toolResultText) {
-        md += '\n\n---\n\n' + toolResultText;
+      toolResultData = parseToolResultData(tool_result);
+      if (!toolResultData) {
+        const toolResultText = typeof tool_result === 'string' 
+          ? parseMCPTextContent(tool_result) 
+          : JSON.stringify(tool_result, null, 2);
+        if (toolResultText) {
+          md += '\n\n---\n\n' + toolResultText;
+        }
       }
     }
     
@@ -115,13 +142,100 @@ const ChatBotMessageRenderer = ({ content }) => {
     markdownText = md;
   }
   
-  if (!markdownText) return null;
+  if (!markdownText && !toolResultData) return null;
   
   return (
     <div className="markdown-content">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
-        {markdownText}
-      </ReactMarkdown>
+      {markdownText && (
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+          {markdownText}
+        </ReactMarkdown>
+      )}
+      
+      {toolResultData?.options && (
+        <OptionList
+          options={toolResultData.options}
+          title={toolResultData.message || '请选择：'}
+          onSelect={(item) => {
+            if (onOptionSelect) {
+              onOptionSelect(item);
+            } else if (onSendMessage) {
+              onSendMessage(`选择: ${item.label} (ID: ${item.id})`);
+            }
+          }}
+        />
+      )}
+      
+      {toolResultData?.preview && !toolResultData?.options && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontWeight: 500, marginBottom: 8 }}>
+            {toolResultData.message || '已生成测试用例，请确认：'}
+          </div>
+          <div style={{ 
+            background: '#f5f5f5', 
+            padding: 12, 
+            borderRadius: 4,
+            maxHeight: 200,
+            overflow: 'auto'
+          }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {toolResultData.preview}
+            </ReactMarkdown>
+          </div>
+          <Space style={{ marginTop: 12 }}>
+            <Button 
+              type="primary"
+              onClick={() => {
+                setPendingData(toolResultData);
+                setConfirmOpen(true);
+              }}
+            >
+              确认保存
+            </Button>
+            <Button onClick={() => {
+              if (onSendMessage) {
+                onSendMessage('取消保存，重新生成');
+              }
+            }}>
+              取消
+            </Button>
+            <Button 
+              type="link"
+              onClick={() => {
+                setPendingData(toolResultData);
+                setConfirmOpen(true);
+              }}
+            >
+              查看完整内容
+            </Button>
+          </Space>
+          
+          <ConfirmDialog
+            open={confirmOpen}
+            preview={pendingData?.full_content || pendingData?.preview || ''}
+            message="请确认是否保存以下测试用例："
+            onConfirm={() => {
+              setConfirmOpen(false);
+              if (onSendMessage) {
+                onSendMessage(`确认保存，project_id: ${pendingData?.project_id || ''}, document_id: ${pendingData?.document_id || ''}`);
+              }
+            }}
+            onCancel={() => setConfirmOpen(false)}
+          />
+        </div>
+      )}
+      
+      {toolResultData?.saved_count && (
+        <div style={{ marginTop: 8, color: '#52c41a' }}>
+          {toolResultData.message || `成功保存 ${toolResultData.saved_count} 条测试用例`}
+        </div>
+      )}
+      
+      {toolResultData?.script_id && (
+        <div style={{ marginTop: 8, color: '#52c41a' }}>
+          {toolResultData.message || `成功保存脚本：${toolResultData.script_name}`}
+        </div>
+      )}
     </div>
   );
 };

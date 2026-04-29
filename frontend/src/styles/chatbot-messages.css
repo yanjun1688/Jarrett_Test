@@ -1,0 +1,55 @@
+/**
+ * ChatBot 消息列表样式
+ */
+.chatbot-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.chatbot-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #bfbfbf;
+}
+
+.chatbot-empty .empty-text {
+  font-size: 18px;
+  margin: 16px 0 8px;
+}
+
+.chatbot-empty .empty-hint {
+  font-size: 14px;
+  color: #999;
+}
+
+.chatbot-message {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+}
+
+.chatbot-message.user {
+  background: #e6f7ff;
+  margin-left: 48px;
+}
+
+.chatbot-message.assistant {
+  background: #f6f6f6;
+  margin-right: 48px;
+}
+
+.chatbot-message.loading {
+  align-items: center;
+}
+
+.message-avatar {
+  background: #667eea;
+}

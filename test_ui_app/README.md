@@ -13,7 +13,6 @@ test_ui_app/
 ├── urls.py                # URL 路由配置
 ├── playwright_engine.py   # Playwright 执行引擎
 ├── tasks.py               # Celery 异步任务
-├── agent_integration.py   # Agent 集成模块
 ├── consumers.py           # WebSocket 消费者
 ├── execution/             # 执行管理
 │   ├── execution_manager.py   # 执行生命周期管理

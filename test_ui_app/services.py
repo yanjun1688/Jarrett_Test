@@ -202,6 +202,7 @@ class PlaywrightService:
     async def preview_page(self, url: str, browser_type: str = 'chromium',
                           viewport_width: int = 1280, viewport_height: int = 720) -> Dict[str, Any]:
         """
+        @deprecated 元素选择功能已废弃。
         预览页面并返回截图
         
         Args:
@@ -265,6 +266,7 @@ class PlaywrightService:
                             selector: str | None = None, browser_type: str = 'chromium',
                             viewport_width: int = 1280, viewport_height: int = 720) -> Dict[str, Any]:
         """
+        @deprecated 元素选择功能已废弃。
         根据坐标或选择器获取元素定位信息
         
         Args:

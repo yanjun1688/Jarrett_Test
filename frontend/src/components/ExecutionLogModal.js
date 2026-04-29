@@ -38,6 +38,8 @@ const { Title, Text } = Typography;
  * @param {string} startTime - 开始时间
  * @param {string} endTime - 结束时间
  * @param {number} progress - 进度百分比（集合执行）
+ * @param {string} contentType - 响应 Content-Type
+ * @param {boolean} isJson - 是否为 JSON 响应
  */
 const ExecutionLogModal = ({
   visible,
@@ -53,6 +55,8 @@ const ExecutionLogModal = ({
   responseStatus,
   responseTime,
   responseBody,
+  contentType,
+  isJson,
   assertions = [],
   screenshots = [],
   errorMessage,
@@ -116,10 +120,42 @@ const ExecutionLogModal = ({
     return logs;
   };
 
-  // 格式化响应体
+  // 格式化响应体 - 自适应展示
   const formatResponseBody = () => {
     if (!responseBody) return null;
-    // 如果已经是对象，直接 stringify
+    
+    // 优先使用 isJson 判断（后端提供）
+    if (isJson === true) {
+      if (typeof responseBody === 'object') {
+        return JSON.stringify(responseBody, null, 2);
+      }
+      try {
+        const parsed = JSON.parse(responseBody);
+        return JSON.stringify(parsed, null, 2);
+      } catch {
+        return responseBody;
+      }
+    }
+    
+    // 根据 Content-Type 判断
+    if (contentType?.includes('application/json')) {
+      if (typeof responseBody === 'object') {
+        return JSON.stringify(responseBody, null, 2);
+      }
+      try {
+        const parsed = JSON.parse(responseBody);
+        return JSON.stringify(parsed, null, 2);
+      } catch {
+        return responseBody;
+      }
+    }
+    
+    // HTML 响应 - 原样展示（测试工程师需要看到真实内容）
+    if (contentType?.includes('text/html')) {
+      return responseBody;
+    }
+    
+    // 降级：尝试解析为 JSON
     if (typeof responseBody === 'object') {
       return JSON.stringify(responseBody, null, 2);
     }
@@ -129,6 +165,19 @@ const ExecutionLogModal = ({
     } catch {
       return responseBody;
     }
+  };
+  
+  // 获取响应体展示类型标签
+  const getResponseBodyTypeTag = () => {
+    if (!responseBody) return null;
+    
+    if (isJson || contentType?.includes('application/json')) {
+      return <Tag color="blue">JSON</Tag>;
+    }
+    if (contentType?.includes('text/html')) {
+      return <Tag color="orange">HTML</Tag>;
+    }
+    return null;
   };
 
   // 断言结果表格列
@@ -208,11 +257,13 @@ const ExecutionLogModal = ({
 
   // 计算执行时长显示
   const getDurationDisplay = () => {
-    if (executionDuration !== undefined && executionDuration !== null) {
-      return `${executionDuration.toFixed(2)}秒`;
+    const duration = parseFloat(executionDuration);
+    if (!isNaN(duration)) {
+      return `${duration.toFixed(2)}秒`;
     }
-    if (responseTime !== undefined && responseTime !== null) {
-      return `${responseTime.toFixed(4)}秒`;
+    const rTime = parseFloat(responseTime);
+    if (!isNaN(rTime)) {
+      return `${rTime.toFixed(4)}秒`;
     }
     if (isRunning) {
       return '计算中...';
@@ -312,14 +363,14 @@ const ExecutionLogModal = ({
                   </Space>
                 </Col>
               )}
-              {responseTime !== undefined && responseTime !== null && (
-                <Col span={6}>
-                  <Space direction="vertical" size={0}>
-                    <Text type="secondary">响应时间</Text>
-                    <Text strong>{responseTime.toFixed(4)}秒</Text>
-                  </Space>
-                </Col>
-              )}
+{responseTime !== undefined && responseTime !== null && (
+                 <Col span={6}>
+                   <Space direction="vertical" size={0}>
+                     <Text type="secondary">响应时间</Text>
+                     <Text strong>{parseFloat(responseTime).toFixed(4)}秒</Text>
+                   </Space>
+                 </Col>
+               )}
             </Row>
           )}
 
@@ -376,13 +427,21 @@ const ExecutionLogModal = ({
         {executionType === 'api' && responseBody && (
           <>
             <Divider style={{ margin: '12px 0' }} />
-            <Title level={5}>响应数据</Title>
+            <Space>
+              <Title level={5} style={{ margin: 0 }}>响应数据</Title>
+              {getResponseBodyTypeTag()}
+              {contentType && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  ({contentType.split(';')[0]})
+                </Text>
+              )}
+            </Space>
             <Card 
               size="small"
               bodyStyle={{ 
                 maxHeight: 300, 
                 overflow: 'auto', 
-                backgroundColor: '#f0f2f5',
+                backgroundColor: contentType?.includes('text/html') ? '#fff7e6' : '#f0f2f5',
                 padding: 12,
                 fontFamily: 'monospace',
                 fontSize: 12
@@ -429,25 +488,25 @@ const ExecutionLogModal = ({
         )}
 
         {/* 错误信息 */}
-        {errorMessage && (
-          <>
-            <Divider style={{ margin: '12px 0' }} />
-            <Title level={5}>错误信息</Title>
-            <Card 
-              className="ui-test-error-card"
-              bodyStyle={{ 
-                backgroundColor: '#fff1f0',
-                border: '1px solid #ffa39e',
-                fontFamily: 'monospace',
-                fontSize: 12 
-              }}
-            >
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#cf1322' }}>
-                {errorMessage}
-              </pre>
-            </Card>
-          </>
-        )}
+{errorMessage && (
+            <>
+              <Divider style={{ margin: '12px 0' }} />
+              <Title level={5}>错误信息</Title>
+              <Card 
+                className="ui-test-error-card"
+                bodyStyle={{ 
+                  backgroundColor: '#fff1f0',
+                  border: '1px solid #ffa39e',
+                  fontFamily: 'monospace',
+                  fontSize: 12 
+                }}
+              >
+                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#cf1322' }}>
+                  {typeof errorMessage === 'object' ? JSON.stringify(errorMessage, null, 2) : errorMessage}
+                </pre>
+              </Card>
+            </>
+          )}
 
         {/* 执行时间 */}
         {(startTime || endTime) && (

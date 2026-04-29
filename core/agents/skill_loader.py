@@ -618,22 +618,7 @@ class SkillLoader:
         if not entrypoint:
             raise ValueError("Python executor需要指定entrypoint")
         
-        if entrypoint == "generate_api_test":
-            async def api_test_executor(params: Dict[str, Any]) -> Dict[str, Any]:
-                api_spec = params.get("api_spec")
-                framework = params.get("framework", "pytest")
-                
-                mock_code = "def test_api(): pass"
-                
-                return {
-                    "success": True,
-                    "code": mock_code,
-                    "framework": framework,
-                    "generated_at": "2026-02-27T10:00:00Z"
-                }
-            
-            return api_test_executor
-        elif entrypoint == "execute_function":
+        if entrypoint == "execute_function":
             async def dummy_executor(params: Dict[str, Any]) -> Dict[str, Any]:
                 return {"success": True, "params": params}
             return dummy_executor
@@ -664,7 +649,6 @@ class SkillLoader:
         
         builtin_executors = {
             "default": self._create_default_executor(config),
-            "test_generation.executor": self._create_test_generation_executor(config),
             "api_test_orchestration.executor": self._create_api_test_executor(config),
         }
         
@@ -684,26 +668,6 @@ class SkillLoader:
                 "description": config.get("description", ""),
                 "params": params
             }
-        return execute
-    
-    def _create_test_generation_executor(self, config: Dict[str, Any]) -> Callable[..., Any]:
-        """创建测试生成执行器"""
-        async def execute(params: Dict[str, Any]) -> Dict[str, Any]:
-            test_type = params.get("test_type", "functional")
-            target = params.get("target", "")
-            
-            # 模拟测试生成过程
-            result = {
-                "success": True,
-                "test_file": f"generated_{test_type}_test.py",
-                "target": target,
-                "dependencies": ["pytest"],
-                "generated_tests": ["test_example"],
-                "instructions": "Run: pytest generated_functional_test.py"
-            }
-            
-            return result
-        
         return execute
     
     def _create_api_test_executor(self, config: Dict[str, Any]) -> Callable[..., Any]:

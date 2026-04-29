@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import time
 from functools import wraps
 from typing import Optional, Callable, Any, TypeVar, Union
@@ -25,6 +26,15 @@ def setup_logging(
         format: 日志格式
         filename: 日志文件路径，如果为None则输出到控制台
     """
+    # Windows 上强制 UTF-8 编码，解决 emoji 等 Unicode 字符输出问题
+    if sys.platform == 'win32':
+        stdout_reconfigure = getattr(sys.stdout, 'reconfigure', None)
+        stderr_reconfigure = getattr(sys.stderr, 'reconfigure', None)
+        if stdout_reconfigure:
+            stdout_reconfigure(encoding='utf-8', errors='replace')
+        if stderr_reconfigure:
+            stderr_reconfigure(encoding='utf-8', errors='replace')
+    
     log_level = getattr(logging, level.upper(), logging.INFO)
     
     handlers: list[logging.Handler] = []

@@ -142,7 +142,11 @@ class ChatbotAgent(BaseAgent):
             QueryKnowledgeTool,
             QueryTestScriptsTool,
             InstallSkillTool,
-            RunSkillTool
+            RunSkillTool,
+            QueryProjectTool,
+            GenerateTestTool,
+            SaveTestCaseTool,
+            SaveTestScriptTool
         )
 
         api_test_tool = GenerateAPITestTool(llm_service=self.llm_service)
@@ -176,6 +180,22 @@ class ChatbotAgent(BaseAgent):
         run_skill_tool = RunSkillTool(llm_service=self.llm_service)
         self.tool_orchestrator.register_tool(run_skill_tool)
         logger.info(f"Registered tool: {run_skill_tool.name}")
+
+        query_project_tool = QueryProjectTool()
+        self.tool_orchestrator.register_tool(query_project_tool)
+        logger.info(f"Registered tool: {query_project_tool.name}")
+
+        generate_test_tool = GenerateTestTool(llm_service=self.llm_service)
+        self.tool_orchestrator.register_tool(generate_test_tool)
+        logger.info(f"Registered tool: {generate_test_tool.name}")
+
+        save_test_case_tool = SaveTestCaseTool()
+        self.tool_orchestrator.register_tool(save_test_case_tool)
+        logger.info(f"Registered tool: {save_test_case_tool.name}")
+
+        save_test_script_tool = SaveTestScriptTool()
+        self.tool_orchestrator.register_tool(save_test_script_tool)
+        logger.info(f"Registered tool: {save_test_script_tool.name}")
 
     def _register_capabilities(self):
         """注册已加载的能力（工具）"""
@@ -350,12 +370,17 @@ class ChatbotAgent(BaseAgent):
 
         message = input_data["message"]
         project_id = input_data.get("project_id")
+        test_type = input_data.get("test_type")  # 强制指定工具类型："ui" | "api" | "prd" | None
         context = input_data.get("context", {})
         user_id = input_data.get("user_id") or context.get("user_id")
 
-        logger.info(f"[ChatBot] ========== 开始处理消息 ==========")
-        logger.info(f"[ChatBot] 用户消息: {message}")
-        logger.info(f"[ChatBot] 会话ID: {conversation_id}")
+        logger.info(f'[ChatBot] ========== 开始处理消息 ==========')
+        logger.info(f'[ChatBot] 用户消息: {message}')
+        logger.info(f'[ChatBot] 会话ID: {conversation_id}')
+        logger.info(f'[ChatBot] 用户ID: {user_id}')
+        logger.info(f'[ChatBot] 项目ID: {project_id}')
+        if test_type:
+            logger.info(f'[ChatBot] 强制工具类型: {test_type}')
 
         # Step 1: 写入用户消息到 context_store（sync_to_async 避免阻塞事件循环）
         if self.context_store and conversation_id and user_id:
@@ -385,6 +410,7 @@ class ChatbotAgent(BaseAgent):
 
         # Step 4: 构建完整 prompt（build_for_chatbot 内部调用 ContextStore 获取分层历史）
         # sync_to_async 因为 build_for_chatbot 内部调用 ContextStore 做文件 I/O
+        # 添加 test_type 指令（方案C：Prompt注入）
         prompts = await sync_to_async(self.prompt_builder.build_for_chatbot)(
             message=message,
             intent='chatbot',
@@ -393,7 +419,13 @@ class ChatbotAgent(BaseAgent):
             skills=skills_data,
             session_id=str(conversation_id) if conversation_id else None,
             user_id=str(user_id) if user_id else None,
+            environment={"test_type": test_type, "project_id": project_id} if test_type else None,
         )
+
+        env_debug = f"test_type={test_type}" if test_type else "无环境指令"
+        if project_id and test_type:
+            env_debug += f", project_id={project_id}"
+        logger.info(f'[ChatBot] Prompt环境注入: {env_debug}')
 
         system_prompt = prompts["system_prompt"]
         sys_tokens = prompts["system_prompt_tokens"]
@@ -462,9 +494,11 @@ class ChatbotAgent(BaseAgent):
         tool_calls = result.get("tool_calls")
 
         if tool_calls:
-            logger.info(f"[ChatBot] LLM 决定调用 {len(tool_calls)} 个工具")
-            tool_names = [self._extract_tool_call_info(tc)['name'] for tc in tool_calls]
-            response = await self._handle_tool_calls(tool_calls, message, user_id=user_id)
+            logger.info(f'[ChatBot] LLM 选择了工具调用: {len(tool_calls)} 个')
+            for tc in tool_calls:
+                tc_info = self._extract_tool_call_info(tc)
+                logger.info(f'[ChatBot]   选择工具: {tc_info["name"]}')
+            response = await self._handle_tool_calls(tool_calls, message, test_type=test_type)
         else:
             response_text = result.get("response", "")
             logger.info(f"[ChatBot] LLM 直接回复，长度: {len(response_text)} 字符")
@@ -553,17 +587,18 @@ class ChatbotAgent(BaseAgent):
         
         return {'name': func_name, 'arguments': func_args if isinstance(func_args, dict) else {}}
 
-    async def _handle_tool_calls(self, tool_calls, message: str, user_id: Optional[int] = None) -> Dict[str, Any]:
+    async def _handle_tool_calls(self, tool_calls, message: str, test_type: Optional[str] = None) -> Dict[str, Any]:
         """
         处理 LLM 返回的 tool_calls。
 
         - run_skill__xxx 格式映射到 run_skill 工具
         - 其他工具直接执行
+        - 后置拦截：test_type 强制指定工具类型（方案B）
 
         Args:
             tool_calls: LLM 返回的 tool_calls 列表
             message: 用户原始消息
-            user_id: 用户ID（用于创建执行记录）
+            test_type: 强制工具类型（"ui" | "api" | "prd" | None）
 
         Returns:
             Response dictionary with text, tool_used, tool_result
@@ -606,8 +641,6 @@ class ChatbotAgent(BaseAgent):
                     if server_name == "playwright":
                         logger.info(f"[ToolExec] Fallback: 使用 agent-browser skill")
                         fallback_args = {"skill_name": "agent-browser", "user_input": message}
-                        if user_id:
-                            fallback_args['user_id'] = user_id
                         
                         try:
                             tool_result = await self.tool_orchestrator.execute(
@@ -630,9 +663,31 @@ class ChatbotAgent(BaseAgent):
                 actual_tool = func_name
                 actual_args = func_args
 
+            # 方案B：后置拦截 - test_type 强制指定工具
+            if test_type:
+                tool_mapping = {
+                    'ui': 'generate_ui_test',
+                    'api': 'generate_api_test',
+                    'prd': 'generate_test'
+                }
+                expected_tool = tool_mapping.get(test_type)
+                if expected_tool and actual_tool != expected_tool:
+                    # 检查是否是生成类工具，如果是则强制替换
+                    generation_tools = ['generate_ui_test', 'generate_api_test', 'generate_test']
+                    if actual_tool in generation_tools:
+                        logger.warning(
+                            f"[ToolExec] 后置拦截: test_type={test_type} 要求使用 {expected_tool}, "
+                            f"但 LLM 选择 {actual_tool}, 强制替换"
+                        )
+                        actual_tool = expected_tool
+                        # 保留原有参数
+                    else:
+                        logger.info(
+                            f"[ToolExec] test_type={test_type} 但 LLM 选择非生成工具 {actual_tool}, "
+                            f"不拦截（可能是查询类工具）"
+                        )
+
             try:
-                if user_id and 'user_id' not in actual_args:
-                    actual_args['user_id'] = user_id
                 tool_result = await self.tool_orchestrator.execute(
                     actual_tool, 
                     execution_logger=self._execution_logger,
@@ -706,6 +761,15 @@ class ChatbotAgent(BaseAgent):
                             parts.append(f"\n**错误信息:** {data['error']}")
                         
                         text = "\n".join(parts)
+                    elif "options" in data and isinstance(data["options"], list):
+                        parts = []
+                        if data.get("message"):
+                            parts.append(data["message"])
+                        for opt in data["options"]:
+                            parts.append(f"  {opt.get('id')}. {opt.get('label', '')}")
+                            if opt.get("description"):
+                                parts[-1] += f" — {opt['description']}"
+                        text = "\n".join(parts)
                     else:
                         text = data.get("result") or data.get("message") or data.get("answer") or str(data)
                 else:
@@ -728,7 +792,12 @@ class ChatbotAgent(BaseAgent):
                     except Exception as e:
                         logger.warning(f"[ChatBot] 总结失败: {e}，返回原始内容")
             else:
-                text = f"工具 '{tool_name}' 执行失败。\n错误: {result.get('error', '未知错误')}"
+                err_detail = result.get('error')
+                if not err_detail:
+                    data = result.get('data', {})
+                    if isinstance(data, dict):
+                        err_detail = data.get('error') or data.get('message')
+                text = f"工具 '{tool_name}' 执行失败。\n错误: {err_detail or '未知错误'}"
         else:
             parts = []
             for r in all_results:

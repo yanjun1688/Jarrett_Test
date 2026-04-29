@@ -4,9 +4,12 @@ RAG Retriever Service - Abstraction for dependency injection
 This module provides a clean abstraction for RAG retrieval that can be
 injected into agents, avoiding tight coupling with Django ORM.
 """
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from abc import ABC, abstractmethod
 import logging
+
+if TYPE_CHECKING:
+    from core.agents.rag.knowledge_retriever import KnowledgeRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +24,7 @@ class RAGRetriever(ABC):
         self,
         query: str,
         top_k: int = 5,
-        **kwargs
+        **kwargs: Any,
     ) -> List[Dict[str, Any]]:
         """
         Retrieve relevant documents
@@ -32,7 +35,7 @@ class RAGRetriever(ABC):
             **kwargs: Additional parameters
 
         Returns:
-            List of retrieved documents with metadata
+            List of retrieved documents
         """
         pass
 
@@ -124,7 +127,7 @@ class DjangoORMRAGRetriever(RAGRetriever):
         """
         self.project_id = project_id
         self.knowledge_base_id = knowledge_base_id
-        self._retriever = None
+        self._retriever: Optional[KnowledgeRetriever] = None
 
     def _get_project_id(self) -> Optional[int]:
         """Get project_id from knowledge_base if needed"""
@@ -135,13 +138,13 @@ class DjangoORMRAGRetriever(RAGRetriever):
             from core.models.knowledge import KnowledgeBase
             try:
                 kb = KnowledgeBase.objects.get(id=self.knowledge_base_id)
-                return kb.project_id
+                return kb.project.id
             except KnowledgeBase.DoesNotExist:
                 return None
         return None
 
     @property
-    def retriever(self):
+    def retriever(self) -> Optional['KnowledgeRetriever']:
         """Lazy initialize ChromaDB retriever"""
         if self._retriever is None:
             from core.agents.rag.knowledge_retriever import KnowledgeRetriever
@@ -152,7 +155,10 @@ class DjangoORMRAGRetriever(RAGRetriever):
         self,
         query: str,
         top_k: int = 5,
-        **kwargs
+        knowledge_base_id: Optional[int] = None,
+        doc_types: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
     ) -> List[Dict[str, Any]]:
         """
         Retrieve relevant documents
@@ -160,6 +166,9 @@ class DjangoORMRAGRetriever(RAGRetriever):
         Args:
             query: Search query
             top_k: Number of results to return
+            knowledge_base_id: Knowledge base ID filter (optional)
+            doc_types: Document type filter (optional)
+            filters: Additional ChromaDB where filters (optional)
             **kwargs: Additional parameters
 
         Returns:
@@ -173,7 +182,10 @@ class DjangoORMRAGRetriever(RAGRetriever):
             results = self.retriever.search(
                 query,
                 top_k=top_k,
+                doc_types=doc_types,
                 project_id=self.project_id,
+                knowledge_base_id=knowledge_base_id,
+                where_extra=filters,
                 hybrid_search=True
             )
             
@@ -208,7 +220,7 @@ class DjangoORMRAGRetriever(RAGRetriever):
         Returns:
             List of retrieved documents
         """
-        return await self.retrieve(query, top_k, filters={'type': document_type})
+        return await self.retrieve(query, top_k, doc_types=[document_type])
 
     async def retrieve_code_examples(
         self,
@@ -259,7 +271,7 @@ class DjangoORMRAGRetriever(RAGRetriever):
 
     async def add_documents(
         self,
-        documents: List[Dict[str, Any]]
+        documents: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """
         Add documents to the knowledge base
@@ -275,11 +287,11 @@ class DjangoORMRAGRetriever(RAGRetriever):
             return {"success": False, "error": "Retriever not initialized"}
         
         try:
-            contents = [doc.get('content', '') for doc in documents]
-            metadatas = [doc.get('metadata', {}) for doc in documents]
+            contents: List[str] = [doc.get('content', '') for doc in documents]
+            metadatas: List[Dict[str, Any]] = [doc.get('metadata', {}) for doc in documents]
             
             import uuid
-            doc_ids = [f"doc_{uuid.uuid4().hex[:8]}" for _ in documents]
+            doc_ids: List[str] = [f"doc_{uuid.uuid4().hex[:8]}" for _ in documents]
             
             self.retriever.add_documents_batch(contents, metadatas, doc_ids)
             
@@ -296,7 +308,7 @@ class MockRAGRetriever(RAGRetriever):
     Returns predefined results without requiring a real knowledge base.
     """
 
-    def __init__(self, mock_results: Optional[List[Dict[str, Any]]] = None):
+    def __init__(self, mock_results: Optional[List[Dict[str, Any]]] = None) -> None:
         """
         Initialize mock retriever
 
@@ -309,7 +321,7 @@ class MockRAGRetriever(RAGRetriever):
         self,
         query: str,
         top_k: int = 5,
-        **kwargs
+        **kwargs: Any,
     ) -> List[Dict[str, Any]]:
         """
         Return mock results
@@ -343,7 +355,7 @@ class MockRAGRetriever(RAGRetriever):
         """
         filtered = [
             r for r in self.mock_results
-            if r.get('metadata', {}).get('type') == document_type
+            if r.get('metadata', {}).get('document_type') == document_type
         ]
         return filtered[:top_k]
 

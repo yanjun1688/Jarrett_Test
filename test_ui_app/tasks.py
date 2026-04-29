@@ -12,13 +12,6 @@ from .execution.execution_manager import ExecutionManager
 
 logger = logging.getLogger(__name__)
 
-if sys.platform == 'win32':
-    current_policy = asyncio.get_event_loop_policy().__class__.__name__
-    if 'Selector' in current_policy:
-        logger.warning(f"检测到错误的事件循环策略: {current_policy}，正在修复为ProactorEventLoopPolicy")
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-        logger.info(f"已设置事件循环策略为: {asyncio.get_event_loop_policy().__class__.__name__}")
-
 logger.debug(
     "模块加载时的事件循环策略: policy=%s, sys_platform=%s",
     asyncio.get_event_loop_policy().__class__.__name__,
