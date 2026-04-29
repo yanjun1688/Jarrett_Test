@@ -182,6 +182,8 @@ class TestExecutionService:
             
             logger.info(f"[Backend] 已创建TestExecution记录并保存日志")
 
+            result['execution_id'] = execution_record.id
+
             logger.info(f"[Backend] 执行完成，准备返回结果")
             logger.info(f"[Backend] Result keys: {list(result.keys())}")
             logger.info(f"[Backend] Result: {result}")

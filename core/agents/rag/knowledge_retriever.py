@@ -37,6 +37,8 @@ class KnowledgeRetriever:
         doc_id: str
     ) -> None:
         """Add a single document"""
+        if 'chroma_id_prefix' not in metadata:
+            metadata['chroma_id_prefix'] = doc_id.rsplit('_chunk_', 1)[0] + '_' if '_chunk_' in doc_id else doc_id
         embedding = self.embedding_service.embed_query(content)
         self.vector_store.add_documents(
             documents=[content],
@@ -52,6 +54,9 @@ class KnowledgeRetriever:
         doc_ids: List[str]
     ) -> None:
         """Add multiple documents in batch"""
+        for i, (doc_id, m) in enumerate(zip(doc_ids, metadatas)):
+            if 'chroma_id_prefix' not in m:
+                m['chroma_id_prefix'] = doc_id.rsplit('_chunk_', 1)[0] + '_' if '_chunk_' in doc_id else doc_id
         embeddings = self.embedding_service.embed_texts(contents)
         self.vector_store.add_documents(
             documents=contents,
@@ -66,8 +71,10 @@ class KnowledgeRetriever:
         top_k: int = 10,
         doc_types: Optional[List[str]] = None,
         project_id: Optional[int] = None,
+        knowledge_base_id: Optional[int] = None,
         boost_project: bool = False,
-        hybrid_search: bool = True
+        hybrid_search: bool = True,
+        where_extra: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Semantic search with optional filters and hybrid keyword matching
@@ -77,15 +84,22 @@ class KnowledgeRetriever:
             top_k: Number of results
             doc_types: Filter by document types
             project_id: Filter by project ID
+            knowledge_base_id: Filter by knowledge base ID
             boost_project: If True, prioritize results from project_id
             hybrid_search: If True, combine vector search with keyword matching
+            where_extra: Additional ChromaDB where filters to merge
             
         Returns:
             List of matching documents
         """
         query_embedding = self.embedding_service.embed_query(query)
         
-        where = self._build_where_clause(doc_types, project_id)
+        where = self._build_where_clause(doc_types, project_id, knowledge_base_id)
+        if where_extra:
+            if where:
+                where = {'$and': [where, where_extra]}
+            else:
+                where = where_extra
         
         n_results = top_k * 3 if hybrid_search else (top_k * 2 if boost_project and project_id else top_k)
         
@@ -179,11 +193,12 @@ class KnowledgeRetriever:
     def _build_where_clause(
         self,
         doc_types: Optional[List[str]],
-        project_id: Optional[int]
-    ) -> Optional[Dict]:
+        project_id: Optional[int],
+        knowledge_base_id: Optional[int] = None
+    ) -> Optional[Dict[str, Any]]:
         """Build ChromaDB where clause from filters"""
-        conditions = []
-        
+        conditions: List[Dict[str, Any]] = []
+
         if doc_types and len(doc_types) == 1:
             conditions.append({"doc_type": doc_types[0]})
         elif doc_types and len(doc_types) > 1:
@@ -191,6 +206,9 @@ class KnowledgeRetriever:
         
         if project_id is not None:
             conditions.append({"project_id": project_id})
+        
+        if knowledge_base_id is not None:
+            conditions.append({"knowledge_base_id": knowledge_base_id})
         
         if not conditions:
             return None
@@ -200,6 +218,17 @@ class KnowledgeRetriever:
         
         return {"$and": conditions}
     
+    DOC_TYPE_KEYWORDS: Dict[str, List[str]] = {
+        'prd': ['PRD', '需求', '产品需求', '功能需求', '产品文档', '需求文档'],
+        'api_doc': ['API', '接口', '接口文档', 'yaml', 'swagger', 'openapi', 'API文档'],
+        'feature_test': ['功能测试', '功能用例', '测试用例', '功能测试用例', '功能'],
+        'api_test': ['接口测试', 'API测试', '接口用例', 'API用例'],
+        'ui_test': ['UI测试', '界面测试', '前端测试', 'UI用例', '界面用例'],
+        'best_practice': ['最佳实践', '最佳', '实践', '规范', '指南'],
+        'code_example': ['代码示例', '示例代码', '代码', '示例', 'example', 'code'],
+        'test_pattern': ['测试模式', '模式', 'pattern', '测试策略'],
+    }
+
     def _extract_query_keywords(self, query: str) -> List[str]:
         keywords = []
         
@@ -209,7 +238,10 @@ class KnowledgeRetriever:
         words = re.findall(r'\b[A-Z_]{2,}\b', query)
         keywords.extend(words)
         
-        words = re.findall(r'\b\w{3,}\b', query)
+        chinese_chars = re.findall(r'[\u4e00-\u9fff]+', query)
+        keywords.extend(chinese_chars)
+        
+        words = re.findall(r'\b[a-zA-Z]{3,}\b', query)
         keywords.extend(words[:5])
         
         unique = []
@@ -226,17 +258,22 @@ class KnowledgeRetriever:
         self,
         results: List[Dict[str, Any]],
         query: str,
-        target_count: int
+        target_count: int,
     ) -> List[Dict[str, Any]]:
         """
         Apply keyword matching boost to results
         
-        Documents that match query keywords get higher ranking.
-        Boost score is based on keyword match count and position.
+        改进：
+        1. 精确匹配 title 加高分（+5，降低权重）
+        2. 全文内容关键词匹配（+0.5，提高权重）
+        3. doc_type 类型关键词匹配（+2）
+        4. 过滤掉 combined_score < 0 的低质量结果
         """
         query_keywords = self._extract_query_keywords(query)
         if not query_keywords:
             return results
+        
+        query_lower = query.lower().strip()
         
         scored_results = []
         for r in results:
@@ -244,9 +281,14 @@ class KnowledgeRetriever:
             doc_keywords_str = metadata.get('keywords', '')
             doc_keywords = doc_keywords_str.split(',') if doc_keywords_str else []
             title = metadata.get('title', '')
+            title_lower = title.lower().strip()
             content = r.get('content', '') or ''
+            doc_type = metadata.get('doc_type', '')
             
             keyword_score = 0.0
+            
+            if query_lower == title_lower or query_lower in title_lower:
+                keyword_score += 5.0
             
             for kw in query_keywords:
                 kw_lower = kw.lower()
@@ -258,19 +300,26 @@ class KnowledgeRetriever:
                 if kw_lower in title.lower():
                     keyword_score += 0.5
                 
-                if kw_lower in content[:500].lower():
-                    keyword_score += 0.2
+                if kw_lower in content.lower():
+                    keyword_score += 0.5
+                
+                if doc_type in self.DOC_TYPE_KEYWORDS:
+                    type_keywords = self.DOC_TYPE_KEYWORDS[doc_type]
+                    type_keywords_lower = [tk.lower() for tk in type_keywords]
+                    if kw_lower in type_keywords_lower:
+                        keyword_score += 2.0
             
             distance = r.get('distance') or 1.0
-            vector_score = 1.0 - distance
+            vector_score = 1.0 / (1.0 + distance)
             
             combined_score = vector_score + (keyword_score * 0.3)
             
-            scored_results.append({
-                **r,
-                'keyword_score': keyword_score,
-                'combined_score': combined_score
-            })
+            if combined_score > 0:
+                scored_results.append({
+                    **r,
+                    'keyword_score': keyword_score,
+                    'combined_score': combined_score
+                })
         
         scored_results.sort(key=lambda x: x.get('combined_score', 0), reverse=True)
         
@@ -280,7 +329,7 @@ class KnowledgeRetriever:
         self,
         results: List[Dict[str, Any]],
         project_id: int,
-        top_k: int
+        top_k: int,
     ) -> List[Dict[str, Any]]:
         """
         Boost results from specified project
@@ -300,17 +349,44 @@ class KnowledgeRetriever:
         boosted = project_results + other_results
         return boosted
     
-    def _format_results(self, results: Dict) -> List[Dict[str, Any]]:
-        """Format query results"""
-        formatted = []
+    def _format_results(self, results: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Format query results, fallback to MySQL for missing metadata"""
+        formatted: List[Dict[str, Any]] = []
         if not results['ids'] or not results['ids'][0]:
             return formatted
         
+        # 批量查询 knowledge_base_name（fallback）
+        kb_ids_to_fetch: List[int] = []
         for i, doc_id in enumerate(results['ids'][0]):
+            metadata = results['metadatas'][0][i] if results['metadatas'] else {}
+            kb_name = metadata.get('knowledge_base_name')
+            kb_id = metadata.get('knowledge_base_id')
+            if (not kb_name or kb_name == 'None') and kb_id:
+                kb_ids_to_fetch.append(kb_id)
+        
+        # 从 MySQL 批量获取知识库名称
+        kb_names_cache: Dict[int, str] = {}
+        if kb_ids_to_fetch:
+            try:
+                from core.models.knowledge import KnowledgeBase
+                kb_objects = KnowledgeBase.objects.filter(id__in=kb_ids_to_fetch)
+                kb_names_cache = {kb.id: kb.name for kb in kb_objects}
+            except Exception:
+                pass
+        
+        for i, doc_id in enumerate(results['ids'][0]):
+            metadata = results['metadatas'][0][i] if results['metadatas'] else {}
+            
+            # Fallback knowledge_base_name
+            kb_name = metadata.get('knowledge_base_name')
+            kb_id = metadata.get('knowledge_base_id')
+            if (not kb_name or kb_name == 'None') and kb_id and kb_id in kb_names_cache:
+                metadata['knowledge_base_name'] = kb_names_cache[kb_id]
+            
             formatted.append({
                 'id': doc_id,
                 'content': results['documents'][0][i] if results['documents'] else None,
-                'metadata': results['metadatas'][0][i] if results['metadatas'] else {},
+                'metadata': metadata,
                 'distance': results['distances'][0][i] if results['distances'] else None
             })
         return formatted

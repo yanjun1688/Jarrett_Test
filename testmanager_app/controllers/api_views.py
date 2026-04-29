@@ -124,6 +124,7 @@ class ApiRequestViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, Base
         logger.finish({
             'status': 'success' if result.get('success') else 'error',
             'api_request_id': api_request.id,
+            'execution_id': result.get('execution_id'),
             'response_status': result.get('response_status'),
             'duration': result.get('duration')
         })

@@ -1,235 +1,230 @@
 """
 GenerateUI Test Tool
 根据用户描述生成 UI 自动化测试脚本（Playwright）
+直接调用 LLM 生成代码，不再走 TestGenerationService
 """
-from typing import Dict, Any, List, Optional
+from __future__ import annotations
+
 import logging
-import re
+from typing import Any, Dict, List, Optional
 
 from core.tools.base_tool import BaseTool, ToolResult
+from core.agents.llm import create_llm_service
 
 logger = logging.getLogger(__name__)
 
 
 class GenerateUITestTool(BaseTool):
     """根据用户描述生成 UI 自动化测试脚本（Playwright）"""
-    
+
     def __init__(self, llm_service: Optional[Any] = None) -> None:
         super().__init__(
-            name="generate_ui_test",
-            description="生成 UI/Web 自动化测试脚本。当用户需要测试网页功能、表单、按钮点击等UI交互时调用。",
-            version="1.0.0"
+            name='generate_ui_test',
+            description='生成 UI/Web 自动化测试脚本。当用户需要测试网页功能、表单、按钮点击等UI交互时调用。',
+            version='2.0.0'
         )
         self._llm_service = llm_service
-    
+
     def _build_parameters_schema(self) -> Dict[str, Any]:
         return {
-            "url": {
-                "type": "string",
-                "description": "要测试的网页 URL"
+            'project_id': {
+                'type': 'integer',
+                'description': '项目 ID（必填）。如果用户未提供，请先询问用户选择项目。'
             },
-            "description": {
-                "type": "string",
-                "description": "测试场景描述，如'测试登录功能'"
+            'description': {
+                'type': 'string',
+                'description': '测试场景描述，如\'测试登录功能\''
             },
-            "actions": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "要执行的操作列表，如 ['点击登录按钮', '输入用户名']"
+            'url': {
+                'type': 'string',
+                'description': '要测试的网页 URL（可选）'
+            },
+            'actions': {
+                'type': 'array',
+                'items': {'type': 'string'},
+                'description': '要执行的操作列表（可选），如 [\'点击登录按钮\', \'输入用户名\']'
             }
         }
-    
+
     def _get_required_parameters(self) -> List[str]:
-        return ["description"]
-    
+        return ['project_id', 'description']
+
     async def execute(self, **kwargs: Any) -> ToolResult:
         """
-        生成 UI 测试脚本
-        
+        生成 UI 测试脚本，直接调用 LLM
+
         Args:
-            url: 要测试的网页 URL
+            project_id: 项目 ID（必填）
             description: 测试场景描述
+            url: 要测试的网页 URL
             actions: 要执行的操作列表
-            
+
         Returns:
             包含测试脚本的 ToolResult
         """
-        if not self._llm_service:
+        project_id = kwargs.get('project_id')
+        description = kwargs.get('description')
+        url = kwargs.get('url')
+        actions = kwargs.get('actions', [])
+
+        if not project_id:
             return ToolResult(
                 success=False,
                 data={},
-                error="LLM service is required but not provided"
+                error='缺少项目 ID。请先询问用户选择一个项目。'
             )
-        
-        url = kwargs.get("url", "")
-        description = kwargs.get("description")
-        actions = kwargs.get("actions", [])
-        
+
         if not description:
             return ToolResult(
                 success=False,
                 data={},
-                error="Missing required parameter: description"
+                error='缺少必填参数: description'
             )
-        
+
         try:
-            if not actions:
-                actions = self._get_default_actions(description)
-            
-            prompt = self._build_prompt(url, description, actions)
-            llm_response = await self._llm_service.generate(prompt=prompt)
-            
-            script_data = self._parse_script_response(llm_response)
-            user_options = self._generate_user_options(script_data)
-            
-            result_data = {
-                "script": script_data,
-                "user_options": user_options
+            # 初始化 LLM 服务（如果未提供）
+            if not self._llm_service:
+                self._llm_service = create_llm_service(provider='zhipu')
+
+            # 构建 prompt
+            url_context = f'目标URL: {url}\n' if url else ''
+            actions_context = ''
+            if actions:
+                actions_context = '操作步骤:\n' + '\n'.join([f'{i+1}. {action}' for i, action in enumerate(actions)])
+
+            prompt = f"""请根据以下描述生成 Playwright UI 自动化测试代码。
+
+测试场景: {description}
+{url_context}{actions_context}
+
+要求：
+1. 使用 Python + Playwright + pytest
+2. 包含必要的 import 语句
+3. 使用异步方式 (async/await)
+4. 包含适当的注释说明每个步骤
+5. 使用合适的定位器 (role, text, test-id 优先于 CSS selector)
+6. 包含错误处理
+7. 代码应完整可执行
+
+请自我检查：
+- 代码是否完整可运行？
+- 是否包含所有必要的 import？
+- 是否有适当的注释？
+- 是否符合 Playwright 最佳实践？
+
+直接输出 Python 代码，使用 markdown 代码块格式。"""
+
+            # 调用 LLM 生成代码
+            response = await self._llm_service.generate(
+                prompt=prompt,
+                system_message='你是 Playwright 测试专家，擅长生成高质量的 UI 自动化测试代码。',
+                temperature=0.3,
+                max_tokens=2000
+            )
+
+            # 提取代码
+            code = self._extract_code(response)
+
+            # 简单的质量评分
+            quality_score = self._calculate_quality_score(code)
+
+            script_data = {
+                'language': 'python',
+                'framework': 'playwright',
+                'code': code
             }
-            
+
+            user_options = self._generate_user_options()
+
             return ToolResult(
                 success=True,
-                data=result_data,
+                data={
+                    'script': script_data,
+                    'user_options': user_options,
+                    'quality_score': quality_score
+                },
                 metadata={
-                    "url": url,
-                    "description": description
+                    'url': url,
+                    'description': description,
+                    'project_id': project_id,
+                    'actions': actions
                 }
             )
-            
+
         except Exception as e:
-            logger.error(f"Failed to generate UI test: {e}")
+            logger.error(f'Failed to generate UI test: {e}')
             return ToolResult(
                 success=False,
                 data={},
-                error=f"LLM generation error: {str(e)}"
+                error=f'Generation error: {str(e)}'
             )
-    
-    def _build_prompt(self, url: str, description: str, actions: List[str]) -> str:
-        """构建 LLM Prompt"""
-        actions_str = "\n".join(f"- {action}" for action in actions) if actions else "- 根据描述自动推断操作"
-        url_context = f"目标 URL: {url}\n" if url else "URL: 由用户提供\n"
-        
-        prompt = f"""你是一个 UI 自动化测试专家，精通 Playwright 和 Python。
 
-{url_context}测试场景: {description}
+    def _extract_code(self, response: str) -> str:
+        """从 LLM 响应中提取代码"""
+        import re
 
-需要执行的操作:
-{actions_str}
+        # 尝试提取 markdown 代码块
+        code_block_pattern = r'```python\s*(.*?)```'
+        matches = re.findall(code_block_pattern, response, re.DOTALL)
 
-请生成一个完整的 Playwright 测试脚本，要求：
-1. 使用 Python 和 playwright.sync_api
-2. 包含完整的测试函数定义
-3. 添加适当的断言来验证测试结果
-4. 添加必要的注释说明测试步骤
-5. 处理可能的异常情况
+        if matches:
+            return matches[0].strip()
 
-请直接返回 Python 代码，不要包含额外的解释文字。代码应该可以直接运行。"""
-        return prompt
-    
-    def _parse_script_response(self, response: str) -> Dict[str, Any]:
-        """解析脚本响应"""
-        code = response
-        
-        if "```python" in response:
-            code_match = re.search(r'```python\s*([\s\S]*?)\s*```', response)
-            if code_match:
-                code = code_match.group(1).strip()
-        elif "```" in response:
-            code_match = re.search(r'```\s*([\s\S]*?)\s*```', response)
-            if code_match:
-                code = code_match.group(1).strip()
-        
-        actions = self._extract_actions_from_code(code)
-        
-        return {
-            "language": "python",
-            "framework": "playwright",
-            "code": code,
-            "actions": actions
-        }
-    
-    def _extract_actions_from_code(self, code: str) -> List[Dict[str, Any]]:
-        """从代码中提取操作"""
-        actions = []
-        
-        goto_pattern = r"page\.goto\(['\"]([^'\"]+)['\"]"
-        for match in re.finditer(goto_pattern, code):
-            actions.append({
-                "type": "navigate",
-                "selector": None,
-                "value": match.group(1)
-            })
-        
-        fill_pattern = r"page\.fill\(['\"]([^'\"]+)['\"],\s*['\"]([^'\"]*)['\"]"
-        for match in re.finditer(fill_pattern, code):
-            actions.append({
-                "type": "fill",
-                "selector": match.group(1),
-                "value": match.group(2)
-            })
-        
-        click_pattern = r"page\.click\(['\"]([^'\"]+)['\"]"
-        for match in re.finditer(click_pattern, code):
-            actions.append({
-                "type": "click",
-                "selector": match.group(1),
-                "value": None
-            })
-        
-        return actions
-    
-    def _get_default_actions(self, description: str) -> List[str]:
-        """根据描述获取默认操作"""
-        desc_lower = description.lower()
-        
-        if "登录" in description or "login" in desc_lower:
-            return [
-                "打开登录页面",
-                "输入用户名",
-                "输入密码",
-                "点击登录按钮",
-                "验证登录成功"
-            ]
-        elif "注册" in description or "register" in desc_lower or "signup" in desc_lower:
-            return [
-                "打开注册页面",
-                "填写注册表单",
-                "点击注册按钮",
-                "验证注册成功"
-            ]
-        elif "表单" in description or "form" in desc_lower:
-            return [
-                "打开表单页面",
-                "填写表单字段",
-                "提交表单",
-                "验证提交结果"
-            ]
-        elif "搜索" in description or "search" in desc_lower:
-            return [
-                "打开搜索页面",
-                "输入搜索关键词",
-                "执行搜索",
-                "验证搜索结果"
-            ]
-        else:
-            return [
-                "打开页面",
-                "执行主要操作",
-                "验证结果"
-            ]
-    
-    def _generate_user_options(self, script: Dict[str, Any]) -> Dict[str, Any]:
+        # 如果没有找到代码块，尝试提取整个响应中的代码行
+        lines = response.split('\n')
+        code_lines = []
+        in_code = False
+
+        for line in lines:
+            if line.strip().startswith(('import ', 'from ', 'async def', 'def ', 'class ', '@pytest', 'async with', 'await ')):
+                in_code = True
+            if in_code:
+                code_lines.append(line)
+
+        if code_lines:
+            return '\n'.join(code_lines).strip()
+
+        # 如果都没找到，返回原始响应
+        return response.strip()
+
+    def _calculate_quality_score(self, code: str) -> int:
+        """计算代码质量评分（启发式）"""
+        score = 0
+
+        # 检查代码长度
+        if len(code) >= 200:
+            score += 20
+
+        # 检查是否有 import
+        if 'import' in code:
+            score += 20
+
+        # 检查是否有 async/await
+        if 'async def' in code or 'await ' in code:
+            score += 20
+
+        # 检查是否有注释
+        if '#' in code or '"""' in code:
+            score += 20
+
+        # 检查是否有断言或验证
+        if 'expect(' in code or 'assert' in code:
+            score += 20
+
+        return min(score, 100)
+
+    def _generate_user_options(self, script: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """生成用户选项"""
         return {
-            "can_save": True,
-            "can_execute": True,
-            "save_options": [
-                {"label": "保存为测试脚本", "action": "save_script"},
-                {"label": "保存到测试套件", "action": "save_to_suite"}
+            'can_save': True,
+            'can_execute': True,
+            'save_options': [
+                {'label': '保存为测试脚本', 'action': 'save_script'},
+                {'label': '保存到测试套件', 'action': 'save_to_suite'}
             ],
-            "execute_options": [
-                {"label": "立即执行", "action": "execute_now"},
-                {"label": "稍后执行", "action": "execute_later"}
+            'execute_options': [
+                {'label': '立即执行', 'action': 'execute_now'},
+                {'label': '稍后执行', 'action': 'execute_later'}
             ],
-            "suggested_action": "是否保存或执行这个测试脚本？"
+            'suggested_action': '是否保存或执行这个测试脚本？'
         }

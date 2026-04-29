@@ -12,7 +12,7 @@ from celery import Celery
 from celery.signals import worker_init
 
 if sys.platform == 'win32':
-    print(f"[Celery] Windows平台检测，强制设置事件循环策略...")
+    print(f"[Celery] Windows平台检测，设置事件循环策略...")
     print(f"[Celery] 当前策略: {asyncio.get_event_loop_policy().__class__.__name__}")
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
     print(f"[Celery] [OK] 已设置为: {asyncio.get_event_loop_policy().__class__.__name__}")

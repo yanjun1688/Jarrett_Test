@@ -6,6 +6,7 @@ import ExecutionPieChart from './ExecutionPieChart';
 import { unifiedAPI } from '../api/unified';
 import { testExecutionsAPI } from '../api/testExecutions';
 import { uiTestsAPI } from '../api/uiTests';
+import { chatbotAPI } from '../api/chatbot';
 import { EXECUTION_STATUS } from '../constants';
 import ExecutionLogModal from './ExecutionLogModal';
 import '../css/TestReportList.css';
@@ -54,6 +55,7 @@ function TestReportList() {
   // ChatBot执行日志相关状态（需要在useEffect之前定义）
   const [chatbotLogs, setChatbotLogs] = useState([]);
   const [chatbotLogsLoading, setChatbotLogsLoading] = useState(false);
+
   const [chatbotLogsPagination, setChatbotLogsPagination] = useState({
     current: 1,
     pageSize: 20,
@@ -181,19 +183,16 @@ function TestReportList() {
   const fetchChatbotLogs = useCallback(async (page = 1, pageSize = 20) => {
     setChatbotLogsLoading(true);
     try {
-      const response = await unifiedAPI.getExecutions({
-        script_type: 'chatbot',
-        page,
-        page_size: pageSize,
-      });
+      const params = { page, page_size: pageSize };
+      const response = await chatbotAPI.getExecutionLogs(params);
       
-      const { results, count } = response.data;
-      setChatbotLogs(results || []);
+      const { logs, total, page: currentPage } = response.data?.data || {};
+      setChatbotLogs(logs || []);
       setChatbotLogsPagination(prev => ({
         ...prev,
-        current: page,
+        current: currentPage || page,
         pageSize,
-        total: count || 0,
+        total: total || 0,
       }));
     } catch (error) {
       if (!axios.isCancel(error)) {
@@ -231,6 +230,8 @@ function TestReportList() {
             response_status: sourceData.api_response_data?.status_code || sourceData.response_status,
             response_time: sourceData.duration,
             response_body: sourceData.api_response_data,
+            content_type: sourceData.content_type || '',
+            is_json: sourceData.is_json || false,
             assertions: sourceData.assertions || [],
           };
         } catch (e) {
@@ -298,24 +299,80 @@ function TestReportList() {
   
   const handleViewChatbotLog = useCallback(async (record) => {
     setSelectedLog(record);
-    setLogType('chatbot');
     setLogModalVisible(true);
     setLogDetailLoading(true);
     setLogDetail(null);
-    
+
+    const isManual = record.conversation_id?.startsWith('manual-');
+
     try {
-      const response = await unifiedAPI.getExecutionById(record.id);
-      const unifiedData = response.data;
-      const logsArray = unifiedData.logs ? unifiedData.logs.split('\n').filter(l => l.trim()) : [];
-      
-      setLogDetail({
-        logs: logsArray,
-        execution_duration: unifiedData.duration_seconds,
-        error_message: unifiedData.error_message,
-        status: unifiedData.status,
-        started_at: unifiedData.started_at,
-        completed_at: unifiedData.completed_at,
-      });
+      if (isManual && record.log_type === 'api_test') {
+        const executionId = record.details?.execution_id;
+        if (executionId) {
+          setLogType('api');
+          const sourceResponse = await testExecutionsAPI.getById(executionId);
+          const sourceData = sourceResponse.data;
+          const logsArray = sourceData.api_logs
+            ? sourceData.api_logs.split('\n').filter(l => l.trim())
+            : [];
+
+          setLogDetail({
+            logs: logsArray,
+            execution_duration: sourceData.duration,
+            error_message: sourceData.error_message || sourceData.actual_result,
+            status: sourceData.status,
+            started_at: sourceData.executed_at,
+            completed_at: sourceData.completed_at,
+            response_status: sourceData.api_response_data?.status_code,
+            response_time: sourceData.duration,
+            response_body: sourceData.api_response_data,
+            content_type: sourceData.content_type || '',
+            is_json: sourceData.is_json || false,
+            assertions: sourceData.assertions || [],
+          });
+        } else {
+          throw new Error('缺少 execution_id');
+        }
+      } else if (isManual && record.log_type === 'ui_test') {
+        const executionId = record.details?.execution_id;
+        if (executionId) {
+          setLogType('ui');
+          const execResponse = await uiTestsAPI.getExecutionById(executionId);
+          const execData = execResponse.data;
+          const logsArray = execData.execution_log
+            ? execData.execution_log.split('\n').filter(l => l.trim())
+            : [];
+
+          setLogDetail({
+            logs: logsArray,
+            execution_duration: execData.duration,
+            error_message: execData.error_message || '',
+            status: execData.status,
+            started_at: execData.started_at,
+            completed_at: execData.completed_at,
+            screenshots: execData.screenshots || [],
+            result_summary: execData.result_summary || {},
+          });
+        } else {
+          throw new Error('缺少 execution_id');
+        }
+      } else {
+        setLogType('chatbot');
+        const response = await chatbotAPI.getExecutionLogDetail(record.id);
+        const logData = response.data?.data;
+        const details = logData?.details || {};
+        const messageText = logData?.message || '';
+        const logsArray = messageText ? messageText.split('\n').filter(l => l.trim()) : [];
+
+        setLogDetail({
+          logs: logsArray,
+          execution_duration: details.duration,
+          error_message: details.error || '',
+          status: details.status || 'pending',
+          started_at: logData?.created_at,
+          completed_at: null,
+        });
+      }
     } catch (error) {
       notification.error({ message: '获取日志详情失败', description: error.message });
     } finally {
@@ -464,7 +521,7 @@ function TestReportList() {
         } else if (key === 'ui-logs' && uiLogs.length === 0) {
           fetchUiTestLogs(1, 20);
         } else if (key === 'chatbot-logs' && chatbotLogs.length === 0) {
-          fetchChatbotLogs(1, 20);
+          fetchChatbotLogs(1, chatbotLogsPagination.pageSize);
         }
       }}>
         <TabPane tab="测试统计" key="statistics">
@@ -608,43 +665,55 @@ function TestReportList() {
         
         <TabPane tab="ChatBot执行日志" key="chatbot-logs">
           <Card>
+
             <Table
               columns={[
                 {
+                  title: '来源',
+                  key: 'source',
+                  width: 80,
+                  render: (_, record) => {
+                    const isManual = record.conversation_id?.startsWith('manual-');
+                    return <Tag color={isManual ? 'blue' : 'purple'}>{isManual ? '手动' : 'ChatBot'}</Tag>;
+                  },
+                },
+                {
+                  title: '类型',
+                  dataIndex: 'log_type',
+                  key: 'log_type',
+                  width: 100,
+                  render: (type) => {
+                    const typeMap = { skill: 'Skill', api_test: '接口测试', ui_test: 'UI测试' };
+                    return <Tag>{typeMap[type] || type}</Tag>;
+                  },
+                },
+                {
                   title: '标题',
-                  dataIndex: 'script_name',
-                  key: 'script_name',
+                  dataIndex: 'title',
+                  key: 'title',
                   width: 250,
                   render: (text) => <strong>{text || '-'}</strong>,
                 },
                 {
                   title: '执行状态',
-                  dataIndex: 'status',
                   key: 'status',
                   width: 100,
-                  render: (status) => {
+                  render: (_, record) => {
+                    const status = record.details?.status;
                     const statusMap = {
-                      'passed': { color: 'success', text: '通过' },
-                      'failed': { color: 'error', text: '失败' },
+                      'success': { color: 'success', text: '成功' },
+                      'error': { color: 'error', text: '失败' },
                       'pending': { color: 'default', text: '待执行' },
                       'running': { color: 'processing', text: '执行中' },
-                      'stopped': { color: 'default', text: '已停止' },
                     };
-                    const config = statusMap[status] || { color: 'default', text: status };
+                    const config = statusMap[status] || { color: 'default', text: status || '-' };
                     return <Tag color={config.color}>{config.text}</Tag>;
                   },
                 },
                 {
-                  title: '执行时长',
-                  dataIndex: 'duration_seconds',
-                  key: 'duration_seconds',
-                  width: 100,
-                  render: (duration) => duration ? `${duration.toFixed(2)}秒` : '-',
-                },
-                {
                   title: '执行时间',
-                  dataIndex: 'started_at',
-                  key: 'started_at',
+                  dataIndex: 'created_at',
+                  key: 'created_at',
                   width: 180,
                   render: (text) => text ? new Date(text).toLocaleString() : '-',
                 },
@@ -711,6 +780,8 @@ function TestReportList() {
               ? JSON.stringify(logDetail.response_body, null, 2) 
               : logDetail.response_body)
             : undefined}
+          contentType={logDetail?.content_type}
+          isJson={logDetail?.is_json}
           assertions={logType === 'api' ? logDetail?.assertions : undefined}
           screenshots={logType === 'ui' ? logDetail?.screenshots : undefined}
           logs={logDetail?.logs}

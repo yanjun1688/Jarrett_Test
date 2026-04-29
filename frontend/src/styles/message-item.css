@@ -1,0 +1,56 @@
+/**
+ * 单条消息样式
+ */
+.message-item {
+  padding: 12px 16px;
+  border-radius: 12px;
+  max-width: 80%;
+}
+
+.message-item.user {
+  background: #e6f7ff;
+  align-self: flex-end;
+  margin-left: 20%;
+}
+
+.message-item.assistant {
+  background: #f6f6f6;
+  align-self: flex-start;
+  margin-right: 20%;
+}
+
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.message-role {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.message-time {
+  font-size: 12px;
+  color: #999;
+}
+
+.message-content {
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.message-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.message-item:hover .message-actions {
+  opacity: 1;
+}

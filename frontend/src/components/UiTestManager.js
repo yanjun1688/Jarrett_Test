@@ -22,7 +22,7 @@ import {
 import { uiTestsAPI } from '../api';
 import { usePermissions } from '../hooks/usePermissions';
 import RecordingPanel from './RecordingPanel';
-import ElementPickerModal from './ElementPickerModal';
+
 import ExecutionModal from '../features/ui-tests/components/ExecutionModal';
 import { buildStepsPayload, convertStepsToFormFormat } from '../features/ui-tests/utils/scriptUtils';
 import useUiTestScripts from '../features/ui-tests/hooks/useUiTestScripts';
@@ -50,9 +50,6 @@ const UiTestManager = () => {
     createModalVisible,
     editModalVisible,
     editingScript,
-    elementPickerVisible,
-    elementPickerFieldIndex,
-    elementPickerUrl,
   } = modals;
 
   // 录制面板状态
@@ -570,48 +567,6 @@ const UiTestManager = () => {
                           <Input placeholder="例如：#login-button 或 .btn-primary" />
                         </Form.Item>
 
-                        {/* 选择元素按钮 - 仅当需要元素的操作类型时显示 */}
-                        <Form.Item
-                          noStyle
-                          shouldUpdate={(prev, cur) =>
-                            prev.steps?.[field.name]?.action_type !==
-                            cur.steps?.[field.name]?.action_type
-                          }
-                        >
-                          {({ getFieldValue }) => {
-                            const currentAction = getFieldValue(['steps', field.name, 'action_type']);
-                            const needsElement = ['click', 'fill', 'select', 'hover', 'assert', 'extract'].includes(
-                              currentAction
-                            );
-                            
-                            if (!needsElement) return null;
-
-                            // 获取当前步骤的URL（用于元素选择器的初始URL）
-                            const navigateStep = form.getFieldValue('steps')?.find(
-                              (s, idx) => idx < field.name && s.action_type === 'navigate'
-                            );
-                            const stepUrl = navigateStep?.url || '';
-
-                            return (
-                              <Button
-                                type="link"
-                                size="small"
-                                onClick={() => {
-                                  modalDispatch({
-                                    type: 'SHOW_ELEMENT_PICKER',
-                                    payload: {
-                                      fieldIndex: field.name,
-                                      context: 'create',
-                                      url: stepUrl,
-                                    },
-                                  });
-                                }}
-                              >
-                                选择元素
-                              </Button>
-                            );
-                          }}
-                        </Form.Item>
                       </Space>
 
                       {/* 针对不同操作类型显示不同参数字段（简单直观） */}
@@ -1027,48 +982,6 @@ const UiTestManager = () => {
                                 <Input placeholder="例如：#login-button 或 .btn-primary" />
                               </Form.Item>
 
-                              {/* 选择元素按钮 - 编辑模式 */}
-                              <Form.Item
-                                noStyle
-                                shouldUpdate={(prev, cur) =>
-                                  prev.steps?.[field.name]?.action_type !==
-                                  cur.steps?.[field.name]?.action_type
-                                }
-                              >
-                                {({ getFieldValue }) => {
-                                  const currentAction = getFieldValue(['steps', field.name, 'action_type']);
-                                  const needsElement = ['click', 'fill', 'select', 'hover', 'assert', 'extract'].includes(
-                                    currentAction
-                                  );
-                                  
-                                  if (!needsElement) return null;
-
-                                  // 获取当前步骤的URL
-                                  const navigateStep = form.getFieldValue('steps')?.find(
-                                    (s, idx) => idx < field.name && s.action_type === 'navigate'
-                                  );
-                                  const stepUrl = navigateStep?.url || '';
-
-                                  return (
-                                    <Button
-                                      type="link"
-                                      size="small"
-                                      onClick={() => {
-                                        modalDispatch({
-                                          type: 'SHOW_ELEMENT_PICKER',
-                                          payload: {
-                                            fieldIndex: field.name,
-                                            context: 'edit',
-                                            url: stepUrl,
-                                          },
-                                        });
-                                      }}
-                                    >
-                                      选择元素
-                                    </Button>
-                                  );
-                                }}
-                              </Form.Item>
                             </Space>
 
                             {/* 针对不同操作类型显示不同参数字段 */}
@@ -1313,32 +1226,6 @@ const UiTestManager = () => {
         onSave={handleRecordingSave}
       />
 
-      {/* 元素选择器模态框 */}
-      <ElementPickerModal
-        visible={elementPickerVisible}
-        initialUrl={elementPickerUrl}
-        onCancel={() => modalDispatch({ type: 'HIDE_ELEMENT_PICKER' })}
-        onSelect={(locator) => {
-          // 填充选中的定位器到表单
-          if (elementPickerFieldIndex !== null) {
-            const currentSteps = form.getFieldValue('steps') || [];
-            form.setFieldsValue({
-              steps: currentSteps.map((step, idx) => {
-                if (idx === elementPickerFieldIndex) {
-                  return {
-                    ...step,
-                    locator_type: locator.locator_type,
-                    locator_value: locator.locator_value,
-                  };
-                }
-                return step;
-              }),
-            });
-            notification.success('元素定位器已填充');
-          }
-          modalDispatch({ type: 'HIDE_ELEMENT_PICKER' });
-        }}
-      />
     </Space>
   );
 };

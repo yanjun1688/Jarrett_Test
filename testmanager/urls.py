@@ -18,7 +18,7 @@ from django.urls.resolvers import URLPattern, URLResolver
 urlpatterns: List[Union[URLPattern, URLResolver]] = [
     path("admin/", admin.site.urls),
     
-    path("api/", include("api.urls")),
+    path("api/v1/", include("api.urls")),
 ]
 
 if settings.DEBUG:

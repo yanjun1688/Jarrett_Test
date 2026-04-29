@@ -8,6 +8,7 @@ Structure:
     ├── chatbot/                   # Chatbot AI
     ├── knowledge/                 # Knowledge base
     ├── planning/                  # Test planning
+    ├── test-generation/           # Test generation (UI/API/PRD)
     ├── projects/                  # Project management (ViewSet)
     ├── modules/                   # Module management (ViewSet)
     ├── testcases/                 # Test cases (ViewSet)
@@ -23,7 +24,6 @@ Structure:
     ├── feature-tests/             # Feature tests (ViewSet)
     ├── ui-test/                   # UI test module
     ├── skills/                    # Skills/workflows
-    ├── ai-agent/                  # AI agent
     └── projects/<id>/...          # Project-level operations
 """
 from __future__ import annotations
@@ -37,13 +37,13 @@ from rest_framework.urlpatterns import format_suffix_patterns
 from api.v1.knowledge import views as knowledge_views
 from api.v1.planning import views as planning_views
 from api.v1.execution import views as execution_views
+from api.v1.test_generation import views as test_generation_views
 
 from testmanager_app.chatbots import chatbot_views
 from testmanager_app.controllers import skill_api_views
 from testmanager_app import auth_views
 from testmanager_app import views as tm_views
-from test_ui_app import views as ui_views, agent_views as ui_agent_views
-from test_ai_agent import views as ai_agent_views
+from test_ui_app import views as ui_views
 from api.v1.unified import views as unified_views
 
 app_name = 'api'
@@ -113,19 +113,33 @@ planning_patterns = [
 ]
 
 ui_test_patterns = [
-    path('agent/generate/', ui_agent_views.GenerateScriptWithAgentView.as_view(), name='generate-ui-test'),
     path('extract-elements/', ui_views.ExtractElementsView.as_view(), name='extract-elements'),
 ]
 
-skills_patterns = [
-    path('remote-search/', skill_api_views.SkillRemoteSearchView.as_view(), name='skill-remote-search'),
-    path('local/', skill_api_views.SkillLocalListView.as_view(), name='skill-local'),
-    path('install/', skill_api_views.SkillInstallView.as_view(), name='skill-install'),
-    path('execute/', skill_api_views.SkillExecuteView.as_view(), name='skill-execute'),
+# [DEPRECATED 2026-04-24] test-generation 模块已废弃
+# 所有端点返回 410 Gone，请使用 /api/v1/chatbot/message/ 替代
+# 计划在 2026-05-24 物理删除这些路由
+test_generation_patterns = [
+    path('ui-test/', test_generation_views.GenerateUITestView.as_view(), name='generate-ui-test'),
+    path('api-test/', test_generation_views.GenerateAPITestView.as_view(), name='generate-api-test'),
+    path('from-prd/', test_generation_views.GenerateFromPRDView.as_view(), name='generate-from-prd'),
 ]
 
-ai_agent_patterns = [
-    path('process-prd/', ai_agent_views.ProcessPRDView.as_view(), name='process-prd'),
+skills_patterns = [
+    # [DEPRECATED] GET /skills/remote-search/ - 旧版直接调用 npx CLI
+    path('remote-search/', skill_api_views.SkillRemoteSearchView.as_view(), name='skill-remote-search'),
+    
+    # [DEPRECATED] POST /skills/install/ - 旧版直接调用 npx CLI  
+    path('install/', skill_api_views.SkillInstallView.as_view(), name='skill-install'),
+    
+    # [MCP] POST /skills/search/ - 新版 MCP Server 代理
+    path('search/', skill_api_views.SkillSearchMCPView.as_view(), name='skill-search'),
+    
+    # GET /skills/local/ - 本地技能列表（保持兼容）
+    path('local/', skill_api_views.SkillLocalListView.as_view(), name='skill-local'),
+    
+    # POST /skills/execute/ - 执行技能（保持兼容）
+    path('execute/', skill_api_views.SkillExecuteView.as_view(), name='skill-execute'),
 ]
 
 urlpatterns = [
@@ -135,9 +149,9 @@ urlpatterns = [
     path('chatbot/', include((chatbot_patterns, 'chatbot'), namespace='chatbot')),
     path('knowledge/', include((knowledge_patterns, 'knowledge'), namespace='knowledge')),
     path('planning/', include((planning_patterns, 'planning'), namespace='planning')),
+    path('test-generation/', include((test_generation_patterns, 'test-generation'), namespace='test-generation')),
     path('ui-test/', include((ui_test_patterns, 'ui-test'), namespace='ui-test')),
     path('skills/', include((skills_patterns, 'skills'), namespace='skills')),
-    path('ai-agent/', include((ai_agent_patterns, 'ai-agent'), namespace='ai-agent')),
     
     path('report-data/', tm_views.TestReportDataView.as_view(), name='report-data'),
     

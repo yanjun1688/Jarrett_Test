@@ -8,6 +8,7 @@
 from __future__ import annotations
 import json
 import logging
+import threading
 import time
 from typing import Any, Callable
 from playwright.sync_api import Playwright, Browser, BrowserContext, Page
@@ -650,15 +651,44 @@ class SyncBrowserRecorder:
     ) -> list[dict[str, Any]]:
         """
         启动录制（阻塞式）
-        
+
         调用后会打开浏览器并阻塞，直到浏览器窗口关闭。
+
+        关键设计：Playwright 放到独立线程中运行，因为：
+        - Daphne/ASGI 进程中已有一个运行中的事件循环
+        - sync_playwright().__enter__() 会调用 asyncio.get_running_loop()
+        - 如果偷到 Daphne 的循环，子进程创建可能失败
+        - 独立线程没有运行中的循环，Playwright 自己用 ProactorEventLoopPolicy 创建新的
         """
+        result: dict[str, Any] = {}
+
+        def _run() -> None:
+            try:
+                result['steps'] = self._do_recording(start_url, browser_type)
+            except Exception as e:
+                result['error'] = e
+
+        thread = threading.Thread(target=_run, name='playwright-recorder')
+        thread.start()
+        thread.join()
+
+        if 'error' in result:
+            logger.error(f"[SyncRecorder] 录制过程异常: {str(result['error'])}")
+            return self.recorded_actions.copy()
+        return result.get('steps', [])
+
+    def _do_recording(
+        self,
+        start_url: str,
+        browser_type: str = 'chromium',
+    ) -> list[dict[str, Any]]:
+        """录制核心逻辑，必须在独立线程中运行"""
         from playwright.sync_api import sync_playwright
-        
+
         logger.info(f"[SyncRecorder] 启动同步录音: {start_url}")
         self.recorded_actions = []
         self.action_counter = 0
-        
+
         try:
             self.playwright = sync_playwright().start()
             browser_launchers = {
@@ -667,50 +697,44 @@ class SyncBrowserRecorder:
                 'webkit': self.playwright.webkit,
             }
             launcher = browser_launchers.get(browser_type, self.playwright.chromium)
-            
+
             self.browser = launcher.launch(headless=False)
             self.context = self.browser.new_context(viewport={'width': 1280, 'height': 720})
-            
+
             # 注入脚本和绑定方法
             self.context.expose_binding('reportAction', self._handle_action_report)
             self.context.add_init_script(self._get_recording_script())
-            
+
             self.page = self.context.new_page()
-            
+
             # 监听页面关闭事件 - 这是退出循环的最可靠信号
             is_closed = [False]
             def on_page_close():
                 logger.info("[SyncRecorder] 录制页面已关闭")
                 is_closed[0] = True
-            
+
             self.page.on("close", lambda _: on_page_close())
-            
+
             if start_url and start_url != 'about:blank':
                 self.page.goto(start_url)
                 self._add_action('navigate', params={'url': start_url}, description=f'打开 {start_url}')
 
             self.is_recording = True
-            
+
             # 阻塞循环：等待页面或浏览器关闭
             logger.info("[SyncRecorder] 进入阻塞等待状态...")
             while not is_closed[0]:
-                # 使用 page.wait_for_timeout 是为了让 Playwright 有机会处理内部事件
                 try:
                     if self.page is not None:
                         self.page.wait_for_timeout(500)
                 except Exception:
-                    # 如果页面已经关闭，wait_for_timeout 可能会抛异常
                     break
-                
-                # 双重检查浏览器连接
+
                 if self.browser is not None and not self.browser.is_connected():
                     break
-            
+
             return self.recorded_actions.copy()
-            
-        except Exception as e:
-            logger.error(f"[SyncRecorder] 录制过程异常: {str(e)}")
-            return self.recorded_actions.copy()
+
         finally:
             self.cleanup()
 

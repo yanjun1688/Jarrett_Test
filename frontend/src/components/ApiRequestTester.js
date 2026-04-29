@@ -61,6 +61,26 @@ function parseHeadersInput(input) {
   }
 }
 
+function formatJsonString(str) {
+  if (!str) return '';
+  try {
+    const parsed = JSON.parse(str);
+    return JSON.stringify(parsed, null, 2);
+  } catch (e) {
+    return str;
+  }
+}
+
+function normalizeJsonString(str) {
+  if (!str) return '';
+  try {
+    const parsed = JSON.parse(str);
+    return JSON.stringify(parsed);
+  } catch (e) {
+    return str.trim();
+  }
+}
+
 const initialState = {
   requests: [],
   projects: [],
@@ -160,7 +180,7 @@ function ApiRequestTester() {
         url: values.url,
         method: values.method,
         headers: JSON.stringify(headers),
-        body: values.body || '',
+        body: normalizeJsonString(values.body),
         project: values.project || null,
       });
       notification.success({ message: '请求已保存' });
@@ -178,8 +198,8 @@ function ApiRequestTester() {
       name: request.name,
       url: request.url,
       method: request.method,
-      headers: request.headers,
-      body: request.body || '',
+      headers: formatJsonString(request.headers),
+      body: formatJsonString(request.body),
       project: request.project,
     });
   };
@@ -195,7 +215,7 @@ function ApiRequestTester() {
         url: values.url,
         method: values.method,
         headers: JSON.stringify(headers),
-        body: values.body || '',
+        body: normalizeJsonString(values.body),
       });
       notification.success({ message: '请求已更新' });
       setShowEditModal(false);
@@ -239,7 +259,7 @@ function ApiRequestTester() {
         payload: { 
           requestId, 
           result: {
-            status: data.error_message ? 'failed' : 'passed', // 执行状态
+            status: data.error_message ? 'failed' : 'passed',
             totalCount: 1,
             passedCount: data.passed_count || 0,
             failedCount: Math.max((data.total_assertions || 0) - (data.passed_count || 0), 0),
@@ -247,6 +267,8 @@ function ApiRequestTester() {
             responseTime: data.response_time,
             executionDuration: data.response_time,
             responseBody: data.response_body,
+            contentType: data.content_type || '',
+            isJson: data.is_json || false,
             assertions: data.assertions || [],
             logs: data.api_logs || `======= ${data.status || '开始执行'} =======\n${data.api_logs || data.response_body || JSON.stringify(data)}`,
             errorMessage: data.error_message,
@@ -597,8 +619,10 @@ function ApiRequestTester() {
           responseStatus={execModalData?.responseStatus}
           responseTime={execModalData?.responseTime}
           responseBody={execModalData?.responseBody}
+          contentType={execModalData?.contentType}
+          isJson={execModalData?.isJson}
           logs={execModalData?.logs}
-          assertionResults={execModalData?.assertions || []}
+          assertions={execModalData?.assertions || []}
           errorMessage={execModalData?.errorMessage}
           startTime={execModalData?.startTime}
           endTime={execModalData?.endTime}

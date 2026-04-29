@@ -154,3 +154,8 @@ start.ps1
 
 # Data directory
 data/
+
+# Temporary/one-time scripts (local only)
+cleanup_deprecated.py
+create_migration_template.py
+REMOVE_TESTFLOW_MODELS_migration_example.py

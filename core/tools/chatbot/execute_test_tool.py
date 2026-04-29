@@ -134,9 +134,11 @@ class ExecuteTestTool(BaseTool):
         
         # 优先级0: 使用 unified_script_id 路由（最高优先级）
         if unified_script_id:
+            logger.info(f'[ExecuteTest] 优先级0: unified_script_id={unified_script_id}')
             result = await self._execute_by_unified_script_id(
                 unified_script_id, user_id=user_id,
             )
+            logger.info(f'[ExecuteTest] unified 执行结果: success={result.success}')
             if execution_logger:
                 await sync_to_async(execution_logger.finish)({
                     'status': 'success' if result.success else 'error',
@@ -149,8 +151,9 @@ class ExecuteTestTool(BaseTool):
         
         # 优先级1: 直接使用 test_script_id 执行
         if test_script_id:
-            logger.info(f"[ExecuteTest] 使用 test_script_id={test_script_id} 直接执行")
+            logger.info(f'[ExecuteTest] 优先级1: test_script_id={test_script_id}')
             result = await self._execute_test_script(test_script_id, user_id=user_id)
+            logger.info(f'[ExecuteTest] script 执行结果: success={result.success}')
             if execution_logger:
                 await sync_to_async(execution_logger.finish)({
                     'status': 'success' if result.success else 'error',
@@ -161,8 +164,9 @@ class ExecuteTestTool(BaseTool):
         
         # 优先级2: 使用 script_name 单步执行（自动查找）
         if script_name:
-            logger.info(f"[ExecuteTest] 使用 script_name='{script_name}' 单步查找执行")
+            logger.info(f'[ExecuteTest] 优先级2: script_name={script_name!r}, project_name={project_name!r}')
             result = await self._execute_by_script_name_direct(script_name, project_name, user_id=user_id)
+            logger.info(f'[ExecuteTest] 单步执行结果: success={result.success}, execution_id={result.data.get("execution_id") if result.data else None}')
             if execution_logger:
                 await sync_to_async(execution_logger.finish)({
                     'status': 'success' if result.success else 'error',
@@ -184,6 +188,7 @@ class ExecuteTestTool(BaseTool):
             return result
         
         if not test_type:
+            logger.warning('[ExecuteTest] 无有效执行参数（unified_script_id、test_script_id、script_name、test_id 均为空）')
             if execution_logger:
                 await sync_to_async(execution_logger.finish)({'status': 'error', 'error': 'Missing parameter'})
             return ToolResult(
@@ -231,6 +236,7 @@ class ExecuteTestTool(BaseTool):
                     'test_type': test_type
                 })
             
+            logger.info(f'[ExecuteTest] 执行完成: success=True, test_type={test_type}, total_tests={result.get("execution_result", {}).get("total_tests", 0)}')
             return ToolResult(
                 success=True,
                 data=result,
@@ -239,9 +245,9 @@ class ExecuteTestTool(BaseTool):
                     "total_tests": result.get("execution_result", {}).get("total_tests", 0)
                 }
             )
-            
+
         except Exception as e:
-            logger.error(f"Test execution failed: {e}")
+            logger.error(f'[ExecuteTest] 执行异常: {e}', exc_info=True)
             if execution_logger:
                 await sync_to_async(execution_logger.finish)({'status': 'error', 'error': str(e)})
             return ToolResult(

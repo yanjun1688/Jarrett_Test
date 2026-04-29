@@ -20,7 +20,7 @@ from typing import Any
 
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    print("显式设置 WindowsProactorEventLoopPolicy (from asgi.py)")
+    print("[ASGI] 设置 WindowsProactorEventLoopPolicy")
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "testmanager.settings")
 

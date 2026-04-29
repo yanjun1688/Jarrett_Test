@@ -3,8 +3,6 @@ import {
   Modal,
   Button,
   Input,
-  List,
-  Card,
   Space,
   Typography,
   Alert,
@@ -18,12 +16,12 @@ import {
   SearchOutlined,
   DownloadOutlined,
   ToolOutlined,
-  CheckCircleOutlined,
   ReloadOutlined
 } from '@ant-design/icons';
+import Ansi from 'ansi-to-react';
 import { skillExecutionAPI } from '../api/skillExecution';
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 /**
  * Skill 管理组件
@@ -34,8 +32,9 @@ const SkillExecutionManager = ({ visible, onCancel }) => {
   const [installing, setInstalling] = useState(false);
   
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [remoteSkills, setRemoteSkills] = useState([]);
+  const [searchOutput, setSearchOutput] = useState('');
   const [localSkills, setLocalSkills] = useState([]);
+  const [installInput, setInstallInput] = useState('');
   
   const [activeTab, setActiveTab] = useState('search');
 
@@ -56,8 +55,9 @@ const SkillExecutionManager = ({ visible, onCancel }) => {
   useEffect(() => {
     if (visible) {
       loadLocalSkills();
-      setRemoteSkills([]);
+      setSearchOutput('');
       setSearchKeyword('');
+      setInstallInput('');
       setActiveTab('search');
     }
   }, [visible, loadLocalSkills]);
@@ -72,27 +72,36 @@ const SkillExecutionManager = ({ visible, onCancel }) => {
     try {
       const response = await skillExecutionAPI.searchSkills(searchKeyword);
       if (response.data?.success) {
-        setRemoteSkills(response.data.data?.skills || []);
-        if (response.data.data?.skills?.length === 0) {
+        // MCP Server 返回格式: {success, output, error}
+        setSearchOutput(response.data.output || '');
+        if (!response.data.output) {
           message.info('未找到匹配的 Skill');
         }
       } else {
         message.error(response.data?.error || '搜索失败');
+        setSearchOutput('');
       }
     } catch (error) {
       message.error('搜索失败: ' + (error.response?.data?.error || error.message));
+      setSearchOutput('');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleInstall = async (skillName) => {
+  const handleInstall = async () => {
+    if (!installInput.trim()) {
+      message.warning('请输入要安装的 Skill ID');
+      return;
+    }
+    
     setInstalling(true);
     try {
-      const response = await skillExecutionAPI.installSkill(skillName);
+      const response = await skillExecutionAPI.installSkill(installInput.trim());
       if (response.data?.success) {
-        message.success(response.data.data?.message || '安装成功');
+        message.success(response.data.message || '安装成功');
         loadLocalSkills();
+        setInstallInput('');
       } else {
         message.error(response.data?.error || '安装失败');
       }
@@ -101,11 +110,6 @@ const SkillExecutionManager = ({ visible, onCancel }) => {
     } finally {
       setInstalling(false);
     }
-  };
-
-  const isSkillInstalled = (skillName) => {
-    const basename = skillName.split('/')[-1].split('@')[0];
-    return localSkills.some(s => s.name === basename);
   };
 
   const renderSearchPanel = () => (
@@ -121,66 +125,53 @@ const SkillExecutionManager = ({ visible, onCancel }) => {
         style={{ marginBottom: 16 }}
       />
 
-      {remoteSkills.length > 0 && (
-        <List
-          grid={{ gutter: 16, column: 2 }}
-          dataSource={remoteSkills}
-          renderItem={(skill) => {
-            const skillFullName = skill.id || skill.name;
-            const installed = isSkillInstalled(skillFullName);
-            const basename = skillFullName.split('/')[-1].split('@')[0];
-            
-            return (
-              <List.Item>
-                <Card
-                  title={
-                    <Space>
-                      <ToolOutlined />
-                      <Text strong>{basename}</Text>
-                      {skill.version && <Tag size="small">v{skill.version}</Tag>}
-                      {installed && <Tag color="success">已安装</Tag>}
-                    </Space>
-                  }
-                  extra={
-                    installed ? (
-                      <Tag icon={<CheckCircleOutlined />} color="success">
-                        已安装
-                      </Tag>
-                    ) : (
-                      <Button 
-                        type="primary" 
-                        size="small"
-                        icon={<DownloadOutlined />}
-                        onClick={() => handleInstall(skillFullName)}
-                        loading={installing}
-                      >
-                        安装
-                      </Button>
-                    )
-                  }
-                >
-                  <Paragraph type="secondary" ellipsis={{ rows: 2 }}>
-                    {skill.description || '暂无描述'}
-                  </Paragraph>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    {skillFullName}
-                  </Text>
-                </Card>
-              </List.Item>
-            );
-          }}
-        />
+      {searchOutput && (
+        <>
+          <div style={{ 
+            background: '#1e1e1e', 
+            padding: '16px', 
+            borderRadius: '8px',
+            fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+            fontSize: '14px',
+            lineHeight: '1.5',
+            overflow: 'auto',
+            maxHeight: '400px',
+            marginBottom: '16px'
+          }}>
+            <Ansi>{searchOutput}</Ansi>
+          </div>
+          
+          <div style={{ marginBottom: 16 }}>
+            <Text type="secondary" style={{ marginRight: 8 }}>
+              输入要安装的 Skill ID：
+            </Text>
+            <Input
+              placeholder="如: owner/repo@skill"
+              value={installInput}
+              onChange={(e) => setInstallInput(e.target.value)}
+              style={{ width: 300, marginRight: 8 }}
+            />
+            <Button 
+              type="primary" 
+              icon={<DownloadOutlined />}
+              onClick={handleInstall}
+              loading={installing}
+            >
+              安装
+            </Button>
+          </div>
+        </>
       )}
 
-      {remoteSkills.length === 0 && !loading && searchKeyword && (
+      {!searchOutput && !loading && searchKeyword && (
         <Empty description="未找到匹配的 Skill" />
       )}
 
-      {remoteSkills.length === 0 && !loading && !searchKeyword && (
+      {!searchOutput && !loading && !searchKeyword && (
         <Alert
           type="info"
           message="搜索远程 Skill"
-          description="输入关键词搜索 skill.sh 社区的技能，找到后点击安装即可在 ChatBot 中使用"
+          description="输入关键词搜索 skill.sh 社区的技能，在终端输出中找到想要的 Skill ID，然后输入安装"
           showIcon
         />
       )}
@@ -196,34 +187,31 @@ const SkillExecutionManager = ({ visible, onCancel }) => {
       </Space>
 
       {localSkills.length > 0 && (
-        <List
-          grid={{ gutter: 16, column: 2 }}
-          dataSource={localSkills}
-          renderItem={(skill) => (
-            <List.Item>
-              <Card
-                title={
-                  <Space>
-                    <ToolOutlined />
-                    <Text strong>{skill.name}</Text>
-                    <Tag color={skill.source === 'builtin' ? 'blue' : 'green'}>
-                      {skill.source === 'builtin' ? '内置' : '已安装'}
-                    </Tag>
-                  </Space>
-                }
-              >
-                <Paragraph type="secondary" ellipsis={{ rows: 2 }}>
-                  {skill.description || '暂无描述'}
-                </Paragraph>
-                {skill.version && (
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    版本: {skill.version}
-                  </Text>
-                )}
-              </Card>
-            </List.Item>
-          )}
-        />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+          {localSkills.map((skill) => (
+            <div key={skill.name} style={{
+              border: '1px solid #d9d9d9',
+              borderRadius: 8,
+              padding: 16
+            }}>
+              <Space style={{ marginBottom: 8 }}>
+                <ToolOutlined />
+                <Text strong>{skill.name}</Text>
+                <Tag color={skill.source === 'builtin' ? 'blue' : 'green'}>
+                  {skill.source === 'builtin' ? '内置' : '已安装'}
+                </Tag>
+              </Space>
+              <div style={{ color: '#666', fontSize: 14 }}>
+                {skill.description || '暂无描述'}
+              </div>
+              {skill.version && (
+                <div style={{ color: '#999', fontSize: 12, marginTop: 8 }}>
+                  版本: {skill.version}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
 
       {localSkills.length === 0 && !loading && (

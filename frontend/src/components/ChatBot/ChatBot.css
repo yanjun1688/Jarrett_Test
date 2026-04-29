@@ -1,0 +1,36 @@
+/**
+ * ChatBot 组件样式
+ */
+.chatbot-drawer .chatbot-container {
+  display: flex;
+  height: 100%;
+  position: relative;
+}
+
+.drawer-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 10;
+}
+
+.drawer-resize-handle:hover {
+  background: #667eea;
+}
+
+.chatbot-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chatbot-header {
+  display: flex;
+  align-items: center;
+}

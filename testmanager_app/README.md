@@ -39,9 +39,10 @@ testmanager_app/
 ├── script_views.py              # 脚本视图
 ├── viewsets/                    # DRF ViewSets
 │
-├── agent_views.py               # Agent 集成视图
-├── chatbot_views.py             # AI 对话视图
-├── enhanced_chatbot_views.py    # 增强版对话视图
+├── agent_views.py               # Agent 集成视图（已迁移至 api/v1/test-generation/）
+├── chatbots/                    # AI 对话模块
+│   ├── chatbot_views.py         # AI 对话视图
+│   └── enhanced_chatbot_views.py # 增强版对话视图
 ├── skill_api_views.py           # Skill API 视图
 │
 ├── services/                    # 业务服务层
@@ -63,7 +64,6 @@ testmanager_app/
 ├── script_engine.py             # 脚本执行引擎
 ├── execution_strategies.py      # 执行策略
 ├── collection_execution_strategies.py  # 集合执行策略
-├── agent_integration.py         # Agent 集成
 ├── shared_async_utils.py        # 异步工具函数
 │
 ├── management/                  # Django 管理命令

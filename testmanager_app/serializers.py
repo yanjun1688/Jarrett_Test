@@ -89,6 +89,7 @@ class TestExecutionListSerializer(serializers.ModelSerializer[TestExecution]):
             'api_request_url', 'api_request_method',
             'status', 'actual_result', 'executed_at', 'executor_name',
             'error_message', 'step_results',
+            'api_response_data', 'duration',
         ]
 
 

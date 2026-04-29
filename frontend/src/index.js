@@ -20,7 +20,7 @@ const ApiRequestTester = lazy(() => import('./components/ApiRequestTester'));
 const PressureTestManager = lazy(() => import('./components/PressureTestManager'));
 const AdvancedPressureTestManager = lazy(() => import('./components/AdvancedPressureTestManager'));
 const FeatureTestCaseManager = lazy(() => import('./components/FeatureTestCaseManager'));
-const AiTestCaseAnalysis = lazy(() => import('./components/AiTestCaseAnalysis'));
+const AiTestGenerator = lazy(() => import('./components/AiTestGenerator'));
 const TestFlowList = lazy(() => import('./components/TestFlowList'));
 const TestFlowBuilder = lazy(() => import('./components/TestFlowBuilder'));
 const TestFlowMonitor = lazy(() => import('./components/TestFlowMonitor'));
@@ -138,10 +138,10 @@ root.render(
               } 
             />
             <Route
-              path="ai-test-analysis"
+              path="ai-test-generator"
               element={
                 <ProtectedRoute>
-                  <LazyRoute><AiTestCaseAnalysis /></LazyRoute>
+                  <LazyRoute><AiTestGenerator /></LazyRoute>
                 </ProtectedRoute>
               }
             />

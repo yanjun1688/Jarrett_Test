@@ -41,8 +41,9 @@ const TestFlowMonitor = () => {
   }
 
   if (error) {
+    const errorMsg = typeof error === 'object' ? JSON.stringify(error) : error;
     return (
-      <Alert message="错误" description={error} type="error" showIcon />
+      <Alert message="错误" description={errorMsg} type="error" showIcon />
     );
   }
 

@@ -30,9 +30,7 @@ class TestChainExecutor:
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f"[{timestamp}] {message}"
         self.logs.append(log_entry)
-        # Windows GBK 编码无法输出 emoji，替换为 ASCII 安全字符后再写日志
-        safe_entry = log_entry.encode('ascii', errors='replace').decode('ascii')
-        logger.info(safe_entry)
+        logger.info(log_entry)
 
     
     
@@ -329,13 +327,23 @@ class TestChainExecutor:
 
             try:
                 response_json = response.json()
+                response_body = response_json
+                content_type = 'json'
             except (json.JSONDecodeError, ValueError):
                 response_json = None
+                response_body = response.text
+                content_type = 'text'
+
+            resp_content_type = response.headers.get('Content-Type', '')
+            is_json = resp_content_type.startswith('application/json') or content_type == 'json'
 
             return {
                 'success': passed,
                 'status_code': response.status_code,
                 'response_data': response_json,
+                'response_body': response_body,
+                'content_type': resp_content_type,
+                'is_json': is_json,
                 'elapsed': response.elapsed.total_seconds(),
                 'assertion_results': assertion_results
             }
@@ -344,7 +352,9 @@ class TestChainExecutor:
             self.log(f"❌ 步骤 '{step_name}' 执行异常: {str(e)}")
             return {
                 'success': False,
-                'error': str(e)
+                'error': str(e),
+                'content_type': '',
+                'is_json': False
             }
 
     def execute_test_chain(self, script_content, script_format='yaml'):
@@ -374,6 +384,18 @@ class TestChainExecutor:
                 config = json_lib.loads(script_content)
             else:
                 raise ValueError(f"不支持的格式: {script_format}")
+
+            # 容错处理：如果解析结果是数组，强制转换为对象格式
+            if isinstance(config, list):
+                self.log(f"检测到数组格式JSON，自动包装为对象格式")
+                config = {
+                    'name': 'AI生成的测试',
+                    'steps': config
+                }
+
+            # 确保config是字典类型
+            if not isinstance(config, dict):
+                raise ValueError(f"脚本内容必须是JSON对象格式，当前类型: {type(config).__name__}")
 
             self.log(f"测试名称: {config.get('name', '未命名')}")
             self.log(f"测试描述: {config.get('description', '无描述')}")
@@ -412,7 +434,7 @@ class TestChainExecutor:
                 if not result['success']:
                     all_passed = False
                     # 是否继续执行可由配置决定
-                    if config.get('stop_on_failure', True):
+                    if config.get('stop_on_failure', False):
                         self.log(f"步骤失败，中止执行")
                         break
 

@@ -89,6 +89,7 @@ def sync_document_to_chroma(self, document_id: int):
             'knowledge_base_name': doc.knowledge_base.name,
             'project_id': project_id,
             'keywords': ','.join(keywords),
+            'chroma_id_prefix': chroma_id_prefix,
         })
         
         retriever.add_document(

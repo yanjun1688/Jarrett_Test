@@ -34,7 +34,12 @@ AGENT_SKILL_DIR = Path(settings.BASE_DIR) / ".agents" / "skills"
 
 
 class SkillRemoteSearchView(APIView):
-    """搜索远程技能"""
+    """
+    [DEPRECATED] 搜索远程技能 - 直接调用 npx CLI 版本
+
+    已废弃，请使用 SkillSearchMCPView (POST /skills/search/)
+    废弃原因：直接调用 npx 导致 ANSI 代码污染输出格式
+    """
     permission_classes = [IsAuthenticated]
     
     def get(self, request: Request) -> Response:
@@ -100,7 +105,9 @@ class SkillRemoteSearchView(APIView):
         try:
             data = json.loads(output)
             if isinstance(data, dict) and 'skills' in data:
-                return data['skills']
+                skills = data['skills']
+                if isinstance(skills, list):
+                    return skills
             elif isinstance(data, list):
                 return data
             return []
@@ -120,7 +127,12 @@ class SkillRemoteSearchView(APIView):
 
 
 class SkillLocalListView(APIView):
-    """获取本地已安装技能列表（内置 + 用户安装）"""
+    """
+    [DEPRECATED] 获取本地已安装技能列表（内置 + 用户安装）
+
+    已废弃，请使用 SkillListMCPView (GET /skills/local/)
+    废弃原因：统一使用 MCP Server 代理，保持架构一致性
+    """
     permission_classes = [IsAuthenticated]
     
     def get(self, request: Request) -> Response:
@@ -153,7 +165,12 @@ class SkillLocalListView(APIView):
 
 
 class SkillInstallView(APIView):
-    """安装远程技能到本地（.agent/skills/ 目录）"""
+    """
+    [DEPRECATED] 安装远程技能到本地 - 直接调用 npx CLI 版本
+
+    已废弃，请使用 SkillInstallMCPView (POST /skills/install/)
+    废弃原因：直接调用 npx 导致 ANSI 代码污染输入格式
+    """
     permission_classes = [IsAuthenticated]
     
     def post(self, request: Request) -> Response:
@@ -340,4 +357,165 @@ class SkillExecuteView(APIView):
                 "success": False,
                 "error": str(e),
                 "execution_log_ids": logger_exec.get_log_ids()
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# =============================================================================
+# MCP Skill Manager 代理视图 (新增)
+# =============================================================================
+
+class SkillSearchMCPView(APIView):
+    """
+    搜索远程 Skills - MCP Server 代理版本
+
+    替代已废弃的 SkillRemoteSearchView
+    通过 MCP Skill Manager Server 统一处理搜索请求
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        keyword = request.data.get('keyword', '').strip()
+
+        if not keyword:
+            return Response({
+                "success": False,
+                "error": "请输入搜索关键词"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            from core.agents.capability.mcp_lifespan import global_mcp_manager
+            from asgiref.sync import async_to_sync
+
+            # 使用 async_to_sync 在同步上下文中调用异步 MCP 方法
+            result = async_to_sync(global_mcp_manager.call_tool)(
+                "skill-manager",
+                "search_skills",
+                {"keyword": keyword}
+            )
+
+            # result 是 MCP Server 返回的内容列表
+            if isinstance(result, list) and len(result) > 0:
+                content = result[0]
+                if hasattr(content, 'text'):
+                    data = json.loads(content.text)
+                else:
+                    data = content
+            elif isinstance(result, dict):
+                data = result
+            else:
+                data = {"success": False, "error": "Invalid response format", "skills": []}
+
+            return Response(data)
+
+        except Exception as e:
+            logger.error(f"[SkillSearchMCPView] 搜索失败: {e}", exc_info=True)
+            return Response({
+                "success": False,
+                "error": f"搜索失败: {str(e)}",
+                "output": ""
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class SkillInstallMCPView(APIView):
+    """
+    安装远程 Skill - MCP Server 代理版本
+
+    替代已废弃的 SkillInstallView
+    通过 MCP Skill Manager Server 统一处理安装请求
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        skill_id = request.data.get('skill_id') or request.data.get('skill_name')
+        skill_name = request.data.get('skill_name_alias')  # 可选的安装后名称
+
+        if not skill_id:
+            return Response({
+                "success": False,
+                "error": "请提供 skill_id"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            from core.agents.capability.mcp_lifespan import global_mcp_manager
+            from asgiref.sync import async_to_sync
+
+            # 使用 async_to_sync 在同步上下文中调用异步 MCP 方法
+            result = async_to_sync(global_mcp_manager.call_tool)(
+                "skill-manager",
+                "install_skill",
+                {"skill_id": skill_id, "skill_name": skill_name}
+            )
+
+            # 解析 MCP 返回结果
+            if isinstance(result, list) and len(result) > 0:
+                content = result[0]
+                if hasattr(content, 'text'):
+                    data = json.loads(content.text)
+                else:
+                    data = content
+            elif isinstance(result, dict):
+                data = result
+            else:
+                data = {"success": False, "error": "Invalid response format"}
+
+            if data.get("success"):
+                return Response({
+                    "success": True,
+                    "data": data
+                })
+            else:
+                return Response({
+                    "success": False,
+                    "error": data.get("error", "安装失败")
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        except Exception as e:
+            logger.error(f"[SkillInstallMCPView] 安装失败: {e}", exc_info=True)
+            return Response({
+                "success": False,
+                "error": f"安装失败: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class SkillListMCPView(APIView):
+    """
+    获取本地 Skills 列表 - MCP Server 代理版本
+
+    替代 SkillLocalListView 的同步版本
+    通过 MCP Skill Manager Server 统一获取列表
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        try:
+            from core.agents.capability.mcp_lifespan import global_mcp_manager
+            from asgiref.sync import async_to_sync
+
+            # 使用 async_to_sync 在同步上下文中调用异步 MCP 方法
+            result = async_to_sync(global_mcp_manager.call_tool)(
+                "skill-manager",
+                "list_local_skills",
+                {}
+            )
+
+            # 解析 MCP 返回结果
+            if isinstance(result, list) and len(result) > 0:
+                content = result[0]
+                if hasattr(content, 'text'):
+                    data = json.loads(content.text)
+                else:
+                    data = content
+            elif isinstance(result, dict):
+                data = result
+            else:
+                data = {"success": False, "error": "Invalid response format", "skills": []}
+
+            return Response(data)
+
+        except Exception as e:
+            logger.error(f"[SkillListMCPView] 获取列表失败: {e}", exc_info=True)
+            return Response({
+                "success": False,
+                "error": f"获取列表失败: {str(e)}",
+                "skills": []
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

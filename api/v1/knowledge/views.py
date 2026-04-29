@@ -413,7 +413,7 @@ class UploadDocumentView(APIView):
         )
         
         try:
-            from test_ai_agent.document_loader import DocumentLoader
+            from core.utils.document_loader import DocumentLoader
             file_bytes = uploaded_file.read()
             filename = str(uploaded_file.name)
             content = DocumentLoader.load_document_from_bytes(file_bytes, filename)

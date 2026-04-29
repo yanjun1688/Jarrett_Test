@@ -107,6 +107,50 @@ class BehaviorRulesSection(PromptSection):
 - 参数完整 → 调用工具
 - 参数缺失或不明确 → 询问用户或直接回答
 
+保存到项目的规则：
+- 调用 save_test_script 或 save_test_case 前必须明确知道 project_id
+- 如果不知道 project_id，先调用 query_projects 获取项目列表，列出选项让用户选择
+- 禁止在未确认项目的情况下调用 save 工具
+- 多个测试场景应合并为一个脚本保存（每个场景作为 steps 数组中的一个独立步骤），不要每个场景分别保存
+
+脚本 JSON 结构示例（多场景合并）：
+```json
+{
+  "name": "用户登录测试",
+  "variables": {
+    "base_url": "https://api.example.com",
+    "valid_email": "user@test.com",
+    "valid_pwd": "Test1234"
+  },
+  "steps": [
+    {
+      "name": "正确凭证登录",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/auth/login",
+        "headers": {"Content-Type": "application/json"},
+        "json": {"email": "{{valid_email}}", "password": "{{valid_pwd}}"}
+      },
+      "assertions": [{"type": "jsonpath", "expression": "$.code", "expected": 200}]
+    },
+    {
+      "name": "错误密码登录",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/auth/login",
+        "headers": {"Content-Type": "application/json"},
+        "json": {"email": "{{valid_email}}", "password": "wrong_pwd"}
+      },
+      "assertions": [{"type": "jsonpath", "expression": "$.code", "expected": 400}]
+    }
+  ]
+}
+```
+
+执行规则：
+- 保存的脚本 JSON 中不应包含 stop_on_failure 字段，保证断言失败后继续执行后续步骤
+- 断言优先用 jsonpath 验证业务状态码（$.code），除非需要验证 HTTP 响应码（如 401）才用 status_code
+
 知识库范围：仅包含用户上传的项目文档。
 
 历史推理规则：
@@ -503,7 +547,7 @@ class ConversationHistorySection(PromptSection):
 
 
 class EnvironmentInfoSection(PromptSection):
-    """环境信息模块"""
+    """环境信息模块 - 包含 test_type 强制指令（方案C）"""
     
     @property
     def name(self) -> str:
@@ -513,8 +557,33 @@ class EnvironmentInfoSection(PromptSection):
     def is_static(self) -> bool:
         return False
     
+    def should_include(self, context: Dict[str, Any]) -> bool:
+        # 当有 test_type 或其他环境信息时才包含
+        return bool(context.get("test_type") or context.get("project_path") or 
+                    context.get("language") or context.get("test_framework") or 
+                    context.get("working_directory"))
+    
     def render(self, context: Dict[str, Any]) -> str:
         lines = ["### 环境信息", ""]
+        
+        # 方案C：test_type 强制指令（Prompt注入）
+        test_type = context.get("test_type")
+        if test_type:
+            tool_mapping = {
+                'ui': ('generate_ui_test', 'UI/Web 自动化测试', 'Playwright'),
+                'api': ('generate_api_test', 'API/接口测试', 'JSON 配置'),
+                'prd': ('generate_test', 'PRD文档测试用例', '测试用例分析'),
+            }
+            tool_name, test_desc, framework = tool_mapping.get(test_type, ('unknown', '未知类型', ''))
+            
+            lines.append(f"**⚠️ 强制工具指令**: 用户已明确选择生成 **{test_desc}**")
+            lines.append(f"- **必须使用工具**: `{tool_name}`")
+            lines.append(f"- **框架**: {framework}")
+            lines.append(f"- **禁止**: 使用其他生成工具（如 generate_ui_test/generate_api_test/generate_test）")
+            lines.append("")
+            
+            if context.get("project_id"):
+                lines.append(f"- 项目ID: {context['project_id']}（已自动填充）")
         
         if context.get("project_path"):
             lines.append(f"- 项目路径: {context['project_path']}")
@@ -527,8 +596,5 @@ class EnvironmentInfoSection(PromptSection):
         
         if context.get("working_directory"):
             lines.append(f"- 工作目录: {context['working_directory']}")
-        
-        if len(lines) == 2:
-            return ""
         
         return "\n".join(lines)

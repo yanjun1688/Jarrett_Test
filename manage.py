@@ -7,10 +7,9 @@ import sys
 import asyncio
 from typing import List
 
-# Windows上设置事件循环策略以支持Playwright（必须在导入Django之前）
-# Windows上使用默认的ProactorEventLoopPolicy
-# Playwright需要Proactor才能创建子进程
-# 不要设置SelectorEventLoopPolicy！
+# Windows ProactorEventLoop 支持子进程创建（Playwright依赖此能力）
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 
 def main() -> None:
