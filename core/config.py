@@ -40,6 +40,15 @@ class JTestSettings(BaseSettings):
         description="ChromaDB全局知识库集合名称"
     )
     
+    # BM25配置
+    bm25_index_path: str = Field(
+        default="./data/bm25_index",
+        description="BM25全文索引存储路径"
+    )
+    bm25_enabled: bool = Field(default=True, description="是否启用BM25混合搜索")
+    bm25_top_k: int = Field(default=50, ge=1, description="BM25检索结果数")
+    rrf_k: int = Field(default=60, ge=1, description="RRF融合常数k")
+    
     # 执行配置
     max_concurrent_executions: int = Field(default=10, ge=1, description="最大并发执行数")
     execution_timeout: int = Field(default=600, ge=1, description="执行超时时间(秒)")

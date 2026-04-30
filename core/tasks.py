@@ -1,43 +1,36 @@
 """
 Celery Tasks for Knowledge Base
 
-Handles async sync of documents to ChromaDB.
+Handles async sync of documents to ChromaDB with chunking support.
 """
+from __future__ import annotations
+
 import logging
 import re
 from typing import Any, List
+
 from celery import shared_task
 from django.utils import timezone
-from django.core.exceptions import ObjectDoesNotExist
 
-from core.models.knowledge import KnowledgeDocument, KnowledgeBase
+from core.models.knowledge import KnowledgeDocument
 
 logger = logging.getLogger(__name__)
 
 
-def _extract_keywords(doc: Any) -> List[str]:
+def _extract_keywords(content: str, metadata: dict) -> List[str]:
     keywords = []
-    
-    title = doc.metadata.get('title', '')
+    title = metadata.get('title', '')
     if title:
         keywords.append(title)
-    
-    existing_keywords = doc.metadata.get('keywords', [])
+    existing_keywords = metadata.get('keywords', [])
     if existing_keywords:
         keywords.extend(existing_keywords)
-    
-    tags = doc.metadata.get('tags', [])
+    tags = metadata.get('tags', [])
     if tags:
         keywords.extend(tags)
-    
-    name = doc.metadata.get('name', '')
-    if name:
-        keywords.append(name)
-    
-    content_sample = doc.content[:500] if doc.content else ''
+    content_sample = content[:500] if content else ''
     api_patterns = re.findall(r'API[_\-\w]*', content_sample)
     keywords.extend(api_patterns[:3])
-    
     unique_keywords = []
     seen = set()
     for kw in keywords:
@@ -45,146 +38,152 @@ def _extract_keywords(doc: Any) -> List[str]:
         if kw_lower not in seen and kw:
             seen.add(kw_lower)
             unique_keywords.append(kw)
-    
     return unique_keywords[:10]
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def sync_document_to_chroma(self: Any, document_id: int) -> None:
     """
-    Sync document to ChromaDB
-    
-    Uses database-level optimistic lock for re-entry prevention:
-    UPDATE ... SET sync_status='syncing' WHERE id=? AND sync_status='pending'
-    Only successful update will proceed with sync.
+    Sync document to ChromaDB with chunking.
+
+    Flow:
+    1. Find the root document (chunk_index=-1)
+    2. Run Chunker to split content into chunks
+    3. Delete existing chunks from ChromaDB (if re-syncing)
+    4. Batch embed + write chunks directly to ChromaDB
+    5. Update root doc status (no chunk records in MySQL)
     """
     from core.agents.rag.knowledge_retriever import KnowledgeRetriever
-    
+    from core.agents.rag.chunker import Chunker
+
     try:
-        updated = KnowledgeDocument.objects.filter(
-            id=document_id,
-            sync_status='pending'
-        ).update(sync_status='syncing')
-        
-        if updated == 0:
-            logger.info(f"Document {document_id} already being processed or synced")
-            return
-        
-        doc = KnowledgeDocument.objects.select_related(
-            'knowledge_base__project'
+        root_doc = KnowledgeDocument.objects.select_related(
+            'knowledge_base__project',
         ).get(id=document_id)
-        
-        project_id = doc.knowledge_base.project_id
-        
+
+        if root_doc.sync_status == 'syncing':
+            logger.info(f'Document {document_id} already being synced')
+            return
+
+        # Mark as syncing
+        KnowledgeDocument.objects.filter(id=document_id).update(
+            sync_status='syncing',
+        )
+        root_doc.refresh_from_db()
+
+        project_id = root_doc.knowledge_base.project_id
+        doc_type = root_doc.document_type
+        content = root_doc.content
+        chroma_id_prefix = f'source_{root_doc.id}_'
+
+        # Delete existing chunks from ChromaDB (for re-sync)
         retriever = KnowledgeRetriever()
-        
-        chroma_id = doc.chroma_id
-        chroma_id_prefix = f"doc_{doc.id}_"
-        
-        metadata = doc.metadata.copy()
-        keywords = _extract_keywords(doc)
-        metadata.update({
-            'doc_type': doc.document_type,
-            'knowledge_base_id': doc.knowledge_base.id,
-            'knowledge_base_name': doc.knowledge_base.name,
+        retriever.delete_document_chunks(chroma_id_prefix)
+
+        # Run chunker
+        chunker = Chunker()
+        chunks = chunker.chunk(doc_type, content)
+        if not chunks:
+            raise ValueError('Chunking returned empty result')
+
+        # Build metadata base
+        base_metadata = root_doc.metadata.copy()
+        keywords = _extract_keywords(content, root_doc.metadata)
+        base_metadata.update({
+            'doc_type': doc_type,
+            'knowledge_base_id': root_doc.knowledge_base.id,
+            'knowledge_base_name': root_doc.knowledge_base.name,
             'project_id': project_id,
             'keywords': ','.join(keywords),
             'chroma_id_prefix': chroma_id_prefix,
+            'root_document_id': root_doc.id,
         })
-        
-        retriever.add_document(
-            content=doc.content,
-            metadata=metadata,
-            doc_id=chroma_id
+
+        # Batch embed and write to ChromaDB
+        chunk_contents = [chunk.content for chunk in chunks]
+        chunk_metadatas = [{
+            **base_metadata,
+            'chunk_index': chunk.chunk_index,
+            'title': f"{root_doc.metadata.get('title', '')} (part {chunk.chunk_index + 1})",
+        } for chunk in chunks]
+        chunk_ids = [
+            f'{chroma_id_prefix}chunk_{chunk.chunk_index}'
+            for chunk in chunks
+        ]
+
+        embeddings = retriever.embedding_service.embed_texts(chunk_contents)
+        retriever.vector_store.add_documents(
+            documents=chunk_contents,
+            embeddings=embeddings,
+            metadatas=chunk_metadatas,
+            ids=chunk_ids,
         )
-        
-        doc.chroma_id_prefix = chroma_id_prefix
-        doc.sync_status = 'synced'
-        doc.synced_at = timezone.now()
-        doc.sync_error = ''
-        doc.save(update_fields=['chroma_id_prefix', 'sync_status', 'synced_at', 'sync_error'])
-        
-        logger.info(f"Document {document_id} synced to ChromaDB: {chroma_id}")
-        
+
+        # Write to BM25 index
+        from core.agents.rag.bm25_index import BM25Index
+        bm25 = BM25Index()
+        bm25_docs = [
+            {
+                'chunk_id': chunk_ids[i],
+                'content': chunk_contents[i],
+                'doc_type': doc_type,
+                'title': root_doc.metadata.get('title', ''),
+                'knowledge_base_id': root_doc.knowledge_base.id,
+                'project_id': project_id,
+            }
+            for i in range(len(chunks))
+        ]
+        bm25.add_documents_batch(bm25_docs)
+
+        # Update root document (no chunk records in MySQL)
+        root_doc.chroma_id_prefix = chroma_id_prefix
+        root_doc.sync_status = 'synced'
+        root_doc.synced_at = timezone.now()
+        root_doc.sync_error = ''
+        root_doc.save(update_fields=[
+            'chroma_id_prefix', 'sync_status', 'synced_at', 'sync_error',
+        ])
+
+        logger.info(
+            f'Document {document_id} synced: {len(chunks)} chunks '
+            f'(prefix={chroma_id_prefix})',
+        )
+
     except KnowledgeDocument.DoesNotExist:
-        logger.error(f"Document {document_id} not found")
+        logger.error(f'Document {document_id} not found')
     except Exception as e:
-        logger.error(f"Failed to sync document {document_id}: {e}")
+        logger.error(f'Failed to sync document {document_id}: {e}')
         KnowledgeDocument.objects.filter(id=document_id).update(
             sync_status='failed',
-            sync_error=str(e)
+            sync_error=str(e)[:500],
         )
         raise self.retry(exc=e)
 
 
 @shared_task
 def delete_document_chunks_from_chroma(chroma_id_prefix: str, knowledge_base_id: int) -> None:
-    """
-    Delete all chunks of a document from ChromaDB
-
-    Args:
-        chroma_id_prefix: Document ID prefix, e.g., "doc_123_"
-        knowledge_base_id: Knowledge base ID (for project_id lookup)
-    """
+    """Delete all chunks from ChromaDB by prefix."""
     from core.agents.rag.knowledge_retriever import KnowledgeRetriever
     try:
-        kb = KnowledgeBase.objects.select_related('project').get(id=knowledge_base_id)
-        project_id = kb.project_id
-        
         retriever = KnowledgeRetriever()
         deleted_count = retriever.delete_document_chunks(chroma_id_prefix)
-        logger.info(f"Deleted {deleted_count} chunks with prefix {chroma_id_prefix}")
-    except ObjectDoesNotExist:
-        logger.error(f"KnowledgeBase {knowledge_base_id} not found")
+        logger.info(f'Deleted {deleted_count} chunks with prefix {chroma_id_prefix}')
     except Exception as e:
-        logger.error(f"Failed to delete chunks {chroma_id_prefix}: {e}")
-
-
-@shared_task
-def sync_test_case_to_knowledge(test_case_id: int, knowledge_base_id: int) -> None:
-    """Sync feature test case to knowledge base"""
-    from django.apps import apps
-    from core.services.document_converter import DocumentConverter
-    from core.agents.rag.knowledge_retriever import KnowledgeRetriever
-    
-    try:
-        FeatureTestCase = apps.get_model('testmanager_app', 'FeatureTestCase')
-        test_case = FeatureTestCase.objects.select_related('project').get(id=test_case_id)
-        converted = DocumentConverter.feature_test_to_markdown(test_case)
-        
-        doc = KnowledgeDocument.objects.create(
-            knowledge_base_id=knowledge_base_id,
-            document_type='test_pattern',
-            content=converted['content'],
-            metadata=converted['metadata'],
-            sync_status='pending'
-        )
-        
-        sync_document_to_chroma(doc.id)
-        
-    except Exception as e:
-        logger.error(f"Failed to sync test case {test_case_id}: {e}")
+        logger.error(f'Failed to delete chunks {chroma_id_prefix}: {e}')
 
 
 @shared_task
 def batch_sync_project_documents(project_id: int) -> str:
-    """
-    Batch sync all pending documents for a project
-
-    Optimization: Cache results with list() to avoid N+1 queries
-    """
-    from core.agents.rag.knowledge_retriever import KnowledgeRetriever
-    
+    """Batch sync all pending root documents for a project."""
     pending_docs = list(
         KnowledgeDocument.objects.filter(
             knowledge_base__project_id=project_id,
-            sync_status='pending'
+            sync_status='pending',
+            chunk_index=-1,
         ).values_list('id', flat=True)
     )
-    
     for doc_id in pending_docs:
         sync_document_to_chroma(doc_id)
-    
     count = len(pending_docs)
-    logger.info(f"Synced {count} documents in project {project_id}")
-    return f"Synced {count} documents"
+    logger.info(f'Synced {count} documents in project {project_id}')
+    return f'Synced {count} documents'

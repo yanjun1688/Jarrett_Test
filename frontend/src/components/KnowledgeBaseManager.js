@@ -10,9 +10,6 @@ const { Dragger } = Upload;
 const DOC_TYPE_OPTIONS = [
   { value: 'prd', label: 'PRD文档' },
   { value: 'api_doc', label: '接口文档' },
-  { value: 'feature_test', label: '功能测试用例' },
-  { value: 'api_test', label: '接口测试用例' },
-  { value: 'ui_test', label: 'UI测试用例' },
 ];
 
 const KnowledgeBaseManager = () => {

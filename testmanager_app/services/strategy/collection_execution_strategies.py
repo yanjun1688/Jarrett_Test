@@ -693,14 +693,11 @@ class ChainExecutionStrategy(CollectionExecutionStrategyInterface):
                 if context:
                     chain_logs.append(f"[链式执行] 当前上下文变量: {list(context.keys())}")
                 try:
-                    # 创建临时 ApiRequest 对象，使用渲染后的值
-                    # 临时保存原始值
                     original_url = coll_req.api_request.url
                     original_headers = coll_req.api_request.headers
                     original_body = coll_req.api_request.body
                     
                     try:
-                        # 临时更新模型对象的属性（使用渲染后的值）
                         coll_req.api_request.url = rendered_request_dict.get('url', original_url)
                         coll_req.api_request.headers = rendered_request_dict.get('headers', original_headers)
                         coll_req.api_request.body = rendered_request_dict.get('body', original_body)

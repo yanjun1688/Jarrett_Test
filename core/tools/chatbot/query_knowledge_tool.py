@@ -56,8 +56,7 @@ class QueryKnowledgeTool(BaseTool):
             },
             'doc_type': {
                 'type': 'string',
-                'enum': ['prd', 'api_doc', 'feature_test', 'api_test', 'ui_test',
-                         'best_practice', 'code_example', 'test_pattern'],
+                'enum': ['prd', 'api_doc', 'best_practice', 'code_example', 'test_pattern'],
                 'description': '文档类型过滤（仅 search 模式可用）',
             },
         }
@@ -110,6 +109,7 @@ class QueryKnowledgeTool(BaseTool):
                 return list(
                     KnowledgeDocument.objects.filter(  # type: ignore[arg-type]
                         knowledge_base_id=knowledge_base_id,
+                        chunk_index=-1,  # root documents only
                     ).values('id', 'document_type', 'content', 'file_path', 'metadata').order_by('-created_at')
                 )
 

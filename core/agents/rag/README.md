@@ -2,7 +2,18 @@
 
 ## 概述
 
-`rag` 模块提供检索增强生成（RAG）能力，用于知识库的存储、检索和管理。结合向量数据库和 Embedding 模型实现语义搜索。
+RAG 检索系统采用 **双路混合检索 + RRF 融合** 架构：
+- **向量检索**（ChromaDB + MiniLM）：找"意思接近的"——语义匹配
+- **BM25 全文检索**（Whoosh + jieba）：找"字面匹配的"——关键词匹配
+- **RRF 融合**：不依赖分数归一化，根据排名合并两路结果
+
+```
+                    ┌──→ ChromaDB 向量检索 ──→ 按语义排序
+                    │       (384维 embedding)
+用户查询 ──→ 分词 ──┤                              ├── RRF 融合 ──→ Top-K
+                    │       (Whoosh + jieba)
+                    └──→ BM25 全文检索 ──→ 按词频排序
+```
 
 ## 模块结构
 
@@ -11,271 +22,142 @@ rag/
 ├── __init__.py                # 模块入口
 ├── knowledge_rag_agent.py     # 知识检索 Agent
 ├── rag_retriever_service.py   # RAG 检索器服务抽象
-├── knowledge_retriever.py     # 知识检索核心组件
-├── embedding_service.py       # Embedding 服务
-└── vector_store.py            # ChromaDB 向量存储
+├── knowledge_retriever.py     # 核心检索（双路 + RRF）
+├── embedding_service.py       # Embedding 服务（MiniLM，384维）
+├── vector_store.py            # ChromaDB 向量存储
+├── bm25_index.py              # BM25 索引（Whoosh + jieba分词）
+└── chunker.py                 # 文档分块策略
 ```
 
 ## 核心组件
 
-### KnowledgeRAGAgent
+### Chunker
 
-知识检索 Agent，提供高级检索接口：
+按文档类型自动选择分块策略：
 
-```python
-from core.agents.rag import KnowledgeRAGAgent
+| 策略 | 文档类型 | 说明 |
+|------|---------|------|
+| RecursiveStrategy | PRD | 按 `##` → `###` → 段落递归分割，chunk_size=512 |
+| EndpointStrategy | API_DOC | 按每个 path+method 分割 |
+| NoSplitStrategy | BEST_PRACTICE / TEST_PATTERN | 短文本整篇保留 |
 
-agent = KnowledgeRAGAgent(
-    llm_service=llm_service,
-    rag_retriever=retriever
-)
+数据模型约定：
+```
+KnowledgeDocument (MySQL)
+├── chunk_index = -1     # 根文档（全文存 MySQL，不参与检索）
+└── chroma_id_prefix     # "source_{pk}_"，关联 ChromaDB + BM25
 
-# 查询知识库
-result = await agent.query(
-    query="如何编写好的单元测试？",
-    top_k=5,
-    use_llm=True  # 使用 LLM 生成答案
-)
+ChromaDB + BM25
+└── chunk_id = "source_{pk}_chunk_{index}"   # 对齐的 chunk ID
 ```
 
 ### KnowledgeRetriever
 
-核心检索组件，结合 Embedding 和向量存储：
+核心检索组件，实现双路 + RRF：
 
 ```python
 from core.agents.rag import KnowledgeRetriever
 
 retriever = KnowledgeRetriever()
 
-# 添加文档
-retriever.add_document(
-    content="测试驱动开发是一种开发方法...",
-    metadata={"type": "article", "project_id": 1},
-    doc_id="doc_001"
-)
-
-# 批量添加
-retriever.add_documents_batch(
-    contents=[...],
-    metadatas=[...],
-    doc_ids=[...]
-)
-
-# 搜索
 results = retriever.search(
-    query="TDD 最佳实践",
+    query="支付超时取消订单",
     top_k=5,
-    doc_types=["article"],
-    project_id=1,
-    boost_project=True  # 优先返回项目内文档
+    doc_types=["prd"],        # 按文档类型过滤
+    project_id=1,             # 按项目过滤
+    hybrid_search=True,       # 启用 BM25 + Vector 双路
 )
 ```
 
 ### EmbeddingService
 
-文本 Embedding 服务，单例模式：
+文本 Embedding 服务（进程级单例）：
 
 ```python
 from core.agents.rag import EmbeddingService
 
 embedding_service = EmbeddingService()
-
-# 生成单个 Embedding
 embedding = embedding_service.embed_query("测试文本")
-
-# 批量生成
 embeddings = embedding_service.embed_texts(["文本1", "文本2"])
-
-# 获取维度
-dim = embedding_service.dimension  # 如 384, 768 等
+dim = embedding_service.dimension  # 384
 ```
 
 ### ChromaVectorStore
 
-ChromaDB 向量存储封装：
+ChromaDB 向量存储封装（单集合 `kb_knowledge`）：
 
 ```python
 from core.agents.rag import ChromaVectorStore
 
 store = ChromaVectorStore()
-
-# 添加文档
-store.add_documents(
-    documents=["文档内容1", "文档内容2"],
-    embeddings=[[0.1, ...], [0.2, ...]],
-    metadatas=[{"type": "article"}, {"type": "code"}],
-    ids=["id1", "id2"]
-)
-
-# 查询
-results = store.query(
-    query_embedding=[0.1, 0.2, ...],
-    n_results=5,
-    where={"type": "article"}  # 元数据过滤
-)
-
-# 删除
-store.delete(ids=["id1"])
-store.delete_by_prefix("doc_123_")  # 批量删除
-
-# 统计
+store.add_documents(documents=[...], embeddings=[...], metadatas=[...], ids=[...])
+results = store.query(query_embedding=[...], n_results=50, where={...})
+store.delete_by_prefix("source_123_")
 count = store.count()
 ```
 
-## RAGRetriever 抽象
+### BM25Index
 
-便于依赖注入的抽象接口：
+Whoosh BM25 全文索引（jieba 中文分词）：
 
 ```python
-from core.agents.rag import RAGRetriever, DjangoORMRAGRetriever
+from core.agents.rag.bm25_index import BM25Index
 
-# 抽象基类
-class CustomRetriever(RAGRetriever):
-    async def retrieve(self, query: str, top_k: int = 5) -> List[Dict]:
-        # 自定义实现
-        pass
-
-# Django ORM 实现
-retriever = DjangoORMRAGRetriever(
-    project_id=1,
-    knowledge_base_id=1
-)
-
-# Mock 实现（测试用）
-from core.agents.rag.rag_retriever_service import MockRAGRetriever
-mock_retriever = MockRAGRetriever(mock_results=[...])
+idx = BM25Index()
+idx.add_document(chunk_id="source_1_chunk_0", content="...", doc_type="prd")
+results = idx.search("登录", top_k=50)
+idx.delete_by_prefix("source_1_")
 ```
 
-## 使用场景
+## 检索流程
 
-### 通用查询
+### 写入
 
-```python
-result = await agent.query(
-    query="什么是测试金字塔？",
-    top_k=5,
-    use_llm=True
-)
-
-# 返回:
-# {
-#     "success": True,
-#     "answer": "测试金字塔是...",
-#     "documents": [...],
-#     "metadata": {"retrieved_count": 5}
-# }
+```
+上传文档
+  → MySQL: 存根文档（chunk_index=-1）
+  → Chunker: 分块
+  → 每个 chunk embedding → ChromaDB
+  → 每个 chunk 分词 → Whoosh BM25
+  → 更新 sync_status = 'synced'
 ```
 
-### 按类型查询
+### 查询
 
-```python
-# 查询最佳实践
-result = await agent.get_best_practices(
-    topic="API testing",
-    top_k=5
-)
-
-# 查询测试模式
-result = await agent.get_test_patterns(
-    scenario="用户认证",
-    top_k=5
-)
-
-# 查询代码示例
-result = await agent.get_code_examples(
-    description="pytest fixture",
-    language="python",
-    top_k=3
-)
+```
+用户输入
+  → embed_query → ChromaDB 搜 Top-50
+  → 同时 jieba 分词 → BM25 搜 Top-50
+  → RRF 融合：score = 1/(60 + rank_v) + 1/(60 + rank_b)
+  → 返回 Top-K
 ```
 
-### 历史测试用例检索
+### 删除
 
-```python
-# API 测试用例
-result = await agent.get_api_test_cases(
-    endpoint="/api/users",
-    method="POST",
-    top_k=5
-)
-
-# UI 测试用例
-result = await agent.get_ui_test_cases(
-    page_url="https://example.com/login",
-    page_element="登录按钮",
-    top_k=5
-)
 ```
-
-### UI 元素管理
-
-```python
-# 存储页面元素
-result = await agent.store_ui_elements(
-    page_url="https://example.com/login",
-    elements=[
-        {"id": "username", "selector": "#username", "tag": "input"},
-        {"id": "password", "selector": "#password", "tag": "input"},
-        {"id": "submit", "selector": "button[type=submit]", "tag": "button"}
-    ],
-    metadata={"page_title": "登录页面"}
-)
-
-# 查询页面元素
-result = await agent.query_ui_elements(
-    page_url="https://example.com/login",
-    element_type="button",
-    top_k=10
-)
+删除根文档
+  → ChromaDB.delete_by_prefix("source_{pk}_")
+  → BM25Index.delete_by_prefix("source_{pk}_")
+  → MySQL 删根文档
 ```
 
 ## 配置
 
-### Django Settings
-
 ```python
-# settings.py
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-CHROMADB_PATH = "data/chromadb"
-CHROMADB_COLLECTION_NAME = "kb_knowledge"
-```
+# core/config.py
+rag_enabled: bool = True
+embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+chunk_size: int = 512
+chunk_overlap: int = 50
+top_k: int = 5
 
-### 环境变量
+chromadb_path: str = "./data/chromadb"
+chromadb_collection_name: str = "kb_knowledge"
 
-```bash
-EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-CHROMADB_PATH=./data/chromadb
-```
-
-## 数据模型
-
-### 文档结构
-
-```python
-{
-    "id": "doc_abc123",
-    "content": "文档内容...",
-    "metadata": {
-        "doc_type": "article",      # 文档类型
-        "project_id": 1,            # 项目 ID
-        "file_path": "/path/to/file",
-        "created_at": "2024-01-01",
-        "source": "upload",
-        # ... 其他元数据
-    }
-}
-```
-
-### 检索结果
-
-```python
-{
-    "id": "doc_abc123",
-    "content": "匹配的文档内容...",
-    "metadata": {...},
-    "distance": 0.15,           # 向量距离（越小越相似）
-    "combined_score": 0.85      # 综合分数（越高越相关）
-}
+bm25_index_path: str = "./data/bm25_index"
+bm25_enabled: bool = True
+bm25_top_k: int = 50
+rrf_k: int = 60
 ```
 
 ## 检索模式
@@ -283,99 +165,54 @@ CHROMADB_PATH=./data/chromadb
 ### 全局搜索
 
 ```python
-results = retriever.search(
-    query="测试最佳实践",
-    top_k=10
-)
+results = retriever.search(query="登录功能", top_k=10)
 ```
 
 ### 类型过滤
 
 ```python
-results = retriever.search(
-    query="API 测试",
-    top_k=5,
-    doc_types=["article", "code"]
-)
+results = retriever.search(query="API测试", top_k=5, doc_types=["api_doc"])
+```
+
+### 知识库过滤
+
+```python
+results = retriever.search(query="测试规范", top_k=5, knowledge_base_id=1)
 ```
 
 ### 项目优先
 
 ```python
-results = retriever.search(
-    query="登录测试",
-    top_k=5,
-    project_id=1,
-    boost_project=True  # 项目内结果排在前面
-)
+results = retriever.search(query="支付测试", top_k=5, project_id=1, boost_project=True)
 ```
 
-## 线程安全
+## 知识库边界
 
-### EmbeddingService
+知识库**仅存储知识型文档**，业务数据不应经过 RAG：
 
-使用 `threading.Lock` 保证单例初始化的线程安全：
+| 存入知识库 | 不存知识库 |
+|-----------|-----------|
+| PRD / 需求文档 | 功能测试用例（ORM 查询） |
+| API 文档（OpenAPI） | API 测试用例（ORM 查询） |
+| 最佳实践/规范 | UI 测试脚本（ORM 查询） |
+| 测试模式/策略 | 执行记录/报告（ORM 查询） |
+| 代码示例 | 项目/用户/配置（ORM 查询） |
 
-```python
-class EmbeddingService:
-    _instance = None
-    _lock = threading.Lock()
-    
-    def __new__(cls):
-        with cls._lock:
-            if cls._instance is None:
-                cls._instance = super().__new__(cls)
-        return cls._instance
+## 实测效果
+
+```
+查询 "密码错误"           → BM25 关键词匹配 → 找到 API 测试规范
+查询 "付款"               → 向量语义匹配    → 找到支付 PRD
+查询 "银联"               → BM25 稀有词匹配 → 找到支付 PRD
+查询 "压力测试并发指标"    → 双路都能命中     → RRF 融合排序
+查询 "密码输错5次会锁定"   → 向量语义匹配    → 找到登录 PRD
+查询 "支付超时取消订单"    → 双路互补        → RRF 融合排序
 ```
 
-### ChromaVectorStore
+## 代码参考
 
-使用 `threading.local()` 隔离线程：
-
-```python
-class ChromaVectorStore:
-    _local = threading.local()
-    
-    @classmethod
-    def get_client(cls):
-        if not hasattr(cls._local, 'client'):
-            cls._local.client = chromadb.PersistentClient(...)
-        return cls._local.client
-```
-
-## 最佳实践
-
-1. **批量操作**: 使用 `add_documents_batch` 提高效率
-2. **元数据设计**: 合理设计元数据便于过滤
-3. **项目隔离**: 使用 `project_id` 实现多租户
-4. **缓存策略**: 对频繁查询实现缓存
-
-## 错误处理
-
-```python
-try:
-    result = await agent.query(query="...")
-except Exception as e:
-    logger.error(f"检索失败: {e}")
-    return {
-        "success": False,
-        "answer": "",
-        "documents": [],
-        "error": str(e)
-    }
-```
-
-## 测试
-
-```python
-# 使用 Mock RAG Retriever
-from core.agents.rag.rag_retriever_service import MockRAGRetriever
-
-mock_retriever = MockRAGRetriever(
-    mock_results=[
-        {"document": "测试内容", "metadata": {"type": "article"}}
-    ]
-)
-
-agent = KnowledgeRAGAgent(rag_retriever=mock_retriever)
-```
+- 分块器: `core/agents/rag/chunker.py`
+- BM25 索引: `core/agents/rag/bm25_index.py`
+- 核心检索: `core/agents/rag/knowledge_retriever.py`
+- 同步任务: `core/tasks.py`
+- 设计文档: `docs/rag-rebuild/`

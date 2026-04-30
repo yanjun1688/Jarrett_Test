@@ -21,9 +21,6 @@ const PressureTestManager = lazy(() => import('./components/PressureTestManager'
 const AdvancedPressureTestManager = lazy(() => import('./components/AdvancedPressureTestManager'));
 const FeatureTestCaseManager = lazy(() => import('./components/FeatureTestCaseManager'));
 const AiTestGenerator = lazy(() => import('./components/AiTestGenerator'));
-const TestFlowList = lazy(() => import('./components/TestFlowList'));
-const TestFlowBuilder = lazy(() => import('./components/TestFlowBuilder'));
-const TestFlowMonitor = lazy(() => import('./components/TestFlowMonitor'));
 const KnowledgeBaseManager = lazy(() => import('./components/KnowledgeBaseManager'));
 
 // 懒加载包装组件，添加Suspense和Loading
@@ -142,30 +139,6 @@ root.render(
               element={
                 <ProtectedRoute>
                   <LazyRoute><AiTestGenerator /></LazyRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="test-flows"
-              element={
-                <ProtectedRoute>
-                  <LazyRoute><TestFlowList /></LazyRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="test-flows/builder"
-              element={
-                <ProtectedRoute>
-                  <LazyRoute><TestFlowBuilder /></LazyRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="test-flows/monitor/:id"
-              element={
-                <ProtectedRoute>
-                  <LazyRoute><TestFlowMonitor /></LazyRoute>
                 </ProtectedRoute>
               }
             />

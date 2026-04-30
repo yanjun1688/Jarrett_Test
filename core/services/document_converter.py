@@ -1,167 +1,21 @@
 """
-Document Converter - Convert test cases to Markdown
+Document Converter - Convert documents to Markdown for knowledge base
 
-Uses lazy loading to avoid circular dependencies from core to business apps.
+Only handles knowledge-type documents: PRD, API_DOC.
 """
 import json
 import yaml
-from typing import Dict, Any, Optional, Type
+from typing import Dict, Any, Optional
 from shared.constants import DocType
 
 
 class DocumentConverter:
     """
-    Test case to Markdown document converter
+    Document to Markdown converter
     
-    Uses lazy loading to avoid core layer depending on business apps.
+    Only converts knowledge-type documents (PRD, API_DOC).
+    Business data (test cases, executions) are not stored in knowledge base.
     """
-    
-    @staticmethod
-    def _get_model(model_name: str) -> Type[Any]:
-        """Lazy load model to avoid circular import"""
-        from django.apps import apps
-        return apps.get_model(model_name)
-    
-    @staticmethod
-    def feature_test_to_markdown(test_case: Any) -> Dict[str, Any]:
-        """
-        Convert feature test case to Markdown
-        
-        Args:
-            test_case: FeatureTestCase instance (passed by caller)
-        """
-        version_str = test_case.version or '未指定'
-        pre_steps_str = test_case.pre_steps or '无'
-        actual_result_str = test_case.actual_result or '未填写'
-        to_confirm_str = test_case.to_confirm or '无'
-        
-        if test_case.is_passed is True:
-            is_passed_str = '✅ 通过'
-        elif test_case.is_passed is False:
-            is_passed_str = '❌ 未通过'
-        else:
-            is_passed_str = '⏳ 待验证'
-        
-        content = f"""# 功能测试用例: {test_case.title}
-
-## 基本信息
-- **项目ID**: {test_case.project_id}
-- **版本**: {version_str}
-- **创建时间**: {test_case.created_at.strftime('%Y-%m-%d %H:%M')}
-
-## 前置步骤
-{pre_steps_str}
-
-## 操作步骤
-{test_case.steps}
-
-## 预期结果
-{test_case.expected_result}
-
-## 实际结果
-{actual_result_str}
-
-## 待确定
-{to_confirm_str}
-
-## 是否通过
-{is_passed_str}
-"""
-        return {
-            'content': content,
-            'metadata': {
-                'doc_type': 'feature_test',
-                'source_id': test_case.id,
-                'source_model': 'FeatureTestCase',
-                'title': test_case.title,
-                'project_id': test_case.project_id,
-                'is_passed': test_case.is_passed,
-            }
-        }
-    
-    @staticmethod
-    def api_test_to_markdown(api_request: Any) -> Dict[str, Any]:
-        """
-        Convert API test request to Markdown
-        
-        Args:
-            api_request: ApiRequest instance (passed by caller)
-        """
-        headers_str = json.dumps(api_request.headers or {}, ensure_ascii=False, indent=2)
-        body_str = api_request.body or '无'
-        description_str = api_request.description or '无描述'
-        
-        content = f"""# API 测试: {api_request.name}
-
-## 基本信息
-- **项目ID**: {api_request.project_id}
-- **请求方法**: {api_request.method}
-- **URL**: {api_request.url}
-
-## 请求配置
-### Headers
-```json
-{headers_str}
-```
-
-### Body
-```
-{body_str}
-```
-
-## 描述
-{description_str}
-"""
-        return {
-            'content': content,
-            'metadata': {
-                'doc_type': 'api_test',
-                'source_id': api_request.id,
-                'source_model': 'ApiRequest',
-                'name': api_request.name,
-                'method': api_request.method,
-                'url': api_request.url,
-                'project_id': api_request.project_id,
-            }
-        }
-    
-    @staticmethod
-    def ui_test_to_markdown(ui_script: Any) -> Dict[str, Any]:
-        """
-        Convert UI test script to Markdown
-        
-        Args:
-            ui_script: UITestScript instance (passed by caller)
-        """
-        description_str = ui_script.description or '无描述'
-        actions_str = json.dumps(ui_script.actions or [], ensure_ascii=False, indent=2)
-        browser_type_str = getattr(ui_script, 'browser_type', 'chromium') or 'chromium'
-        
-        content = f"""# UI 测试脚本: {ui_script.name}
-
-## 基本信息
-- **项目ID**: {ui_script.project_id}
-- **浏览器类型**: {browser_type_str}
-
-## 描述
-{description_str}
-
-## 动作列表
-```json
-{actions_str}
-```
-"""
-        return {
-            'content': content,
-            'metadata': {
-                'doc_type': 'ui_test',
-                'source_id': ui_script.id,
-                'source_model': 'UITestScript',
-                'name': ui_script.name,
-                'browser_type': browser_type_str,
-                'project_id': ui_script.project_id,
-            }
-        }
     
     @staticmethod
     def prd_to_markdown(
@@ -341,57 +195,6 @@ class DocumentConverter:
         return ''
     
     @staticmethod
-    def _generic_test_to_markdown(
-        doc_type: str,
-        title: str,
-        content: str,
-        project_id: int,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """Generic converter for test document types."""
-        doc_type_labels = {
-            DocType.FEATURE_TEST: '功能测试',
-            DocType.API_TEST: 'API 测试',
-            DocType.UI_TEST: 'UI 测试',
-        }
-        
-        label = doc_type_labels.get(doc_type, doc_type)
-        
-        content_parts = [f"# {label}: {title}\n"]
-        content_parts.append(f"\n## 基本信息\n")
-        content_parts.append(f"- **项目ID**: {project_id}\n")
-        
-        if metadata:
-            if metadata.get('version'):
-                content_parts.append(f"- **版本**: {metadata.get('version')}\n")
-            if metadata.get('author'):
-                content_parts.append(f"- **作者**: {metadata.get('author')}\n")
-            tags = metadata.get('tags', [])
-            if tags:
-                content_parts.append(f"- **标签**: {', '.join(tags)}\n")
-        
-        content_parts.append(f"\n## 内容\n")
-        content_parts.append(content)
-        
-        result_metadata = {
-            'doc_type': doc_type,
-            'title': title,
-            'project_id': project_id,
-        }
-        
-        if metadata:
-            result_metadata.update({
-                'version': metadata.get('version'),
-                'author': metadata.get('author'),
-                'tags': metadata.get('tags', []),
-            })
-        
-        return {
-            'content': ''.join(content_parts),
-            'metadata': result_metadata
-        }
-    
-    @staticmethod
     def convert_uploaded_document(
         doc_type: str,
         title: str,
@@ -426,13 +229,5 @@ class DocumentConverter:
                 title=title,
                 metadata=metadata
             )
-        elif doc_type in (DocType.FEATURE_TEST, DocType.API_TEST, DocType.UI_TEST):
-            return DocumentConverter._generic_test_to_markdown(
-                doc_type=doc_type,
-                title=title,
-                content=content,
-                project_id=project_id,
-                metadata=metadata
-            )
         else:
-            raise ValueError(f"Unsupported document type: {doc_type}. Supported types: prd, api_doc, feature_test, api_test, ui_test")
+            raise ValueError(f"Unsupported document type: {doc_type}. Supported types: {', '.join(DocType.ALL)}")

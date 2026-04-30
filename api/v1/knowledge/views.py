@@ -448,7 +448,7 @@ class UploadDocumentView(APIView):
         """Process document upload"""
         if doc_type not in DocType.ALL:
             return Response(
-                {'error': f'Invalid doc_type: {doc_type}. Must be one of: {DocType.DOC_TYPES}'},
+                {'error': f'Invalid doc_type: {doc_type}. Must be one of: {", ".join(DocType.ALL)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -481,7 +481,8 @@ class UploadDocumentView(APIView):
             document_type=doc_type,
             content=converted['content'],
             metadata=converted['metadata'],
-            sync_status='pending'
+            chunk_index=-1,
+            sync_status='pending',
         )
         
         sync_document_to_chroma(document.pk)
@@ -496,7 +497,7 @@ class UploadDocumentView(APIView):
                 'doc_type': doc_type,
                 'title': title,
                 'project_id': project_id,
-                'sync_status': document.sync_status
+                'sync_status': document.sync_status,
             }
         }, status=status.HTTP_201_CREATED)
 
@@ -514,7 +515,9 @@ class ListKnowledgeDocumentsView(APIView):
             project_id = request.query_params.get('project_id')
             knowledge_base_id = request.query_params.get('knowledge_base_id')
             
-            queryset = KnowledgeDocument.objects.all().select_related(
+            queryset = KnowledgeDocument.objects.filter(
+                chunk_index=-1,  # root documents only, exclude chunks
+            ).select_related(
                 'knowledge_base', 'knowledge_base__project'
             ).order_by('-created_at')
             
@@ -554,29 +557,37 @@ class ListKnowledgeDocumentsView(APIView):
 
 class DeleteKnowledgeDocumentView(APIView):
     """
-    Delete knowledge document
+    Delete knowledge document (root + all chunks)
     DELETE /api/v1/knowledge/documents/{id}
     """
     permission_classes = [IsAuthenticated]
     
     def delete(self, request: Request, pk: int) -> Response:
-        """Delete knowledge document"""
+        """Delete knowledge document and its chunks"""
         try:
             doc = KnowledgeDocument.objects.select_related('knowledge_base').get(id=pk)
             
+            if doc.chunk_index != -1:
+                return Response(
+                    {'error': 'Cannot delete chunk directly. Delete the root document.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            
+            # Delete chunks from ChromaDB
+            chroma_prefix = doc.chroma_id_prefix or f'source_{doc.pk}_'
             try:
                 from core.agents.rag.knowledge_retriever import KnowledgeRetriever
                 retriever = KnowledgeRetriever()
-                if doc.chroma_id_prefix:
-                    retriever.delete_document_chunks(doc.chroma_id_prefix)
+                retriever.delete_document_chunks(chroma_prefix)
             except Exception as e:
-                logger.warning(f"Failed to delete from ChromaDB: {e}")
+                logger.warning(f'Failed to delete from ChromaDB: {e}')
             
+            # Delete root document
             doc.delete()
             
             return Response({
                 'success': True,
-                'message': 'Document deleted successfully'
+                'message': 'Document deleted successfully',
             })
             
         except KnowledgeDocument.DoesNotExist:
@@ -607,6 +618,12 @@ class SyncDocumentView(APIView):
                 'knowledge_base__project'
             ).get(id=pk)
             
+            if doc.chunk_index != -1:
+                return Response(
+                    {'error': 'Cannot sync chunk directly. Sync the root document.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            
             from core.tasks import sync_document_to_chroma
             
             doc.sync_status = 'syncing'
@@ -615,12 +632,12 @@ class SyncDocumentView(APIView):
             try:
                 sync_document_to_chroma(pk)
                 doc.refresh_from_db()
-                logger.info(f"Document {pk} synced successfully")
+                logger.info(f"Document {pk} synced")
                 
                 return Response({
                     'success': True,
                     'sync_status': doc.sync_status,
-                    'message': 'Document synced successfully'
+                    'message': 'Document synced successfully',
                 })
             except Exception as sync_error:
                 error_msg = str(sync_error)
