@@ -136,20 +136,6 @@ class ApiRequestViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, Base
         })
 
     @api_exception_handler
-    @action(detail=True, methods=['post'], url_path='execute-async')
-    def execute_async(self, request, pk=None):
-        """
-        执行单个API请求（异步版本 - Celery）
-
-        使用 Celery 任务异步执行，适合耗时较长的请求
-        """
-        from testmanager_app.tasks import execute_api_request_task
-        
-        api_request = self.get_object()
-        task = execute_api_request_task.delay(api_request.id, request.user.id)
-        return Response({'task_id': task.id, 'status': 'pending'}, status=status.HTTP_202_ACCEPTED)
-
-    @api_exception_handler
     @action(detail=False, methods=['post'], url_path='execute-batch')
     def execute_batch(self, request):
         """
