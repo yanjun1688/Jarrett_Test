@@ -58,7 +58,6 @@ class TestScriptViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, Base
         """
         详情查询（缓存5分钟）
         """
-        # 临时设置更长的缓存时间用于详情查询
         original_timeout = self.cache_timeout
         self.cache_timeout = 300  # 5分钟
         try:

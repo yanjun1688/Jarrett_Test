@@ -370,28 +370,18 @@ class IntentType:
 
 # 文档类型
 class DocType:
-    """知识库文档类型常量"""
-    PRD = "prd"
-    API_DOC = "api_doc"
-    FEATURE_TEST = "feature_test"
-    API_TEST = "api_test"
-    UI_TEST = "ui_test"
+    """知识库文档类型常量 — 仅限知识型文档"""
+    PRD = 'prd'
+    API_DOC = 'api_doc'
+    BEST_PRACTICE = 'best_practice'
+    CODE_EXAMPLE = 'code_example'
+    TEST_PATTERN = 'test_pattern'
     
-    ALL = [PRD, API_DOC, FEATURE_TEST, API_TEST, UI_TEST]
-    TEST_TYPES = [FEATURE_TEST, API_TEST, UI_TEST]
-    DOC_TYPES = [PRD, API_DOC]
+    ALL = [PRD, API_DOC, BEST_PRACTICE, CODE_EXAMPLE, TEST_PATTERN]
     
     @classmethod
     def is_valid(cls, doc_type: str) -> bool:
         return doc_type in cls.ALL
-    
-    @classmethod
-    def is_test_type(cls, doc_type: str) -> bool:
-        return doc_type in cls.TEST_TYPES
-    
-    @classmethod
-    def is_doc_type(cls, doc_type: str) -> bool:
-        return doc_type in cls.DOC_TYPES
 
 
 # 环境变量名称

@@ -1,19 +1,5 @@
 import apiClient from './axios';
 
-/**
- * @deprecated 描述生成功能已废弃。保留仅用于 DescriptionForm 组件。
- * 替代方案：使用 generateFromPRD / generateFromPRDFile（PRD文档）或 generateAPITest（API定义）。
- */
-export const generateUITest = async (data) => {
-  return await apiClient.post('/chatbot/chat/', {
-    message: data.description,
-    project_id: data.project_id,
-    test_type: 'ui',
-    source: 'generator',
-    url: data.url || undefined,
-  });
-};
-
 export const generateAPITest = async (data) => {
   return await apiClient.post('/chatbot/chat/', {
     message: data.description || `测试 API ${data.method || 'GET'} ${data.endpoint || ''}`,
@@ -57,7 +43,6 @@ export const createAndExecuteScript = async (projectId, jsonContent) => {
 };
 
 export const testGenerationAPI = {
-  generateUITest,
   generateAPITest,
   generateFromPRD,
   generateFromPRDFile,

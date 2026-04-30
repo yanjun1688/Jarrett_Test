@@ -399,36 +399,6 @@ def _update_api_execution_error(execution_id: int, error_message: str) -> None:
         logger.error(f"Failed to update API execution error status: {e}")
 
 
-def get_task_status(task_id: str) -> dict[str, Any]:
-    """
-    获取 Celery 任务状态
-    
-    Args:
-        task_id: Celery 任务 ID
-    
-    Returns:
-        dict: 任务状态信息
-    """
-    from celery.result import AsyncResult
-    
-    result = AsyncResult(task_id)
-    
-    response = {
-        'task_id': task_id,
-        'status': result.status,
-        'ready': result.ready(),
-        'successful': result.successful() if result.ready() else None,
-    }
-    
-    if result.ready():
-        if result.successful():
-            response['result'] = result.result
-        else:
-            response['error'] = str(result.result) if result.result else 'Unknown error'
-    
-    return response
-
-
 @shared_task(bind=True, name='testmanager_app.install_skill')
 def install_skill_task(
     self: Any,

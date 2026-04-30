@@ -96,7 +96,7 @@ export const getBestPractices = async (data = {}) => {
  * 上传文档到知识库
  * @param {FormData} formData - 表单数据
  * @param {number} formData.get('project_id') - 项目ID
- * @param {string} formData.get('doc_type') - 文档类型 (prd, api_doc, feature_test, api_test, ui_test)
+ * @param {string} formData.get('doc_type') - 文档类型 (prd, api_doc)
  * @param {string} formData.get('title') - 文档标题
  * @param {File} formData.get('file') - 文件对象 (可选)
  * @param {string} formData.get('content') - 文档内容 (可选, 纯文本时使用)
