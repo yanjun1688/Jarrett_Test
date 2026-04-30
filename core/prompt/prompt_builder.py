@@ -74,9 +74,9 @@ class PromptBuilder:
     
     def __init__(
         self,
-        context_store=None,
+        context_store: Optional[Any] = None,
         model_name: str = "gpt-4"
-    ):
+    ) -> None:
         """
         初始化 Prompt 构建器
         
@@ -89,7 +89,7 @@ class PromptBuilder:
         
         try:
             from core.context.token_economics import TokenCalculator
-            self.token_calc = TokenCalculator(model_name=model_name)
+            self.token_calc: Optional[TokenCalculator] = TokenCalculator(model_name=model_name)
         except ImportError:
             logger.warning("TokenCalculator not found, token counting disabled")
             self.token_calc = None

@@ -179,10 +179,10 @@ class BaseLLMService:
             message = response.choices[0].message
             # 优先取 content
             if hasattr(message, 'content') and message.content:
-                return message.content
+                return str(message.content)
             # 兼容 thinking 模式（GLM-5 等），内容在 reasoning_content 中
             if hasattr(message, 'reasoning_content') and message.reasoning_content:
-                return message.reasoning_content
+                return str(message.reasoning_content)
             # 工具调用
             if hasattr(message, 'tool_calls') and message.tool_calls:
                 import json
@@ -222,7 +222,7 @@ class BaseLLMService:
         if hasattr(response, 'choices') and len(response.choices) > 0:
             choice = response.choices[0]
             if hasattr(choice, 'finish_reason'):
-                return choice.finish_reason
+                return str(choice.finish_reason)
         return "stop"
     
     async def generate(
@@ -230,7 +230,7 @@ class BaseLLMService:
         prompt: str,
         system_message: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        **kwargs
+        **kwargs: Any
     ) -> str:
         """
         生成文本
@@ -267,7 +267,7 @@ class BaseLLMService:
         tools: List[Dict[str, Any]],
         system_message: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        **kwargs
+        **kwargs: Any
     ) -> Dict[str, Any]:
         """
         使用工具生成文本（支持ReAct模式）
@@ -360,7 +360,7 @@ class OpenAICompatibleService(BaseLLMService):
     适用于 OpenAI、DeepSeek、千问、KIMI、智谱（兼容模式）等
     """
 
-    def _initialize_client(self):
+    def _initialize_client(self) -> None:
         """
         初始化 OpenAI 兼容客户端
         子类可重写此方法以设置自定义 base_url
@@ -380,12 +380,16 @@ class OpenAICompatibleService(BaseLLMService):
         base_url_str = f" (base_url={base_url})" if base_url else ""
         logger.info(f"OpenAI compatible client initialized: {provider_name}{base_url_str}, model: {self.config.model_name}")
 
+    def _call_create(self, **kwargs: Any) -> Any:
+        """同步调用 OpenAI create 方法的 wrapper"""
+        return self.client.chat.completions.create(**kwargs)
+
     def _format_request_params(
         self,
         messages: List[Dict[str, str]],
         system_message: Optional[str] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
-        **kwargs
+        **kwargs: Any
     ) -> Dict[str, Any]:
         """
         格式化请求参数，子类可重写以添加特殊参数
@@ -425,7 +429,7 @@ class OpenAICompatibleService(BaseLLMService):
         prompt: str,
         system_message: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        **kwargs
+        **kwargs: Any
     ) -> str:
         """
         生成文本
@@ -457,10 +461,7 @@ class OpenAICompatibleService(BaseLLMService):
             logger.info(f"Sending request to {self.config.provider.value}: {self.config.model_name}")
             logger.debug(f"Messages count: {len(messages)}")
 
-            response = await asyncio.to_thread(
-                self.client.chat.completions.create,
-                **request_params
-            )
+            response = await asyncio.to_thread(self._call_create, **request_params)
 
             # 提取生成的文本
             generated_text = self._extract_standard_response(response)
@@ -578,7 +579,7 @@ class OpenAICompatibleService(BaseLLMService):
         tools: List[Dict[str, Any]],
         system_message: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        **kwargs
+        **kwargs: Any
     ) -> Dict[str, Any]:
         """
         使用工具生成文本（支持 ReAct 模式）
@@ -609,16 +610,12 @@ class OpenAICompatibleService(BaseLLMService):
                 **kwargs
             )
 
-            loop = asyncio.get_running_loop()
-            response = await asyncio.to_thread(
-                self.client.chat.completions.create,
-                **request_params
-            )
+            response = await asyncio.to_thread(self._call_create, **request_params)
 
             # 揄取响应信息
             message = response.choices[0].message
 
-            result = {
+            result: Dict[str, Any] = {
                 "response": message.content if hasattr(message, 'content') and message.content else "",
                 "tool_calls": getattr(message, 'tool_calls', None),
                 "finish_reason": self._extract_standard_finish_reason(response)
@@ -641,7 +638,7 @@ def create_llm_service(
     provider: str = "openai",
     model_name: Optional[str] = None,
     api_key: Optional[str] = None,
-    **kwargs
+    **kwargs: Any
 ) -> BaseLLMService:
     """
     创建LLM服务实例
@@ -658,6 +655,7 @@ def create_llm_service(
     provider_enum = LLMProvider(provider.lower())
 
     # 根据提供商选择具体的服务类
+    service_class: type[BaseLLMService]
     if provider_enum == LLMProvider.OPENAI:
         from .openai_llm import OpenAILLMService
         service_class = OpenAILLMService

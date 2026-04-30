@@ -285,7 +285,7 @@ class SmartSummarizer:
                 else:
                     return None
 
-            return json.loads(json_str)
+            return json.loads(json_str)  # type: ignore[no-any-return]
 
         except json.JSONDecodeError:
             return None

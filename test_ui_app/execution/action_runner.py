@@ -422,7 +422,8 @@ class ActionRunner(PlaywrightEngine):
             y = box['y'] + box['height'] * y_ratio
             
             # 使用page.mouse点击
-            await self.page.mouse.click(x, y)
+            if self.page:
+                await self.page.mouse.click(x, y)
 
             result['status'] = 'passed'
             result['message'] = f'成功点击Canvas: {self._get_locator_description(selector)}, 位置=({x_ratio:.2%}, {y_ratio:.2%})'
@@ -476,10 +477,11 @@ class ActionRunner(PlaywrightEngine):
             end_y = box['y'] + box['height'] * end_y_ratio
             
             # 执行拖拽操作
-            await self.page.mouse.move(start_x, start_y)
-            await self.page.mouse.down()
-            await self.page.mouse.move(end_x, end_y, steps=10)
-            await self.page.mouse.up()
+            if self.page:
+                await self.page.mouse.move(start_x, start_y)
+                await self.page.mouse.down()
+                await self.page.mouse.move(end_x, end_y, steps=10)
+                await self.page.mouse.up()
 
             result['status'] = 'passed'
             result['message'] = f'成功拖拽Canvas: {self._get_locator_description(selector)}'
@@ -628,7 +630,7 @@ class ActionRunner(PlaywrightEngine):
                 if attrs['id']:
                     score += 1
                 if attrs['name']:
-                    score += 0.5
+                    score += 1  # Changed from 0.5 to 1 to avoid float/int mismatch
                 
                 if score > 0:
                     candidates.append((score, attrs, inp))

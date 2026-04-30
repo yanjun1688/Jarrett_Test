@@ -225,24 +225,25 @@ class ExecuteTestTool(BaseTool):
             )
         
         try:
+            execution_result: Dict[str, Any]
             if test_type == "api":
-                result = await self._execute_api_tests(test_data, base_url)
+                execution_result = await self._execute_api_tests(test_data, base_url)
             else:
-                result = await self._execute_ui_tests(test_data)
-            
+                execution_result = await self._execute_ui_tests(test_data)
+
             if execution_logger:
                 await sync_to_async(execution_logger.finish)({
                     'status': 'success',
                     'test_type': test_type
                 })
-            
-            logger.info(f'[ExecuteTest] 执行完成: success=True, test_type={test_type}, total_tests={result.get("execution_result", {}).get("total_tests", 0)}')
+
+            logger.info(f'[ExecuteTest] 执行完成: success=True, test_type={test_type}, total_tests={execution_result.get("execution_result", {}).get("total_tests", 0)}')
             return ToolResult(
                 success=True,
-                data=result,
+                data=execution_result,
                 metadata={
                     "test_type": test_type,
-                    "total_tests": result.get("execution_result", {}).get("total_tests", 0)
+                    "total_tests": execution_result.get("execution_result", {}).get("total_tests", 0)
                 }
             )
 

@@ -649,29 +649,85 @@ class AdvancedPressureTestConfigCreateSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
     
     def validate_scenario(self, value: Dict) -> Dict:
-        """验证场景配置"""
+        """验证场景配置（支持双模式 step 定义）"""
         if not value:
             raise serializers.ValidationError('场景配置不能为空')
-        
+
         steps = value.get('steps', [])
         if not steps:
             raise serializers.ValidationError('场景步骤不能为空')
-        
+
         for idx, step in enumerate(steps):
             if not step.get('name'):
-                raise serializers.ValidationError(f'步骤{idx+1}的名称不能为空')
-            if not step.get('api_request_id'):
-                raise serializers.ValidationError(f'步骤{idx+1}的API请求不能为空')
-        
+                raise serializers.ValidationError(f'步骤{idx + 1}的名称不能为空')
+
+            # 双模式：api_request_id（引用已有）或 url + method（直接定义）
+            has_api_ref = bool(step.get('api_request_id'))
+            has_direct = bool(step.get('url')) and bool(step.get('method'))
+
+            if not has_api_ref and not has_direct:
+                raise serializers.ValidationError(
+                    f'步骤{idx + 1}必须提供 api_request_id 或 url + method',
+                )
+            if has_api_ref and has_direct:
+                raise serializers.ValidationError(
+                    f'步骤{idx + 1}不能同时指定 api_request_id 和 url，请二选一',
+                )
+
+            # 验证提取器格式
+            for ext_idx, ext in enumerate(step.get('extractors', [])):
+                if not ext.get('name'):
+                    raise serializers.ValidationError(
+                        f'步骤{idx + 1}的提取器{ext_idx + 1}名称不能为空',
+                    )
+                valid_types = {'json_path', 'regex', 'header', 'status_code', 'xpath'}
+                if ext.get('type') not in valid_types:
+                    raise serializers.ValidationError(
+                        f'步骤{idx + 1}的提取器{ext_idx + 1}类型无效，'
+                        f'可选: {", ".join(sorted(valid_types))}',
+                    )
+
         return value
-    
-    def validate(self, data: Dict) -> Dict:
-        """验证配置"""
-        if data.get('use_distributed') and data.get('worker_count', 1) < 1:
+
+    def validate_user_count(self, value: int) -> int:
+        from django.conf import settings
+        limits = settings.LOCUST_GLOBAL_LIMITS
+        if value > limits['MAX_USERS_PER_CONFIG']:
             raise serializers.ValidationError(
-                '启用分布式时Worker数量必须大于0'
+                f'并发用户数不能超过 {limits["MAX_USERS_PER_CONFIG"]}',
             )
-        
+        return value
+
+    def validate_spawn_rate(self, value: int) -> int:
+        from django.conf import settings
+        limits = settings.LOCUST_GLOBAL_LIMITS
+        if value > limits['MAX_SPAWN_RATE']:
+            raise serializers.ValidationError(
+                f'启动速率不能超过 {limits["MAX_SPAWN_RATE"]}',
+            )
+        return value
+
+    def validate_duration_seconds(self, value: int) -> int:
+        from django.conf import settings
+        limits = settings.LOCUST_GLOBAL_LIMITS
+        if value > limits['MAX_DURATION_SECONDS']:
+            raise serializers.ValidationError(
+                f'持续时间不能超过 {limits["MAX_DURATION_SECONDS"]}s',
+            )
+        return value
+
+    def validate_worker_count(self, value: int) -> int:
+        from django.conf import settings
+        limits = settings.LOCUST_GLOBAL_LIMITS
+        if value > limits['MAX_WORKERS_PER_CONFIG']:
+            raise serializers.ValidationError(
+                f'Worker 数量不能超过 {limits["MAX_WORKERS_PER_CONFIG"]}',
+            )
+        return value
+
+    def validate(self, data: Dict) -> Dict:
+        if data.get('use_distributed') and data.get('worker_count', 1) < 1:
+            raise serializers.ValidationError('启用分布式时 Worker 数量必须大于 0')
         return data
 
 

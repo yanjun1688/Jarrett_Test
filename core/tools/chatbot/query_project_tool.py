@@ -62,7 +62,7 @@ class QueryProjectTool(BaseTool):
             
             def _get_projects() -> List[Dict[str, Any]]:
                 return list(
-                    Project.objects.filter(
+                    Project.objects.filter(  # type: ignore[arg-type]
                         is_active=True
                     ).values('id', 'name', 'description').order_by('-created_at')
                 )

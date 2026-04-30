@@ -60,7 +60,7 @@ def parse_mcp_text_content(text: str) -> str:
             parsed = json.loads(json_str)
             if isinstance(parsed, list):
                 return '\n\n'.join([item.get('text', '') for item in parsed])
-            return parsed.get('text', text)
+            return str(parsed.get('text', text))
         except json.JSONDecodeError:
             pass
     
@@ -70,7 +70,7 @@ def parse_mcp_text_content(text: str) -> str:
 class RunSkillTool(BaseTool):
     """执行已安装的 skill"""
     
-    def __init__(self, llm_service=None):
+    def __init__(self, llm_service: Optional[Any] = None) -> None:
         super().__init__(
             name="run_skill",
             description="执行已安装的 skill。当用户要求使用某个 skill 完成任务时调用。",
@@ -117,7 +117,7 @@ class RunSkillTool(BaseTool):
         frontmatter = self._parse_frontmatter(skill_content)
         
         if "mode" in frontmatter:
-            return frontmatter["mode"]
+            return str(frontmatter["mode"])
         
         allowed_tools = frontmatter.get("allowed-tools", "")
         if isinstance(allowed_tools, list):
@@ -133,7 +133,7 @@ class RunSkillTool(BaseTool):
         skill_name: str, 
         skill_content: str, 
         user_input: str, 
-        llm_service
+        llm_service: Any
     ) -> ToolResult:
         """执行模式: LLM 解析命令 -> subprocess 执行 -> 返回结果
         
@@ -249,7 +249,7 @@ class RunSkillTool(BaseTool):
         skill_name: str,
         skill_content: str,
         user_input: str,
-        llm_service
+        llm_service: Any
     ) -> ToolResult:
         """执行模式（旧版）：纯文本解析，兼容不支持 JSON 模式的 LLM"""
         system_prompt = f"""你是一个命令解析器。根据用户的任务需求，解析出需要执行的命令行命令。
@@ -400,7 +400,7 @@ agent-browser fill @e1 "text"
         skill_name: str, 
         skill_content: str, 
         user_input: str, 
-        llm_service
+        llm_service: Any
     ) -> ToolResult:
         """生成模式: LLM 直接生成内容"""
         system_prompt = f"""你是一个专业的AI助手，现在需要根据以下技能指导来完成任务。
@@ -431,7 +431,7 @@ agent-browser fill @e1 "text"
             metadata={"skill_name": skill_name, "mode": "generate", "result_length": len(result_text)}
         )
     
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs: Any) -> ToolResult:
         skill_name = kwargs.get("skill_name")
         user_input = kwargs.get("user_input")
         execution_logger = kwargs.get("_execution_logger")

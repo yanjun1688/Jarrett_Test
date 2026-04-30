@@ -132,7 +132,7 @@ class TestPlanningAgent(BaseAgent):
         use_rag = input_data.get("use_rag", self.config["use_rag"])
         
         # 执行规划
-        result = await self.plan(
+        result: Dict[str, Any] = await self.plan(
             description=description,
             test_type=test_type,
             additional_context=additional_context,
@@ -825,7 +825,7 @@ class TestPlanningAgent(BaseAgent):
         
         return errors
 
-    def _update_planning_stats(self, test_type: str):
+    def _update_planning_stats(self, test_type: str) -> None:
         """更新规划统计"""
         self._planning_stats["total_plans"] += 1
         

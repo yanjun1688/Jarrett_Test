@@ -42,20 +42,20 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserListSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[Any]:
         """管理员可执行所有操作，普通用户仅可查看和修改自己的信息"""
         if self.action in ['create', 'destroy']:
             return [IsAuthenticated(), IsAdminUser()]
-        return super().get_permissions()
+        return super().get_permissions()  # type: ignore[return-value]
 
-    def get_queryset(self):
+    def get_queryset(self) -> Any:
         """普通用户只能看到自己的信息"""
         user = self.request.user
         if user.is_staff or user.is_superuser:
             return User.objects.all()
-        return User.objects.filter(pk=user.pk)
+        return User.objects.filter(pk=user.pk)  # type: ignore[misc]
 
-    def perform_update(self, serializer):
+    def perform_update(self, serializer: Any) -> None:
         """普通用户只能修改自己的信息（PUT和PATCH）"""
         instance = self.get_object()
         if not (self.request.user.is_staff or self.request.user.is_superuser):

@@ -55,14 +55,82 @@ class AdvancedPressureTestConfigViewSet(QueryOptimizerMixin, CommonFilterMixin, 
         """创建时设置创建人"""
         serializer.save(created_by=self.request.user)
     
+    def _expire_stale_executions(self) -> int:
+        """
+        将超时未更新的 running 记录自动标记为 failed。
+
+        判定规则：started_at 超过 max_duration_seconds + 300s（5分钟缓冲区）
+        认为引擎已崩溃，自动清理。
+        """
+        from django.conf import settings
+        from django.utils import timezone
+
+        limits = settings.LOCUST_GLOBAL_LIMITS
+        now = timezone.now()
+        max_duration = limits.get('STALE_TIMEOUT_SECONDS', 600)
+        expired = 0
+
+        for e in AdvancedPressureTestExecution.objects.filter(status='running'):
+            if e.started_at and (now - e.started_at).total_seconds() > max_duration:
+                e.status = 'failed'
+                e.finished_at = now
+                e.duration_seconds = (now - e.started_at).total_seconds()
+                e.error_log = 'Stale execution auto-expired'
+                e.logs = (
+                    f'[系统清理] 执行记录超时未更新，自动终止\n'
+                    f'开始时间: {e.started_at}\n终止时间: {now}'
+                )
+                e.save(update_fields=['status', 'finished_at', 'duration_seconds', 'error_log', 'logs'])
+                expired += 1
+
+        return expired
+
+    def _check_execution_limits(self, config: AdvancedPressureTestConfig) -> None:
+        from django.conf import settings
+        from django.db.models import Sum
+
+        # 先清理僵尸记录
+        expired = self._expire_stale_executions()
+        if expired:
+            logger.info(f'[AdvancedPressureTest] Auto-expired {expired} stale executions')
+
+        limits = settings.LOCUST_GLOBAL_LIMITS
+
+        running_count = AdvancedPressureTestExecution.objects.filter(
+            status='running',
+        ).count()
+        if running_count >= limits['MAX_CONCURRENT_EXECUTIONS']:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError(
+                f'已达到最大同时执行数量上限 ({limits["MAX_CONCURRENT_EXECUTIONS"]})，'
+                f'请等待其他测试完成后再试',
+            )
+
+        active = AdvancedPressureTestExecution.objects.filter(
+            status='running',
+        ).aggregate(
+            total_users=Sum('config__user_count'),
+        )
+        active_users = active['total_users'] or 0
+        if active_users + config.user_count > limits['MAX_CONCURRENT_USERS']:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError(
+                f'全局并发用户数已达上限 ({limits["MAX_CONCURRENT_USERS"]})，'
+                f'当前剩余可用: {limits["MAX_CONCURRENT_USERS"] - active_users}',
+            )
+
     @api_exception_handler
     @action(detail=True, methods=['post'])
     def execute(self, request, pk=None):
         """执行高级压测"""
         config = self.get_object()
-        
-        logger.info(f"[AdvancedPressureTest] Execute requested - config_id={config.id}, user={request.user}")
-        
+
+        logger.info(f'[AdvancedPressureTest] === Step 1/3 === REST execute requested - config_id={config.id}, name={config.name}, user={request.user}')
+
+        # 并发限制检查
+        self._check_execution_limits(config)
+        logger.info(f'[AdvancedPressureTest]     concurrency check passed')
+
         execution: AdvancedPressureTestExecution = AdvancedPressureTestExecution.objects.create(
             config=config,
             executor=request.user,
@@ -75,7 +143,9 @@ class AdvancedPressureTestConfigViewSet(QueryOptimizerMixin, CommonFilterMixin, 
         if config.enable_web_ui:
             web_ui_url = f"http://localhost:{config.web_ui_port}"
         
-        logger.info(f"[AdvancedPressureTest] Created execution - id={execution.id}, ws_url={websocket_url}")
+        logger.info(f'[AdvancedPressureTest] === Step 1/3 done === execution_id={execution.id}, status=pending, ws_url={websocket_url}')
+        logger.info(f'[AdvancedPressureTest]     -> 前端应立即连接 WebSocket: {websocket_url}')
+        logger.info(f'[AdvancedPressureTest]     -> 连接后前端再发 {{type: "start"}} 才开始压测')
         
         response_data = {
             'execution_id': execution.id,

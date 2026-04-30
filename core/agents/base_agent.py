@@ -49,7 +49,8 @@ class BaseAgent(ABC):
     @property
     def state(self) -> str:
         """Get current agent state"""
-        return self._state.get("status", "unknown")
+        status = self._state.get("status", "unknown")
+        return str(status) if status is not None else "unknown"
     
     @abstractmethod
     async def initialize(self) -> None:
@@ -82,7 +83,7 @@ class BaseAgent(ABC):
         """
         pass
     
-    def update_state(self, status: str, **kwargs):
+    def update_state(self, status: str, **kwargs: Any) -> None:
         """
         更新Agent状态
         
@@ -101,7 +102,7 @@ class BaseAgent(ABC):
             **kwargs
         })
     
-    def _add_to_history(self, event_type: str, data: Dict[str, Any]):
+    def _add_to_history(self, event_type: str, data: Dict[str, Any]) -> None:
         """
         添加历史记录
         
@@ -162,19 +163,19 @@ class BaseAgent(ABC):
     
     def _calculate_success_rate(self) -> float:
         """计算成功率"""
-        total = self._state.get("execution_count", 0)
-        errors = self._state.get("error_count", 0)
+        total = int(self._state.get("execution_count", 0) or 0)
+        errors = int(self._state.get("error_count", 0) or 0)
         if total == 0:
             return 0.0
-        return (total - errors) / total
+        return float(total - errors) / float(total)
     
     def _calculate_average_time(self) -> Optional[float]:
         """计算平均执行时间"""
         # 从历史记录中提取执行时间
-        execution_times = []
+        execution_times: List[float] = []
         for entry in self._history:
             if entry["event_type"] == "execution" and "duration" in entry["data"]:
-                execution_times.append(entry["data"]["duration"])
+                execution_times.append(float(entry["data"]["duration"]))
         
         if not execution_times:
             return None
@@ -190,7 +191,7 @@ class BaseAgent(ABC):
         """
         for entry in reversed(self._history):
             if entry["event_type"] == "execution_complete" and "duration" in entry["data"]:
-                return entry["data"]["duration"]
+                return float(entry["data"]["duration"])
         return 0.0
     
     @log_execution_time()
@@ -210,7 +211,7 @@ class BaseAgent(ABC):
         try:
             # 更新状态
             self.update_state("running")
-            self._state["execution_count"] = self._state.get("execution_count", 0) + 1
+            self._state["execution_count"] = int(self._state.get("execution_count", 0) or 0) + 1
             
             # 记录执行开始
             self._add_to_history("execution_start", {
@@ -244,7 +245,7 @@ class BaseAgent(ABC):
             
         except Exception as e:
             # 记录错误
-            self._state["error_count"] = self._state.get("error_count", 0) + 1
+            self._state["error_count"] = int(self._state.get("error_count", 0) or 0) + 1
             self._add_to_history("execution_error", {
                 "error": str(e),
                 "input": input_data,
@@ -337,7 +338,7 @@ class AgentFactory:
     _registry: Dict[str, type] = {}
     
     @classmethod
-    def register(cls, agent_type: str, agent_class: type):
+    def register(cls, agent_type: str, agent_class: type) -> None:
         """注册Agent类"""
         if not issubclass(agent_class, BaseAgent):
             raise ValueError(f"Agent类必须继承自BaseAgent: {agent_class}")
@@ -346,14 +347,15 @@ class AgentFactory:
         logger.info(f"注册Agent类型: {agent_type} -> {agent_class.__name__}")
     
     @classmethod
-    def create(cls, agent_type: str, **kwargs) -> BaseAgent:
+    def create(cls, agent_type: str, **kwargs: Any) -> BaseAgent:
         """创建Agent实例"""
         if agent_type not in cls._registry:
             available_types = list(cls._registry.keys())
             raise ValueError(f"未知的Agent类型: {agent_type}. 可用类型: {available_types}")
         
         agent_class = cls._registry[agent_type]
-        return agent_class(**kwargs)
+        instance: BaseAgent = agent_class(**kwargs)
+        return instance
     
     @classmethod
     def get_available_types(cls) -> List[str]:

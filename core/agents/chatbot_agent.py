@@ -132,7 +132,7 @@ class ChatbotAgent(BaseAgent):
         self.update_state("ready")
         logger.info("ChatbotAgent initialization complete")
 
-    def _register_chatbot_tools(self):
+    def _register_chatbot_tools(self) -> None:
         """注册 ChatBot 可用的工具"""
         from core.tools.chatbot import (
             GenerateAPITestTool,
@@ -197,7 +197,7 @@ class ChatbotAgent(BaseAgent):
         self.tool_orchestrator.register_tool(save_test_script_tool)
         logger.info(f"Registered tool: {save_test_script_tool.name}")
 
-    def _register_capabilities(self):
+    def _register_capabilities(self) -> None:
         """注册已加载的能力（工具）"""
         for tool in self.tool_orchestrator.get_available_tools():
             self.capability_registry.register_tool(
@@ -213,7 +213,7 @@ class ChatbotAgent(BaseAgent):
             f"{len(self.capability_registry.get_all_tools())} tools"
         )
 
-    def _register_skills(self):
+    def _register_skills(self) -> None:
         """注册技能到能力系统"""
         try:
             from core.agents.skill_loader import SkillLoader
@@ -513,7 +513,7 @@ class ChatbotAgent(BaseAgent):
         await self._write_assistant_message(conversation_id, user_id, assistant_text)
 
         # 构建返回结果
-        self._state["execution_count"] = self._state.get("execution_count", 0) + 1
+        self._state["execution_count"] = int(self._state.get("execution_count", 0) or 0) + 1
 
         final_result: Dict[str, Any] = {
             "success": True,
@@ -557,7 +557,7 @@ class ChatbotAgent(BaseAgent):
             except Exception as e:
                 logger.warning(f"[ChatBot] 写入 assistant 回复失败: {e}")
 
-    def _extract_tool_call_info(self, tc) -> Dict[str, Any]:
+    def _extract_tool_call_info(self, tc: Any) -> Dict[str, Any]:
         """
         统一提取 tool_call 信息，适配不同 LLM SDK 的返回格式
         
@@ -587,7 +587,7 @@ class ChatbotAgent(BaseAgent):
         
         return {'name': func_name, 'arguments': func_args if isinstance(func_args, dict) else {}}
 
-    async def _handle_tool_calls(self, tool_calls, message: str, test_type: Optional[str] = None) -> Dict[str, Any]:
+    async def _handle_tool_calls(self, tool_calls: Any, message: str, test_type: Optional[str] = None) -> Dict[str, Any]:
         """
         处理 LLM 返回的 tool_calls。
 
@@ -864,7 +864,7 @@ class ChatbotAgent(BaseAgent):
             logger.error(f"Failed to retrieve knowledge: {e}", exc_info=True)
             return []
 
-    def _extract_skill_url(self, message: str) -> Optional[Dict[str, str]]:
+    def _extract_skill_url(self, message: str) -> Optional[Dict[str, Any]]:
         """
         Extract skill URL from message and parse into skill_id and skill_name
 

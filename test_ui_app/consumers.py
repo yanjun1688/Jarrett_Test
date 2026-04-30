@@ -20,7 +20,7 @@ MAX_MESSAGE_SIZE = 1024 * 100  # 100KB
 RATE_LIMIT_WINDOW = 60  # 60 seconds
 RATE_LIMIT_MAX_MESSAGES = 30  # max messages per window
 
-_rate_limit_store = defaultdict(list)
+_rate_limit_store: dict[str, list[float]] = defaultdict(list)
 
 
 class ChatBotConsumer(AsyncWebsocketConsumer):

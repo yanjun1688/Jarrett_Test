@@ -273,7 +273,7 @@ def get_llm_service(provider: str | None = None) -> BaseLLMService:
     return llm_service
 
 
-def get_chatbot_agent(llm_service) -> ChatbotAgent:
+def get_chatbot_agent(llm_service: Any) -> ChatbotAgent:
     """
     获取或创建 ChatbotAgent 实例
     使用缓存避免每次请求都重新创建
@@ -446,7 +446,7 @@ class EnhancedChatBotView(APIView):
             conversation, error, is_new = await sync_to_async(
                 ConversationService.get_or_create_conversation
             )(
-                user=request.user,
+                user=request.user,  # type: ignore[arg-type]
                 conversation_id=conversation_id,
                 project_id=project_id
             )
@@ -495,7 +495,7 @@ class EnhancedChatBotView(APIView):
                     if "test_cases" in tool_result:
                         await sync_to_async(ConversationService.set_pending_tests)(
                             conversation_id=conv_id_str,
-                            user=request.user,
+                            user=request.user,  # type: ignore[arg-type]
                             tests={"api": tool_result}
                         )
 
@@ -548,7 +548,7 @@ class GetModelListView(APIView):
         ]
         
         # 按默认配置优先级调整顺序
-        default_first_models = []
+        default_first_models: list[dict[str, Any]] = []
         others = []
         
         for model in models:
@@ -596,7 +596,7 @@ class ConversationListView(APIView):
         """获取用户所有会话列表"""
         from core.services.conversation_service import get_markdown_store
         
-        conversations = ConversationService.get_user_conversations(request.user)
+        conversations = ConversationService.get_user_conversations(request.user)  # type: ignore[arg-type]
         md_store = get_markdown_store()
         
         data = []
@@ -630,7 +630,7 @@ class ConversationListView(APIView):
         project_id: Optional[int] = int(project_id_raw) if project_id_raw else None
         
         conversation, error = ConversationService.create_conversation(
-            user=request.user,
+            user=request.user,  # type: ignore[arg-type]
             project_id=project_id
         )
         
@@ -657,7 +657,7 @@ class ConversationDetailView(APIView):
     
     def get(self, request: Request, conversation_id: str) -> Response:
         """获取会话详情"""
-        conversation = ConversationService.get_conversation(conversation_id, request.user)
+        conversation = ConversationService.get_conversation(conversation_id, request.user)  # type: ignore[arg-type]
         
         if not conversation:
             return Response({
@@ -665,8 +665,8 @@ class ConversationDetailView(APIView):
                 "error": "会话不存在"
             }, status=status.HTTP_404_NOT_FOUND)
         
-        messages, _ = ConversationService.get_messages(conversation_id, request.user)
-        metadata, _ = ConversationService.get_metadata(conversation_id, request.user)
+        messages, _ = ConversationService.get_messages(conversation_id, request.user)  # type: ignore[arg-type]
+        metadata, _ = ConversationService.get_metadata(conversation_id, request.user)  # type: ignore[arg-type]
         
         return Response({
             "success": True,
@@ -682,7 +682,7 @@ class ConversationDetailView(APIView):
     
     def delete(self, request: Request, conversation_id: str) -> Response:
         """删除会话"""
-        success, error = ConversationService.delete_conversation(conversation_id, request.user)
+        success, error = ConversationService.delete_conversation(conversation_id, request.user)  # type: ignore[arg-type]
         
         if not success:
             return Response({
@@ -714,7 +714,7 @@ class ClearConversationView(APIView):
                 "error": "缺少 conversation_id"
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        conversation = ConversationService.get_conversation(conversation_id, request.user)
+        conversation = ConversationService.get_conversation(conversation_id, request.user)  # type: ignore[arg-type]
         if not conversation:
             return Response({
                 "success": False,

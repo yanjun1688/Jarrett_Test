@@ -5,7 +5,7 @@ Handles async sync of documents to ChromaDB.
 """
 import logging
 import re
-from typing import List
+from typing import Any, List
 from celery import shared_task
 from django.utils import timezone
 from django.core.exceptions import ObjectDoesNotExist
@@ -15,7 +15,7 @@ from core.models.knowledge import KnowledgeDocument, KnowledgeBase
 logger = logging.getLogger(__name__)
 
 
-def _extract_keywords(doc) -> List[str]:
+def _extract_keywords(doc: Any) -> List[str]:
     keywords = []
     
     title = doc.metadata.get('title', '')
@@ -50,7 +50,7 @@ def _extract_keywords(doc) -> List[str]:
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def sync_document_to_chroma(self, document_id: int):
+def sync_document_to_chroma(self: Any, document_id: int) -> None:
     """
     Sync document to ChromaDB
     
@@ -118,7 +118,7 @@ def sync_document_to_chroma(self, document_id: int):
 
 
 @shared_task
-def delete_document_chunks_from_chroma(chroma_id_prefix: str, knowledge_base_id: int):
+def delete_document_chunks_from_chroma(chroma_id_prefix: str, knowledge_base_id: int) -> None:
     """
     Delete all chunks of a document from ChromaDB
 
@@ -141,7 +141,7 @@ def delete_document_chunks_from_chroma(chroma_id_prefix: str, knowledge_base_id:
 
 
 @shared_task
-def sync_test_case_to_knowledge(test_case_id: int, knowledge_base_id: int):
+def sync_test_case_to_knowledge(test_case_id: int, knowledge_base_id: int) -> None:
     """Sync feature test case to knowledge base"""
     from django.apps import apps
     from core.services.document_converter import DocumentConverter
@@ -167,7 +167,7 @@ def sync_test_case_to_knowledge(test_case_id: int, knowledge_base_id: int):
 
 
 @shared_task
-def batch_sync_project_documents(project_id: int):
+def batch_sync_project_documents(project_id: int) -> str:
     """
     Batch sync all pending documents for a project
 

@@ -21,7 +21,7 @@ logger.debug(
 
 @shared_task(bind=True, name='test_ui_app.execute_ui_test_task')
 def execute_ui_test_task(
-    self,
+    self: Any,
     script_id: int,
     user_id: int | None = None,
 ) -> dict[str, Any]:
@@ -50,7 +50,7 @@ def execute_ui_test_task(
 
 @shared_task(bind=True, name='test_ui_app.execute_ui_test_with_execution_task')
 def execute_ui_test_with_execution_task(
-    self,
+    self: Any,
     script_id: int,
     execution_id: int,
     user_id: int | None = None,

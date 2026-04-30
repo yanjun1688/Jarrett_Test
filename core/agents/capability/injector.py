@@ -193,7 +193,7 @@ class CapabilityInjector:
             Token 数量
         """
         if self.token_calc:
-            return self.token_calc.count_tokens(text)
+            return int(self.token_calc.count_tokens(text))
         else:
             logger.warning("Using fallback token estimation")
             return len(text) // 4

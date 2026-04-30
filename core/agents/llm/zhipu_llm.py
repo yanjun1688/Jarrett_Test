@@ -17,7 +17,7 @@ class ZhipuLLMService(OpenAICompatibleService):
     使用 OpenAI 兼容 API: https://open.bigmodel.cn/api/paas/v4/
     """
 
-    def __init__(self, config=None, provider=None):
+    def __init__(self, config: Optional[Any] = None, provider: Optional[Any] = None) -> None:
         """智谱 AI OpenAI 兼容端点"""
         self.base_url = os.getenv("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4/")
         if not self.base_url.endswith("/"):
@@ -30,7 +30,7 @@ class ZhipuLLMService(OpenAICompatibleService):
         messages: List[Dict[str, str]],
         system_message: Optional[str] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
-        **kwargs
+        **kwargs: Any
     ) -> Dict[str, Any]:
         params = super()._format_request_params(
             messages=messages,

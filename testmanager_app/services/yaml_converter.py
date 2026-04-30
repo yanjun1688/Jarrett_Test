@@ -11,6 +11,7 @@ YAML到RequestCollection的转换服务
 
 from __future__ import annotations
 
+import json
 import warnings
 import yaml
 import base64
@@ -492,12 +493,14 @@ class YamlToCollectionConverter:
         """创建单个步骤"""
         # 1. 创建 ApiRequest
         request_data = step.get('request', {})
+        headers = request_data.get('headers') or {}
+        body = request_data.get('body') or {}
         api_request = ApiRequest.objects.create(
             name=step['name'],
             url=request_data['url'],
             method=request_data['method'],
-            headers=request_data.get('headers') or {},
-            body=request_data.get('body') or {},
+            headers=json.dumps(headers) if isinstance(headers, dict) else str(headers),
+            body=json.dumps(body) if isinstance(body, dict) else str(body),
             project_id=self.project_id,
             created_by_id=self.created_by_id
         )

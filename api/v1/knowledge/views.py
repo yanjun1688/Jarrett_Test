@@ -382,7 +382,7 @@ class UploadDocumentView(APIView):
             title=str(title) if title else '',
             content=str(content) if content else '',
             project_id=int(project_id) if project_id else 0,
-            metadata=cast(Dict[str, Any], metadata)
+            metadata=metadata
         )
     
     def _handle_file_upload(self, request: Request) -> Response:

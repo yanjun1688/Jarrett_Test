@@ -277,6 +277,17 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_BROKER_CONNECTION_RETRY = True
 CELERY_BROKER_CONNECTION_MAX_RETRIES = 10
 
+# 高级压测 (Locust) 全局并发限制
+LOCUST_GLOBAL_LIMITS = {
+    'MAX_USERS_PER_CONFIG': 1000,        # 单个配置最大并发用户数
+    'MAX_SPAWN_RATE': 500,               # 单个配置最大启动速率(用户/秒)
+    'MAX_DURATION_SECONDS': 3600,        # 单个配置最大持续运行时间(秒)
+    'MAX_WORKERS_PER_CONFIG': 20,        # 单个配置最大 Worker 数
+    'MAX_CONCURRENT_USERS': 20000,       # 所有运行中测试的并发用户总和上限
+    'MAX_CONCURRENT_EXECUTIONS': 5,      # 同时运行的测试数量上限
+    'STALE_TIMEOUT_SECONDS': 600,        # running 超过此时间自动标记为 failed（开发期短一些）
+}
+
 # Channels配置 - 使用单独的Redis数据库(DB 3)避免与cache和celery冲突
 # 注意：生产环境应该使用Redis，开发环境如果Redis不可用，可以使用内存通道层
 # 内存通道层限制：只能用于单进程部署，不能用于多进程/多服务器场景
