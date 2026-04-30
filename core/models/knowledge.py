@@ -89,7 +89,6 @@ class KnowledgeDocument(models.Model):
     file_path = models.CharField(max_length=500, blank=True, verbose_name='File Path')
     content = models.TextField(verbose_name='Content')
     metadata = models.JSONField(default=dict, blank=True, verbose_name='Metadata')
-    embedding = models.JSONField(default=list, blank=True, verbose_name='Vector Embedding')
     chunk_index = models.IntegerField(default=0, verbose_name='Chunk Index')
     created_by = models.ForeignKey(
         User,
