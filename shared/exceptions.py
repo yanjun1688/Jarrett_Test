@@ -164,6 +164,13 @@ class DatabaseError(JTestError):
         super().__init__(message, "DATABASE_ERROR", details)
 
 
+class IsolationViolation(JTestError):
+    """RAG 检索隔离违规 — 查询缺少必要的 knowledge_base_id 或 project_id 过滤条件"""
+
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(message, "ISOLATION_VIOLATION", details)
+
+
 def handle_exception(exception: Exception) -> JTestError:
     """处理异常，转换为JTestError"""
     if isinstance(exception, JTestError):

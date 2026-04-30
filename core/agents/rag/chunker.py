@@ -12,6 +12,7 @@ Strategies:
 from __future__ import annotations
 
 import json
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, List
 
@@ -22,11 +23,12 @@ class ChunkResult:
     chunk_index: int
 
 
-class BaseChunkStrategy:
+class BaseChunkStrategy(ABC):
     """Base class for chunk strategies"""
 
+    @abstractmethod
     def chunk(self, content: str) -> List[ChunkResult]:
-        raise NotImplementedError
+        ...
 
 
 class RecursiveStrategy(BaseChunkStrategy):

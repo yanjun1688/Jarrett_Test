@@ -15,12 +15,11 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
-from core.agents.rag.knowledge_rag_agent import KnowledgeRAGAgent
 from core.models import Project, KnowledgeBase, KnowledgeDocument
 from core.services.document_converter import DocumentConverter
 from core.tasks import sync_document_to_chroma
 from shared.constants import DocType
-from shared.exceptions import ValidationError, ConfigurationError
+from shared.exceptions import ValidationError
 from shared.utils.validation import validate_required_fields
 
 logger = logging.getLogger(__name__)
@@ -82,36 +81,25 @@ class QueryKnowledgeView(APIView):
         document_type: Optional[str],
         use_llm: bool
     ) -> Dict[str, Any]:
-        """Async query knowledge base"""
+        """Query knowledge base via direct KnowledgeRetriever."""
         try:
-            agent = KnowledgeRAGAgent(
-                llm_service=None,
-                rag_retriever=None
-            )
-            
-            result = await agent.query(
-                query=query,
+            from core.agents.rag.knowledge_retriever import KnowledgeRetriever
+            from asgiref.sync import sync_to_async
+
+            retriever = KnowledgeRetriever()
+            doc_types = [document_type] if document_type else None
+            results = await sync_to_async(retriever.search)(
+                query,
                 top_k=top_k,
-                document_type=document_type,
-                use_llm=use_llm
+                doc_types=doc_types,
+                project_id=project_id,
+                hybrid_search=True,
             )
-            
-            return result
-            
-        except ConfigurationError as e:
-            logger.error(f"Configuration error in knowledge query: {str(e)}")
-            return {
-                'success': False,
-                'error': 'Knowledge base not configured',
-                'query': query
-            }
+            return {'success': True, 'data': results, 'query': query}
+
         except Exception as e:
-            logger.error(f"Async query failed: {str(e)}")
-            return {
-                'success': False,
-                'error': str(e),
-                'query': query
-            }
+            logger.error(f'Knowledge query failed: {e}', exc_info=True)
+            return {'success': False, 'error': str(e), 'query': query}
 
 
 class BuildKnowledgeBaseView(APIView):
@@ -288,53 +276,54 @@ class GetBestPracticesView(APIView):
         try:
             topic = request.query_params.get('topic', 'general')
             top_k = int(request.query_params.get('top_k', 5))
-            
+            project_id_raw = request.query_params.get('project_id')
+            project_id: Optional[int] = int(project_id_raw) if project_id_raw else None
+
             if not topic.strip():
                 return Response(
                     {'error': 'Topic cannot be empty'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
+
             result = await self._async_get_best_practices(
                 topic=str(topic),
-                top_k=top_k
+                top_k=top_k,
+                project_id=project_id,
             )
-            
+
             return Response(result)
-            
+
         except Exception as e:
             logger.error(f"Error getting best practices: {str(e)}", exc_info=True)
             return Response(
                 {'error': 'Internal server error'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-    
+
     async def _async_get_best_practices(
         self,
         topic: str,
-        top_k: int
+        top_k: int,
+        project_id: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Async get best practices"""
+        """Get best practices via direct KnowledgeRetriever."""
         try:
-            agent = KnowledgeRAGAgent(
-                llm_service=None,
-                rag_retriever=None
+            from core.agents.rag.knowledge_retriever import KnowledgeRetriever
+            from asgiref.sync import sync_to_async
+
+            retriever = KnowledgeRetriever()
+            results = await sync_to_async(retriever.search)(
+                topic,
+                top_k=top_k,
+                doc_types=['best_practice'],
+                project_id=project_id,
+                hybrid_search=True,
             )
-            
-            result = await agent.get_best_practices(
-                topic=topic,
-                top_k=top_k
-            )
-            
-            return result
-            
+            return {'success': True, 'data': results, 'topic': topic}
+
         except Exception as e:
-            logger.error(f"Async best practices query failed: {str(e)}")
-            return {
-                'success': False,
-                'topic': topic,
-                'error': str(e)
-            }
+            logger.error(f'Best practices query failed: {e}', exc_info=True)
+            return {'success': False, 'topic': topic, 'error': str(e)}
 
 
 class UploadDocumentView(APIView):

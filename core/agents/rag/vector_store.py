@@ -145,12 +145,7 @@ class ChromaVectorStore:
         except Exception as e:
             logger.error(f'[ChromaDB] Query failed: {e}')
             logger.error(f'[ChromaDB] Traceback: {traceback.format_exc()}')
-            return {
-                'ids': [[]],
-                'documents': [[]],
-                'metadatas': [[]],
-                'distances': [[]],
-            }
+            raise
 
     def delete(self, ids: List[str]) -> None:
         """Delete documents by IDs"""

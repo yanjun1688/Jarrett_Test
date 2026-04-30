@@ -331,29 +331,6 @@ class TestPlanningAgent(BaseAgent):
                 top_k=3
             )
             
-            # 针对API测试，获取历史测试用例
-            historical_cases = {}
-            
-            if test_type == TestType.API:
-                endpoint = additional_context.get("endpoint")
-                method = additional_context.get("method")
-                if endpoint:
-                    historical_cases = await self.knowledge_rag_agent.get_api_test_cases(
-                        endpoint=str(endpoint) if endpoint else None,
-                        method=str(method) if method else None,
-                        top_k=5
-                    )
-            
-            # 针对UI测试，获取历史测试用例
-            if test_type == TestType.UI:
-                page_url = additional_context.get("url")
-                page_element = additional_context.get("element")
-                historical_cases = await self.knowledge_rag_agent.get_ui_test_cases(
-                    page_url=str(page_url) if page_url else None,
-                    page_element=str(page_element) if page_element else None,
-                    top_k=5
-                )
-            
             # 合并结果
             context_result = {
                 "query": query,
@@ -361,11 +338,8 @@ class TestPlanningAgent(BaseAgent):
                 "document_count": len(doc_result.get("documents", [])),
                 "best_practices": best_practices.get("documents", []),
                 "test_patterns": test_patterns.get("documents", []),
-                "historical_test_cases": historical_cases.get("test_cases", []),
-                "similar_case_count": historical_cases.get("similar_count", 0),
-                "case_recommendations": historical_cases.get("recommendations", []),
                 "retrieval_type": "knowledge_agent",
-                "has_context": len(doc_result.get("documents", [])) > 0 or historical_cases.get("similar_count", 0) > 0
+                "has_context": len(doc_result.get("documents", [])) > 0,
             }
             
             logger.info(f"KnowledgeRAG检索完成: 获取{context_result['document_count']}个文档, "

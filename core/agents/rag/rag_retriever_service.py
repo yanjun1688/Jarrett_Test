@@ -178,13 +178,15 @@ class DjangoORMRAGRetriever(RAGRetriever):
             logger.warning("Retriever not initialized")
             return []
 
+        kb_id = knowledge_base_id or self.knowledge_base_id
+
         try:
             results = self.retriever.search(
                 query,
                 top_k=top_k,
                 doc_types=doc_types,
                 project_id=self.project_id,
-                knowledge_base_id=knowledge_base_id,
+                knowledge_base_id=kb_id,
                 where_extra=filters,
                 hybrid_search=True
             )
