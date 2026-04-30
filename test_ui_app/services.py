@@ -182,7 +182,7 @@ class ScriptBuilder:
         with transaction.atomic():
             script = UITestScript.objects.create(
                 name=name,
-                project_id=project_id if project_id is not None else None,
+                project_id=project_id if project_id is not None else None,  # type: ignore[misc]
                 created_by_id=user_id,
                 actions=actions,
                 **kwargs

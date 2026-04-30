@@ -4,6 +4,7 @@ API测试相关视图
 """
 # pyright: reportAttributeAccessIssue=false
 
+from typing import Any
 import logging
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -186,7 +187,7 @@ class ApiRequestViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, Base
                 if result.get('success'):
                     success_count += 1
             else:
-                logger.warning(f"API请求不存在: {request_id}")
+                logger.log(f"API请求不存在: {request_id}")
                 results.append({
                     'error': f'API请求不存在: {request_id}',
                     'request_id': request_id
@@ -249,7 +250,7 @@ class ApiRequestViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, Base
         if not api_requests:
             return Response({'error': 'No enabled API requests found in this project'}, status=status.HTTP_400_BAD_REQUEST)
         
-        context = {}  # 变量上下文
+        context: dict[str, Any] = {}  # 变量上下文
         results = []
         request_renderer = TemplateRenderer()
         

@@ -20,7 +20,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List, TYPE_CHECKING
+from typing import Dict, Any, Optional, List, cast, TYPE_CHECKING
 from datetime import datetime
 
 from core.context.markdown_store import MarkdownContextStore
@@ -498,7 +498,7 @@ class TokenEconomicsContextStore(MarkdownContextStore):
                 logger.info(
                     f'[ContextStore] [CACHE HIT] 温区摘要完全命中 (count={len(messages)})'
                 )
-                return cached_summary
+                return cast(StructuredSummary, cached_summary)
 
         summary = self.summarizer.generate_warm_summary(messages, self.token_calc)
 
@@ -557,7 +557,7 @@ class TokenEconomicsContextStore(MarkdownContextStore):
                 logger.info(
                     f'[ContextStore] [CACHE HIT] 温区摘要完全命中 (count={len(messages)})'
                 )
-                return cached_summary
+                return cast(StructuredSummary, cached_summary)
 
         summary = await self.summarizer.generate_warm_summary_async(messages, self.token_calc)
 
@@ -606,7 +606,7 @@ class TokenEconomicsContextStore(MarkdownContextStore):
                 logger.info(
                     f'[ContextStore] [CACHE HIT] 冷区摘要完全命中 (count={len(messages)})'
                 )
-                return cached_summary
+                return str(cached_summary)
 
         summary = self.summarizer.generate_cold_summary([], messages)
 
@@ -653,7 +653,7 @@ class TokenEconomicsContextStore(MarkdownContextStore):
                 logger.info(
                     f'[ContextStore] [CACHE HIT] 冷区摘要完全命中 (count={len(messages)})'
                 )
-                return cached_summary
+                return str(cached_summary)
 
         summary = await self.summarizer.generate_cold_summary_async([], messages)
 

@@ -32,7 +32,7 @@ warnings.warn(
 
 @shared_task(bind=True, name='testmanager_app.execute_collection')
 def execute_collection_task(
-    self,
+    self: Any,
     collection_id: int,
     execution_id: int,
     user_id: int | None = None,
@@ -102,7 +102,7 @@ def execute_collection_task(
         # - 并发：asyncio.run() + asyncio.gather() 同时发起
         # - 顺序：asyncio.run() + 循环顺序执行，支持失败即停
         # - 链式：纯同步执行（httpx.Client），支持变量传递
-        context = {} if execution_mode == 'chain' else None
+        context: dict[str, Any] | None = {} if execution_mode == 'chain' else None
         executions = strategy.execute_in_worker(
             collection_requests,
             user,
@@ -238,7 +238,7 @@ def _update_execution_error(execution_id: int, error_message: str) -> None:
 
 @shared_task(bind=True, name='testmanager_app.execute_api_request')
 def execute_api_request_task(
-    self,
+    self: Any,
     api_request_id: int,
     execution_id: int,
     user_id: int | None = None,
@@ -431,7 +431,7 @@ def get_task_status(task_id: str) -> dict[str, Any]:
 
 @shared_task(bind=True, name='testmanager_app.install_skill')
 def install_skill_task(
-    self,
+    self: Any,
     skill_id: str,
     skill_name: str | None = None,
 ) -> dict[str, Any]:

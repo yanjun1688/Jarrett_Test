@@ -191,13 +191,13 @@ class PlaywrightEngine:
         elif selector_type == 'name':
             return f"[name='{selector_value}']"
         elif selector_type == 'css':
-            return selector_value
+            return str(selector_value)
         elif selector_type == 'testid':
             return f"[data-testid='{selector_value}']"
         else:
             # 未知类型，尝试作为CSS选择器
             logger.warning(f"未知的选择器类型: {selector_type}，将作为CSS选择器使用")
-            return selector_value
+            return str(selector_value)
     
     def _get_semantic_locator(self, selector: Optional[Dict[str, Any]]) -> Any:
         """

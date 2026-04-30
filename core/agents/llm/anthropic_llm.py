@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class AnthropicLLMService(BaseLLMService):
     """Anthropic Claude LLM 服务实现"""
     
-    def _initialize_client(self):
+    def _initialize_client(self) -> None:
         """初始化 Anthropic 客户端"""
         import anthropic
         self.client = anthropic.AsyncAnthropic(
@@ -27,7 +27,7 @@ class AnthropicLLMService(BaseLLMService):
         prompt: str,
         system_message: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        **kwargs
+        **kwargs: Any
     ) -> str:
         """
         生成文本
@@ -43,11 +43,11 @@ class AnthropicLLMService(BaseLLMService):
         """
         try:
             # 转换对话历史格式
-            messages = []
+            messages: List[Dict[str, str]] = []
             
             if conversation_history:
                 # Anthropic 不在 history 中包含 system message
-                messages = conversation_history
+                messages = list(conversation_history)
             
             # 添加当前用户消息
             messages.append({
@@ -64,8 +64,11 @@ class AnthropicLLMService(BaseLLMService):
                 messages=messages  # type: ignore[arg-type]
             )
             
-            # 提取生成的文本
-            generated_text = response.content[0].text
+            # 提取生成的文本 - 只处理 TextBlock 类型
+            generated_text = ""
+            for block in response.content:
+                if hasattr(block, 'text'):
+                    generated_text += block.text
             
             logger.debug(f"Generated {len(generated_text)} characters")
             
@@ -81,7 +84,7 @@ class AnthropicLLMService(BaseLLMService):
         tools: List[Dict[str, Any]],
         system_message: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
-        **kwargs
+        **kwargs: Any
     ) -> Dict[str, Any]:
         """
         使用工具生成文本（支持 ReAct 模式）

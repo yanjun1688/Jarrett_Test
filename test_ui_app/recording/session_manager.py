@@ -72,7 +72,8 @@ class RecordingSessionManager:
         """获取会话数据"""
         cache_key = cls.SESSION_PREFIX + session_id
         try:
-            return cache.get(cache_key)
+            result: dict[str, Any] | None = cache.get(cache_key)
+            return result
         except Exception as e:
             logger.error(f"获取会话失败: {session_id}, 错误: {str(e)}")
             return None
@@ -118,7 +119,8 @@ class RecordingSessionManager:
         session = cls.get_session(session_id)
         if not session:
             return []
-        return session.get('steps', [])
+        result: list[dict[str, Any]] = session.get('steps', [])
+        return result
     
     @classmethod
     def delete_session(cls, session_id: str) -> bool:

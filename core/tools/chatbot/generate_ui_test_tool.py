@@ -168,7 +168,7 @@ class GenerateUITestTool(BaseTool):
         matches = re.findall(code_block_pattern, response, re.DOTALL)
 
         if matches:
-            return matches[0].strip()
+            return str(matches[0].strip())
 
         # 如果没有找到代码块，尝试提取整个响应中的代码行
         lines = response.split('\n')

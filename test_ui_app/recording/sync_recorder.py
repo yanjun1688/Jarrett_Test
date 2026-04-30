@@ -622,7 +622,7 @@ class SyncBrowserRecorder:
         """比较两个选择器是否指向同一元素"""
         if isinstance(sel1, dict) and isinstance(sel2, dict):
             return sel1.get('type') == sel2.get('type') and sel1.get('value') == sel2.get('value')
-        return sel1 == sel2
+        return bool(sel1 == sel2)
 
     def _add_action(
         self,
@@ -675,7 +675,8 @@ class SyncBrowserRecorder:
         if 'error' in result:
             logger.error(f"[SyncRecorder] 录制过程异常: {str(result['error'])}")
             return self.recorded_actions.copy()
-        return result.get('steps', [])
+        steps: list[dict[str, Any]] = result.get('steps', [])
+        return steps
 
     def _do_recording(
         self,

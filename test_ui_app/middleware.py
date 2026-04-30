@@ -2,6 +2,7 @@
 WebSocket认证中间件，支持Token认证
 """
 # pyright: reportAttributeAccessIssue=false
+from typing import Any
 import logging
 from urllib.parse import parse_qs
 from channels.middleware import BaseMiddleware
@@ -12,7 +13,7 @@ from testmanager_app.models import AuthToken
 logger = logging.getLogger(__name__)
 
 
-class TokenAuthMiddleware(BaseMiddleware):  # type: ignore[misc]
+class TokenAuthMiddleware(BaseMiddleware):
     """
     WebSocket Token认证中间件
     
@@ -20,7 +21,7 @@ class TokenAuthMiddleware(BaseMiddleware):  # type: ignore[misc]
     支持格式：ws://host/path?token=xxx 或 ws://host/path?token=xxx&other=value
     """
     
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> Any:
         # 只处理WebSocket连接
         if scope["type"] != "websocket":
             return await super().__call__(scope, receive, send)
@@ -58,7 +59,7 @@ class TokenAuthMiddleware(BaseMiddleware):  # type: ignore[misc]
         return await super().__call__(scope, receive, send)
     
     @database_sync_to_async
-    def get_user_from_token(self, token_key):
+    def get_user_from_token(self, token_key: str) -> Any:
         """从token获取用户"""
         try:
             token = AuthToken.objects.select_related('user').get(key=token_key)
@@ -86,7 +87,7 @@ class TokenAuthMiddleware(BaseMiddleware):  # type: ignore[misc]
             return AnonymousUser()
     
     @database_sync_to_async
-    def get_user_from_session(self, scope):
+    def get_user_from_session(self, scope: Any) -> Any:
         """从session获取用户（向后兼容）"""
         from django.contrib.sessions.models import Session
         from django.contrib.auth import get_user_model

@@ -179,7 +179,7 @@ class UITestScriptViewSet(viewsets.ModelViewSet):
             
             # 1. 先创建执行记录（status=pending），让前端可以立即获取 execution_id
             # started_at 不在此处设置，而是在实际执行开始时设置（在 Celery 任务中）
-            execution = UITestExecution.objects.create(
+            execution = UITestExecution.objects.create(  # type: ignore[misc]
                 script=script,
                 executed_by=request.user,
                 status='pending'

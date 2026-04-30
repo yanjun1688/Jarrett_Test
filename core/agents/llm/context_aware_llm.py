@@ -15,10 +15,10 @@ class ContextAwareLLMService(BaseLLMService):
     def __init__(
         self,
         config: Optional[LLMConfig] = None,
-        rag_retriever=None,
+        rag_retriever: Optional[Any] = None,
         max_context_length: int = 8000,
         context_compression: bool = True
-    ):
+    ) -> None:
         """
         初始化上下文感知LLM服务
         
@@ -34,7 +34,7 @@ class ContextAwareLLMService(BaseLLMService):
         self.context_compression = context_compression
         self.conversation_history: List[Dict[str, Any]] = []
     
-    def _initialize_client(self):
+    def _initialize_client(self) -> None:
         """Initialize client - ContextAwareLLMService wraps another LLM service"""
         pass
     
@@ -44,7 +44,7 @@ class ContextAwareLLMService(BaseLLMService):
         system_message: Optional[str] = None,
         top_k: int = 3,
         use_rag: bool = True,
-        **kwargs
+        **kwargs: Any
     ) -> str:
         """
         使用RAG增强生成
@@ -132,7 +132,7 @@ class ContextAwareLLMService(BaseLLMService):
         query: str,
         response: str,
         retrieved_docs: List[Dict[str, Any]]
-    ):
+    ) -> None:
         """
         更新对话历史
         
@@ -157,14 +157,14 @@ class ContextAwareLLMService(BaseLLMService):
         # 管理历史长度（避免超出Token限制）
         self._trim_conversation_history()
     
-    def _trim_conversation_history(self):
+    def _trim_conversation_history(self) -> None:
         """裁剪对话历史以适应Token限制"""
         if not self.conversation_history:
             return
         
         # 粗略估算Token数
         total_tokens = 0
-        kept_messages = []
+        kept_messages: List[Dict[str, Any]] = []
         
         # 从后往前遍历，保留最近的消息
         for message in reversed(self.conversation_history):
@@ -179,7 +179,7 @@ class ContextAwareLLMService(BaseLLMService):
         self.conversation_history = kept_messages
         logger.debug(f"Trimmed conversation history to {len(self.conversation_history)} messages (~{total_tokens} tokens)")
     
-    def clear_history(self):
+    def clear_history(self) -> None:
         """清空对话历史"""
         self.conversation_history = []
         logger.info("Conversation history cleared")

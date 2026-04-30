@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 const WS_BASE_URL = process.env.REACT_APP_WS_BASE_URL || 'ws://localhost:8000';
 
-export const useAdvancedPressureTestWebSocket = (token) => {
+export const useAdvancedPressureTestWebSocket = (getToken) => {
   const [connected, setConnected] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [running, setRunning] = useState(false);
@@ -13,6 +13,8 @@ export const useAdvancedPressureTestWebSocket = (token) => {
   
   const wsRef = useRef(null);
   const executionIdRef = useRef(null);
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
 
   const connect = useCallback((executionId) => {
     if (wsRef.current) {
@@ -20,6 +22,7 @@ export const useAdvancedPressureTestWebSocket = (token) => {
     }
     
     executionIdRef.current = executionId;
+    const token = typeof getTokenRef.current === 'function' ? getTokenRef.current() : getTokenRef.current;
     const wsUrl = `${WS_BASE_URL}/ws/advanced-pressure-test/${executionId}/?token=${token}`;
     
     const ws = new WebSocket(wsUrl);
@@ -90,7 +93,7 @@ export const useAdvancedPressureTestWebSocket = (token) => {
       setError('WebSocket error');
       setConnected(false);
     };
-  }, [token]);
+  }, []);
 
   const startTest = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {

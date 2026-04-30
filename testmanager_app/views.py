@@ -150,7 +150,7 @@ def yaml_to_collection(request: Request, project_id: int) -> Response:
         # 使用新的转换器创建 TestScript
         converter = YamlToScriptConverter(
             project_id=project_id,
-            created_by_id=request.user.id
+            created_by_id=request.user.id or 0
         )
         
         success, result = converter.convert(

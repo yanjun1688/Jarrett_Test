@@ -338,7 +338,7 @@ class ConcurrentExecutionStrategy(CollectionExecutionStrategyInterface):
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # 格式化结果
-        formatted_results = []
+        formatted_results: list[dict[str, Any]] = []
         for idx, result in enumerate(results):
             if isinstance(result, Exception):
                 formatted_results.append(self._create_error_result(
@@ -346,7 +346,7 @@ class ConcurrentExecutionStrategy(CollectionExecutionStrategyInterface):
                     str(result)
                 ))
             else:
-                formatted_results.append(result)
+                formatted_results.append(result)  # type: ignore[arg-type]
 
         return formatted_results
 
@@ -564,7 +564,7 @@ class ChainExecutionStrategy(CollectionExecutionStrategyInterface):
 
         return executions
 
-    def _execute_single_request_simplified(self, coll_req, context: Dict[str, Any], request_renderer) -> Dict[str, Any]:
+    def _execute_single_request_simplified(self, coll_req: Any, context: Dict[str, Any], request_renderer: Any) -> Dict[str, Any]:
         """执行单个请求（简化模式，使用同步 httpx）"""
         from testmanager_app.utils.sync_http_utils import execute_request_direct
         
@@ -936,7 +936,7 @@ class ChainExecutionStrategy(CollectionExecutionStrategyInterface):
             - 如果变量提取失败或断言失败，返回 (context, True, logs)
             - 如果成功，返回 (new_context, False, logs)
         """
-        logs = []
+        logs: list[str] = []
         
         if not extract_rules:
             return context, False, logs
@@ -1124,7 +1124,7 @@ class ChainExecutionStrategy(CollectionExecutionStrategyInterface):
 class RequestRenderer:
     """请求渲染器（处理模板变量）"""
 
-    def render(self, api_request, context: Dict[str, Any]) -> Dict[str, Any]:
+    def render(self, api_request: Any, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         渲染请求中的模板变量 - 修复版本，支持嵌套变量
 
@@ -1203,7 +1203,7 @@ class CollectionExecutionStrategyFactory:
         raise ValueError(f"Unsupported execution mode: {execution_mode}")
 
     @classmethod
-    def register_strategy(cls, strategy: CollectionExecutionStrategyInterface):
+    def register_strategy(cls, strategy: CollectionExecutionStrategyInterface) -> None:
         """注册新的策略"""
         cls._initialize_strategies()
         

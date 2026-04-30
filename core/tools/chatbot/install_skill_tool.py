@@ -36,7 +36,7 @@ class InstallSkillTool(BaseTool):
     def _get_required_parameters(self) -> List[str]:
         return ["skill_id"]
     
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs: Any) -> ToolResult:
         skill_id = kwargs.get("skill_id")
         skill_name = kwargs.get("skill_name")
         

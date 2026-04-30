@@ -82,7 +82,7 @@ class TestReportViewSet(QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
             project=project,
             start_date=start_date,
             end_date=end_date,
-            created_by=created_by
+            created_by=created_by  # type: ignore[arg-type]
         )
 
         return Response(report_data, status=status.HTTP_201_CREATED)

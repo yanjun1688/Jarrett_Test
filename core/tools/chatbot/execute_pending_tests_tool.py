@@ -21,7 +21,7 @@ class ExecutePendingTestsTool(BaseTool):
             version="1.0.0",
             timeout=120
         )
-        self._api_orchestrator = None
+        self._api_orchestrator: Optional[Any] = None
     
     def _build_parameters_schema(self) -> Dict[str, Any]:
         return {

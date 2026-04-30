@@ -3,10 +3,12 @@
 包含：TestCaseViewSet, TestExecutionViewSet
 """
 
+from typing import Any
 import logging
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
 
 from core.models import TestCase, TestExecution
 from testmanager_app.serializers import (
@@ -34,13 +36,13 @@ class TestCaseViewSet(QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
 
     filter_int_fields = ['project', 'module']
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[BaseSerializer]:
         if self.action in ['create', 'update', 'partial_update']:
             return TestCaseCreateSerializer
         return TestCaseSerializer
 
     @action(detail=True, methods=['post'])
-    def execute(self, request, pk=None):
+    def execute(self, request: Any, pk: Any = None) -> Response:
         """执行测试用例"""
         testcase = self.get_object()
 
@@ -72,7 +74,7 @@ class TestExecutionViewSet(QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
 
     select_related_fields = ['test_case', 'api_request', 'executed_by']
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[BaseSerializer]:
         if self.action == 'list':
             return TestExecutionListSerializer
         if self.action in ['create', 'update', 'partial_update']:
@@ -80,7 +82,7 @@ class TestExecutionViewSet(QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
         return TestExecutionSerializer
 
     @action(detail=True, methods=['post'])
-    def update_status(self, request, pk=None):
+    def update_status(self, request: Any, pk: Any = None) -> Response:
         """更新执行状态"""
         execution = self.get_object()
         new_status = request.data.get('status')

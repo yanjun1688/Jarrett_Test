@@ -133,7 +133,7 @@ def get_settings() -> JTestSettings:
     return settings
 
 
-def update_settings(**kwargs) -> JTestSettings:
+def update_settings(**kwargs: Any) -> JTestSettings:
     """更新配置"""
     global settings
     settings = JTestSettings(**{**settings.dict(), **kwargs})

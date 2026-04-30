@@ -407,7 +407,7 @@ class ToolsSchemaSection(PromptSection):
         return False
     
     def should_include(self, context: Dict[str, Any]) -> bool:
-        return context.get("include_tools_schema", False)
+        return bool(context.get("include_tools_schema", False))
     
     def render(self, context: Dict[str, Any]) -> str:
         tools = context.get("available_tools", [])
@@ -441,7 +441,7 @@ class SkillsRegistrySection(PromptSection):
         return False
     
     def should_include(self, context: Dict[str, Any]) -> bool:
-        return context.get("include_skills", True)
+        return bool(context.get("include_skills", True))
     
     def render(self, context: Dict[str, Any]) -> str:
         skills = context.get("installed_skills")
@@ -493,7 +493,7 @@ class ConversationHistorySection(PromptSection):
         return False
     
     def should_include(self, context: Dict[str, Any]) -> bool:
-        return context.get("include_conversation_history", True)
+        return bool(context.get("include_conversation_history", True))
     
     def render(self, context: Dict[str, Any]) -> str:
         optimized_history = context.get("optimized_history", [])

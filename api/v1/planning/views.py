@@ -178,7 +178,7 @@ class PlanTestView(APIView):
     
     def _count_node_categories(self, flow_ir: FlowIR) -> Dict[str, int]:
         """Count node categories in flow"""
-        categories = {}
+        categories: dict[str, int] = {}
         
         for node in flow_ir.nodes.values():
             node_type = node.get('type', 'unknown')  # type: ignore[attr-defined]
@@ -272,10 +272,11 @@ class RefinePlanView(APIView):
             )
             
             # Refine plan
+            flow_ir_obj = FlowIR.from_dict(flow_ir)
             refinement_result = await agent.refine_plan(
-                flow_ir=flow_ir,
+                flow_ir=flow_ir_obj,
                 feedback=feedback,
-                constraints=constraints  # type: ignore[call-arg]
+                additional_context=constraints
             )
             
             if not refinement_result.get('success', False):

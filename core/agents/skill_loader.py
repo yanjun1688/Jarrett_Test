@@ -635,7 +635,7 @@ class SkillLoader:
             module = importlib.import_module(module_path)
             entrypoint = config["execution"].get("entrypoint", "execute")
             
-            executor = getattr(module, entrypoint, None)
+            executor: Optional[Callable[..., Any]] = getattr(module, entrypoint, None)
             if executor is None:
                 raise ValueError(f"模块 {module_path} 中找不到 {entrypoint} 函数")
             

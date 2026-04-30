@@ -108,7 +108,7 @@ class QueryKnowledgeTool(BaseTool):
 
             def _query() -> List[Dict[str, Any]]:
                 return list(
-                    KnowledgeDocument.objects.filter(
+                    KnowledgeDocument.objects.filter(  # type: ignore[arg-type]
                         knowledge_base_id=knowledge_base_id,
                     ).values('id', 'document_type', 'content', 'file_path', 'metadata').order_by('-created_at')
                 )

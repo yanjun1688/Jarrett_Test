@@ -31,8 +31,10 @@ from channels.routing import ProtocolTypeRouter, URLRouter
 django_asgi_app: Any = get_asgi_application()
 
 from channels.auth import AuthMiddlewareStack
+from channels.routing import ChannelNameRouter
 from test_ui_app.middleware import TokenAuthMiddlewareStack
-import test_ui_app.routing
+import test_ui_app.routing as test_ui_routing
+import testmanager_app.routing as testmanager_routing
 
 
 class MCPLifespanMiddleware:
@@ -42,17 +44,17 @@ class MCPLifespanMiddleware:
     处理 ASGI lifespan 事件，在应用启动/关闭时管理 MCP 连接
     """
     
-    def __init__(self, app):
+    def __init__(self, app: Any) -> None:
         self.app = app
         self._mcp_initialized = False
     
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         if scope["type"] == "lifespan":
             await self._handle_lifespan(scope, receive, send)
         else:
             await self.app(scope, receive, send)
     
-    async def _handle_lifespan(self, scope, receive, send):
+    async def _handle_lifespan(self, scope: Any, receive: Any, send: Any) -> None:
         message = await receive()
         
         if message["type"] == "lifespan.startup":
@@ -92,7 +94,7 @@ application = MCPLifespanMiddleware(
         "http": django_asgi_app,
         "websocket": TokenAuthMiddlewareStack(
             URLRouter(
-                test_ui_app.routing.websocket_urlpatterns
+                test_ui_routing.websocket_urlpatterns + testmanager_routing.websocket_urlpatterns
             )
         ),
     })

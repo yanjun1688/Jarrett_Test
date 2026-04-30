@@ -279,9 +279,6 @@ class YamlValidator:
         self, text: str, location: str, defined_vars: set[str],
     ) -> None:
         """检查字符串中的变量语法"""
-        if not isinstance(text, str):
-            return
-
         if '{{' in text:
             if '}}' not in text:
                 self.validation_errors.append({
@@ -364,9 +361,6 @@ class YamlValidator:
         self, text: str, location: str, variables: Dict[str, List[str]],
     ) -> None:
         """从字符串收集变量"""
-        if not isinstance(text, str):
-            return
-
         for var in self._extract_variables_from_string(text):
             var_name = var.strip()
             if '|' in var_name:
