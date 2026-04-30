@@ -13,7 +13,6 @@ Chatbot Agent - Native Function Calling 架构
 """
 # pyright: reportAttributeAccessIssue=false, reportArgumentType=false
 from typing import Dict, Any, Optional, List
-from datetime import datetime
 import logging
 import re
 import os
@@ -498,7 +497,7 @@ class ChatbotAgent(BaseAgent):
             for tc in tool_calls:
                 tc_info = self._extract_tool_call_info(tc)
                 logger.info(f'[ChatBot]   选择工具: {tc_info["name"]}')
-            response = await self._handle_tool_calls(tool_calls, message, test_type=test_type)
+            response = await self._handle_tool_calls(tool_calls, message, test_type=test_type, project_id=project_id)
         else:
             response_text = result.get("response", "")
             logger.info(f"[ChatBot] LLM 直接回复，长度: {len(response_text)} 字符")
@@ -587,7 +586,7 @@ class ChatbotAgent(BaseAgent):
         
         return {'name': func_name, 'arguments': func_args if isinstance(func_args, dict) else {}}
 
-    async def _handle_tool_calls(self, tool_calls: Any, message: str, test_type: Optional[str] = None) -> Dict[str, Any]:
+    async def _handle_tool_calls(self, tool_calls: Any, message: str, test_type: Optional[str] = None, project_id: Optional[int] = None) -> Dict[str, Any]:
         """
         处理 LLM 返回的 tool_calls。
 
@@ -688,6 +687,8 @@ class ChatbotAgent(BaseAgent):
                         )
 
             try:
+                if project_id is not None and 'project_id' not in actual_args:
+                    actual_args = {**actual_args, 'project_id': project_id}
                 tool_result = await self.tool_orchestrator.execute(
                     actual_tool, 
                     execution_logger=self._execution_logger,
@@ -810,59 +811,6 @@ class ChatbotAgent(BaseAgent):
             "tool_used": True,
             "tool_result": text,
         }
-
-    async def _retrieve_knowledge(
-        self,
-        query: str,
-        project_id: Optional[int] = None,
-        top_k: int = 5
-    ) -> List[Dict[str, Any]]:
-        """
-        Retrieve knowledge from RAG
-
-        Args:
-            query: Search query
-            project_id: Project ID for filtering
-            top_k: Number of results to retrieve
-
-        Returns:
-            List of retrieved knowledge entries
-        """
-        try:
-            from core.agents.rag.knowledge_retriever import KnowledgeRetriever
-            from asgiref.sync import sync_to_async
-
-            retriever = KnowledgeRetriever()
-
-            if project_id:
-                logger.info(f"[ChatBot] Retrieving knowledge for project {project_id}")
-            else:
-                logger.info(f"[ChatBot] Retrieving knowledge globally (no project_id)")
-
-            results = await sync_to_async(retriever.search)(
-                query, top_k=top_k, project_id=project_id, boost_project=True
-            )
-
-            knowledge = []
-            for r in results:
-                knowledge.append({
-                    "content": r.get("content", ""),
-                    "document": r.get("content", ""),
-                    "metadata": r.get("metadata", {}),
-                    "distance": r.get("distance"),
-                    "score": 1.0 - (r.get("distance") or 0.0),
-                    "_retrieval_metadata": {
-                        "retrieved_at": datetime.now().isoformat(),
-                        "query": query
-                    }
-                })
-
-            logger.info(f"Retrieved {len(knowledge)} knowledge entries" + (f" for project {project_id}" if project_id else " globally"))
-            return knowledge
-
-        except Exception as e:
-            logger.error(f"Failed to retrieve knowledge: {e}", exc_info=True)
-            return []
 
     def _extract_skill_url(self, message: str) -> Optional[Dict[str, Any]]:
         """

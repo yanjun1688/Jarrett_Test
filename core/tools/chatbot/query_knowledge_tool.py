@@ -70,9 +70,11 @@ class QueryKnowledgeTool(BaseTool):
         query = kwargs.get('query')
         document_id = kwargs.get('document_id')
         doc_type = kwargs.get('doc_type')
+        project_id = kwargs.get('project_id')
 
         logger.info(f'[QueryKnowledge] mode={mode}, kb_id={knowledge_base_id}, '
-                     f'query={query!r}, doc_id={document_id}, doc_type={doc_type}')
+                     f'query={query!r}, doc_id={document_id}, doc_type={doc_type}, '
+                     f'project_id={project_id}')
 
         # list 和 search 模式：从 query 中自动识别知识库名称
         if mode in ('list', 'search') and not knowledge_base_id and query:
@@ -84,7 +86,7 @@ class QueryKnowledgeTool(BaseTool):
         if mode == 'list':
             return await self._handle_list(knowledge_base_id)
         elif mode == 'search':
-            return await self._handle_search(query, knowledge_base_id, doc_type)
+            return await self._handle_search(query, knowledge_base_id, doc_type, project_id)
         elif mode == 'get':
             return await self._handle_get(document_id)
         else:
@@ -165,6 +167,7 @@ class QueryKnowledgeTool(BaseTool):
         query: Optional[str],
         knowledge_base_id: Optional[int],
         doc_type: Optional[str],
+        project_id: Optional[int] = None,
     ) -> ToolResult:
         if not query:
             return ToolResult(
@@ -184,6 +187,7 @@ class QueryKnowledgeTool(BaseTool):
                 top_k=5,
                 doc_types=doc_types_list,
                 knowledge_base_id=knowledge_base_id,
+                project_id=project_id,
                 hybrid_search=True,
             )
             logger.info(f'[QueryKnowledge] search 结果: {len(results)} 条')

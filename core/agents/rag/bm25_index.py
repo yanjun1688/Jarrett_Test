@@ -145,15 +145,19 @@ class BM25Index:
         top_k: int = 50,
         doc_type: Optional[str] = None,
         doc_types: Optional[List[str]] = None,
+        knowledge_base_id: Optional[int] = None,
+        project_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
-        BM25 full-text search.
+        BM25 full-text search with metadata filtering.
 
         Args:
             query: Search query
             top_k: Max results
             doc_type: Single doc type filter (legacy)
             doc_types: Multiple doc types filter
+            knowledge_base_id: Filter by knowledge base
+            project_id: Filter by project
 
         Returns:
             List of {chunk_id, score, content, doc_type, title}
@@ -162,12 +166,17 @@ class BM25Index:
             parser = MultifieldParser(['content', 'title'], schema=self._schema)
             parsed = parser.parse(query)
 
-            results = searcher.search(parsed, limit=top_k)
+            results = searcher.search(parsed, limit=top_k * 3)
 
+            # Apply metadata filters
             if doc_type:
                 results = [r for r in results if r['doc_type'] == doc_type]
             elif doc_types:
                 results = [r for r in results if r['doc_type'] in doc_types]
+            if knowledge_base_id is not None:
+                results = [r for r in results if r['knowledge_base_id'] == knowledge_base_id]
+            if project_id is not None:
+                results = [r for r in results if r['project_id'] == project_id]
 
             return [
                 {

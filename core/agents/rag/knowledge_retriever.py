@@ -6,13 +6,18 @@ Implements RRF fusion for combining vector and BM25 results.
 """
 from __future__ import annotations
 
+import logging
 import re
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
+logger = logging.getLogger(__name__)
+
 from core.agents.rag.embedding_service import EmbeddingService
+from core.agents.rag.rag_metrics import RAGMetrics, Timer
 from core.agents.rag.vector_store import ChromaVectorStore
 from core.config import settings
+from shared.exceptions import IsolationViolation
 
 
 class KnowledgeRetriever:
@@ -31,6 +36,18 @@ class KnowledgeRetriever:
             from core.agents.rag.bm25_index import BM25Index
             self._bm25 = BM25Index()
         return self._bm25
+
+    @staticmethod
+    def _validate_isolation(
+        knowledge_base_id: Optional[int],
+        project_id: Optional[int],
+    ) -> None:
+        """Enforce at least one isolation dimension to prevent cross-KB data leakage."""
+        if knowledge_base_id is None and project_id is None:
+            raise IsolationViolation(
+                'search() requires knowledge_base_id or project_id for data isolation. '
+                'Pass at least one to scope the query.'
+            )
 
     def add_document(
         self,
@@ -91,6 +108,8 @@ class KnowledgeRetriever:
             hybrid_search: If True, use BM25 + Vector + RRF
             where_extra: Additional ChromaDB where filters
         """
+        self._validate_isolation(knowledge_base_id, project_id)
+
         if not hybrid_search or not settings.bm25_enabled:
             return self._vector_only_search(
                 query, top_k, doc_types, project_id,
@@ -98,23 +117,32 @@ class KnowledgeRetriever:
             )
 
         # 1. Vector search
-        query_embedding = self.embedding_service.embed_query(query)
+        with Timer() as embed_timer:
+            query_embedding = self.embedding_service.embed_query(query)
         where = self._build_where_clause(doc_types, project_id, knowledge_base_id)
         if where_extra:
             where = {'$and': [where, where_extra]} if where else where_extra
 
         vector_n = settings.bm25_top_k
-        vector_raw = self.vector_store.query(
-            query_embedding=query_embedding,
-            n_results=vector_n,
-            where=where if where else None,
-        )
+        with Timer() as chroma_timer:
+            vector_raw = self.vector_store.query(
+                query_embedding=query_embedding,
+                n_results=vector_n,
+                where=where if where else None,
+            )
 
-        # 2. BM25 search
-        try:
-            bm25_raw = self.bm25.search(query, top_k=settings.bm25_top_k, doc_types=doc_types)
-        except Exception:
-            bm25_raw = []
+        # 2. BM25 search (scoped by same isolation filters)
+        with Timer() as bm25_timer:
+            try:
+                bm25_raw = self.bm25.search(
+                    query,
+                    top_k=settings.bm25_top_k,
+                    doc_types=doc_types,
+                    knowledge_base_id=knowledge_base_id,
+                    project_id=project_id,
+                )
+            except Exception:
+                bm25_raw = []
 
         # 3. RRF fusion
         k = settings.rrf_k
@@ -166,6 +194,30 @@ class KnowledgeRetriever:
         if boost_project and project_id:
             formatted = self._boost_project_results(formatted, project_id, top_k)
 
+        # 5. Metrics: compute quality indicators
+        distances = vector_raw.get('distances', [[]])[0]
+        avg_distance = sum(distances) / len(distances) if distances else 0.0
+
+        top_scores = [r['rrf_score'] for r in formatted]
+        rrf_score_top_range = max(top_scores) - min(top_scores) if len(top_scores) > 1 else 0.0
+
+        total_ms = embed_timer.elapsed_ms + chroma_timer.elapsed_ms + bm25_timer.elapsed_ms
+        metrics = RAGMetrics(
+            total_latency_ms=total_ms,
+            embedding_latency_ms=embed_timer.elapsed_ms,
+            chromadb_latency_ms=chroma_timer.elapsed_ms,
+            bm25_latency_ms=bm25_timer.elapsed_ms,
+            result_count=len(formatted),
+            top_k=top_k,
+            avg_distance=avg_distance,
+            rrf_score_top_range=rrf_score_top_range,
+        )
+        metrics.log_issues(query)
+        logger.info(
+            'rag_search query=%s metrics=%s status=%s',
+            query[:80], metrics.to_log(), metrics.status(),
+        )
+
         return formatted[:top_k]
 
     def _vector_only_search(
@@ -179,18 +231,20 @@ class KnowledgeRetriever:
         where_extra: Optional[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """Fallback: vector-only search with keyword boost."""
-        query_embedding = self.embedding_service.embed_query(query)
+        with Timer() as embed_timer:
+            query_embedding = self.embedding_service.embed_query(query)
 
         where = self._build_where_clause(doc_types, project_id, knowledge_base_id)
         if where_extra:
             where = {'$and': [where, where_extra]} if where else where_extra
 
         n_results = top_k * 3
-        results = self.vector_store.query(
-            query_embedding=query_embedding,
-            n_results=n_results,
-            where=where if where else None,
-        )
+        with Timer() as chroma_timer:
+            results = self.vector_store.query(
+                query_embedding=query_embedding,
+                n_results=n_results,
+                where=where if where else None,
+            )
 
         formatted = self._format_results(results)
         formatted = self._apply_keyword_boost(formatted, query, top_k * 2)
@@ -198,33 +252,70 @@ class KnowledgeRetriever:
         if boost_project and project_id:
             formatted = self._boost_project_results(formatted, project_id, top_k)
 
+        # Metrics
+        distances = results.get('distances', [[]])[0]
+        avg_distance = sum(distances) / len(distances) if distances else 0.0
+
+        total_ms = embed_timer.elapsed_ms + chroma_timer.elapsed_ms
+        metrics = RAGMetrics(
+            total_latency_ms=total_ms,
+            embedding_latency_ms=embed_timer.elapsed_ms,
+            chromadb_latency_ms=chroma_timer.elapsed_ms,
+            result_count=len(formatted[:top_k]),
+            top_k=top_k,
+            avg_distance=avg_distance,
+        )
+        metrics.log_issues(query)
+        logger.info(
+            'rag_search query=%s metrics=%s status=%s',
+            query[:80], metrics.to_log(), metrics.status(),
+        )
+
         return formatted[:top_k]
 
     def semantic_search(
         self,
         query: str,
         top_k: int = 5,
+        knowledge_base_id: Optional[int] = None,
+        project_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Pure semantic search (backward compatibility)."""
-        return self.search(query, top_k=top_k)
+        return self.search(
+            query, top_k=top_k,
+            knowledge_base_id=knowledge_base_id,
+            project_id=project_id,
+        )
 
     def search_tests(
         self,
         query: str,
         source_types: List[str],
         top_k: int = 5,
+        knowledge_base_id: Optional[int] = None,
+        project_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Test case search (backward compatibility)."""
-        return self.search(query, top_k=top_k, doc_types=source_types)
+        return self.search(
+            query, top_k=top_k, doc_types=source_types,
+            knowledge_base_id=knowledge_base_id,
+            project_id=project_id,
+        )
 
     def search_documents(
         self,
         query: str,
         document_types: List[str],
         top_k: int = 5,
+        knowledge_base_id: Optional[int] = None,
+        project_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Document search (backward compatibility)."""
-        return self.search(query, top_k=top_k, doc_types=document_types)
+        return self.search(
+            query, top_k=top_k, doc_types=document_types,
+            knowledge_base_id=knowledge_base_id,
+            project_id=project_id,
+        )
 
     def delete_document(self, doc_id: str) -> None:
         """Delete a single document."""

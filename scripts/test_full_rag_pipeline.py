@@ -22,6 +22,7 @@ from core.agents.rag.bm25_index import BM25Index
 from core.agents.rag.embedding_service import EmbeddingService
 from core.agents.rag.vector_store import ChromaVectorStore
 from core.agents.rag.knowledge_retriever import KnowledgeRetriever
+from shared.exceptions import IsolationViolation
 
 TEST_PREFIX = 'test_full_rag_'
 
@@ -30,11 +31,14 @@ TEST_PREFIX = 'test_full_rag_'
 # ═══════════════════════════════════════════════════════════════
 
 DOCUMENTS = [
+    # ── Group A: KB 1 / Project 1 (电商业务文档) ──
     # ── PRD: 电商平台 ──
     {
         'id': f'{TEST_PREFIX}prd_user',
         'doc_type': 'prd',
         'title': '用户中心PRD v2.3',
+        'kb_id': 1,
+        'project_id': 1,
         'content': '''
 ## 用户登录
 
@@ -68,6 +72,8 @@ DOCUMENTS = [
         'id': f'{TEST_PREFIX}prd_order',
         'doc_type': 'prd',
         'title': '订单系统PRD',
+        'kb_id': 1,
+        'project_id': 1,
         'content': '''
 ## 创建订单
 
@@ -100,6 +106,8 @@ pending → paid → shipped → completed → deleted
         'id': f'{TEST_PREFIX}prd_payment',
         'doc_type': 'prd',
         'title': '支付模块PRD',
+        'kb_id': 1,
+        'project_id': 1,
         'content': '''
 ## 支付方式
 
@@ -126,6 +134,8 @@ H5 支付需要在微信浏览器内打开。
         'id': f'{TEST_PREFIX}prd_product',
         'doc_type': 'prd',
         'title': '商品管理PRD',
+        'kb_id': 1,
+        'project_id': 1,
         'content': '''
 ## 商品发布
 
@@ -147,6 +157,8 @@ H5 支付需要在微信浏览器内打开。
         'id': f'{TEST_PREFIX}prd_coupon',
         'doc_type': 'prd',
         'title': '优惠券系统PRD',
+        'kb_id': 1,
+        'project_id': 1,
         'content': '''
 ## 优惠券类型
 
@@ -173,6 +185,8 @@ H5 支付需要在微信浏览器内打开。
         'id': f'{TEST_PREFIX}prd_address',
         'doc_type': 'prd',
         'title': '地址管理PRD',
+        'kb_id': 1,
+        'project_id': 1,
         'content': '''
 ## 地址管理
 
@@ -192,11 +206,14 @@ H5 支付需要在微信浏览器内打开。
 地址不存在或已删除时提示用户重新选择。
         '''.strip(),
     },
+    # ── Group B: KB 2 / Project 1 (接口文档+测试规范) ──
     # ── API Docs ──
     {
         'id': f'{TEST_PREFIX}api_user_svc',
         'doc_type': 'api_doc',
         'title': '用户服务API',
+        'kb_id': 2,
+        'project_id': 1,
         'content': '''
 接口路径: /api/v1/user
 
@@ -221,6 +238,8 @@ POST /logout
         'id': f'{TEST_PREFIX}api_order_svc',
         'doc_type': 'api_doc',
         'title': '订单服务API',
+        'kb_id': 2,
+        'project_id': 1,
         'content': '''
 接口路径: /api/v1/order
 
@@ -245,6 +264,8 @@ GET /list
         'id': f'{TEST_PREFIX}bp_login_test',
         'doc_type': 'best_practice',
         'title': '登录功能测试规范',
+        'kb_id': 2,
+        'project_id': 1,
         'content': '''
 ## 登录测试场景
 
@@ -271,6 +292,8 @@ GET /list
         'id': f'{TEST_PREFIX}bp_payment_test',
         'doc_type': 'best_practice',
         'title': '支付功能测试要点',
+        'kb_id': 2,
+        'project_id': 1,
         'content': '''
 ## 支付测试
 
@@ -297,6 +320,8 @@ GET /list
         'id': f'{TEST_PREFIX}bp_security_test',
         'doc_type': 'best_practice',
         'title': '接口安全测试规范',
+        'kb_id': 2,
+        'project_id': 1,
         'content': '''
 ## 安全测试
 
@@ -322,6 +347,8 @@ GET /list
         'id': f'{TEST_PREFIX}code_api_test',
         'doc_type': 'code_example',
         'title': 'API测试代码示例 - Pytest',
+        'kb_id': 2,
+        'project_id': 1,
         'content': '''
 ```python
 def test_login_success(client):
@@ -363,6 +390,8 @@ def test_login_locked(client):
         'id': f'{TEST_PREFIX}code_order_test',
         'doc_type': 'code_example',
         'title': '订单测试代码示例 - Pytest',
+        'kb_id': 2,
+        'project_id': 1,
         'content': '''
 ```python
 def test_create_order_success(client, auth_header):
@@ -449,6 +478,8 @@ def test_ingest():
                 'chroma_id_prefix': TEST_PREFIX,
                 'doc_type': doc['doc_type'],
                 'title': doc['title'],
+                'knowledge_base_id': doc['kb_id'],
+                'project_id': doc['project_id'],
             }],
             ids=[doc['id']],
         )
@@ -457,6 +488,8 @@ def test_ingest():
             content=doc['content'],
             doc_type=doc['doc_type'],
             title=doc['title'],
+            knowledge_base_id=doc['kb_id'],
+            project_id=doc['project_id'],
         )
 
     from_previous = ChromaVectorStore().count() - len(DOCUMENTS)
@@ -473,27 +506,27 @@ def test_hybrid_search():
 
     # ─── Test 3: 语义搜索（向量优势） ───
     print_sep('Test 3: 语义搜索 — "付款方式"')
-    r = retriever.search('付款方式', top_k=5)
+    r = retriever.search('付款方式', top_k=5, project_id=1)
     print_results('付款方式', r)
     assert any('支付' in (x.get('content') or '') for x in r), 'Should find payment PRD'
     print('  PASS: 找到支付相关文档')
 
     # ─── Test 4: 关键词精确搜索（BM25 优势） ───
     print_sep('Test 4: 精确匹配 — "锁定30分钟"')
-    r = retriever.search('锁定30分钟', top_k=5)
+    r = retriever.search('锁定30分钟', top_k=5, project_id=1)
     print_results('锁定30分钟', r)
     assert any('锁定' in (x.get('content') or '') for x in r), 'Should find lock info'
     print('  PASS: 找到锁定规则')
 
     # ─── Test 5: 混合搜索（双路互补） ───
     print_sep('Test 5: 混合搜索 — "订单超时取消退款"')
-    r = retriever.search('订单超时取消退款', top_k=5)
+    r = retriever.search('订单超时取消退款', top_k=5, project_id=1)
     print_results('订单超时取消退款', r)
     print('  PASS: 双路检索无异常')
 
     # ─── Test 6: 短查询 ───
     print_sep('Test 6: 短查询 — "logout"')
-    r = retriever.search('logout', top_k=5)
+    r = retriever.search('logout', top_k=5, project_id=1)
     print_results('logout', r)
     assert any('logout' in (x.get('content') or '').lower() for _, x in [
         (i, x) for i, x in enumerate(r)
@@ -502,7 +535,7 @@ def test_hybrid_search():
 
     # ─── Test 7: 中英混 ───
     print_sep('Test 7: 中英混 — "API 创建订单"')
-    r = retriever.search('API 创建订单', top_k=5)
+    r = retriever.search('API 创建订单', top_k=5, project_id=1)
     print_results('API 创建订单', r)
     print('  PASS')
 
@@ -511,6 +544,7 @@ def test_hybrid_search():
     r = retriever.search(
         '我连续输了5次密码，现在账号登不上去了怎么办',
         top_k=5,
+        project_id=1,
     )
     print_results('密码输错5次登不上', r)
     assert any('锁定' in (x.get('content') or '') for x in r), 'Should explain lock mechanism'
@@ -518,7 +552,7 @@ def test_hybrid_search():
 
     # ─── Test 9: 类型过滤 api_doc ───
     print_sep('Test 9: 类型过滤 — 只查 API')
-    r = retriever.search('登录', top_k=5, doc_types=['api_doc'])
+    r = retriever.search('登录', top_k=5, doc_types=['api_doc'], project_id=1)
     print_results('登录 (filter: api_doc)', r)
     for item in r:
         assert item['metadata']['doc_type'] == 'api_doc', 'All results should be api_doc'
@@ -528,8 +562,8 @@ def test_hybrid_search():
     print_sep('Test 10: RRF 稳定性 — 多次检索结果一致性')
     queries = ['退款流程', '取消订单', '注册账号', '优惠券满减']
     for q in queries:
-        r1 = retriever.search(q, top_k=3)
-        r2 = retriever.search(q, top_k=3)
+        r1 = retriever.search(q, top_k=3, project_id=1)
+        r2 = retriever.search(q, top_k=3, project_id=1)
         ids1 = [x['id'] for x in r1]
         ids2 = [x['id'] for x in r2]
         assert ids1 == ids2, f'RRF inconsistent for "{q}"'
@@ -551,7 +585,7 @@ def test_logging_format():
     assert RAG_CONTEXT_LIMIT == 10, f'Expected 10, got {RAG_CONTEXT_LIMIT}'
 
     retriever = KnowledgeRetriever()
-    results = retriever.search('密码错误', top_k=10)
+    results = retriever.search('密码错误', top_k=10, project_id=1)
 
     # Simulate what _generate_answer does
     context_parts = []
@@ -576,37 +610,101 @@ def test_logging_format():
     print('  PASS: 上下文注入格式正确')
 
 
+def test_isolation_guard():
+    """Test 12: Isolation guard — search without scope raises IsolationViolation"""
+    print_sep('Test 12: 隔离守卫验证')
+
+    retriever = KnowledgeRetriever()
+
+    # 12a: search() without project_id or knowledge_base_id → raise
+    try:
+        retriever.search('付款方式', top_k=5)
+        assert False, 'Should have raised IsolationViolation'
+    except IsolationViolation:
+        print('  12a: 无隔离参数 → IsolationViolation ✅')
+
+    # Confirm project_id works as isolation
+    r = retriever.search('付款方式', top_k=5, project_id=1)
+    assert len(r) > 0, 'Should find results with project_id'
+    print(f'  12b: project_id 隔离 → {len(r)} results ✅')
+
+    # Confirm knowledge_base_id works as isolation
+    r = retriever.search('付款方式', top_k=5, knowledge_base_id=1)
+    assert len(r) > 0, 'Should find results with knowledge_base_id'
+    print(f'  12c: knowledge_base_id 隔离 → {len(r)} results ✅')
+
+    print('  PASS: 隔离守卫全部通过')
+
+
+def test_cross_kb_isolation():
+    """Test 13: Cross-KB isolation — KB1 docs not found in KB2"""
+    print_sep('Test 13: 跨知识库隔离验证')
+
+    retriever = KnowledgeRetriever()
+
+    # KB1 has e-commerce docs (payment, order, coupon), KB2 has testing docs
+
+    # Search KB1 for payment-related content
+    r_kb1 = retriever.search('支付退款', top_k=10, knowledge_base_id=1, project_id=1)
+    r_kb2 = retriever.search('支付退款', top_k=10, knowledge_base_id=2, project_id=1)
+
+    # KB1 should have payment PRD and order PRD
+    kb1_ids = {x['id'] for x in r_kb1}
+    kb2_ids = {x['id'] for x in r_kb2}
+    kb1_expected = {f'{TEST_PREFIX}prd_payment', f'{TEST_PREFIX}prd_order'}
+
+    assert kb1_expected.intersection(kb1_ids), (
+        f'KB1 should contain payment docs, got {kb1_ids}'
+    )
+    assert not kb1_expected.intersection(kb2_ids), (
+        f'KB2 should NOT contain payment docs, got {kb2_ids}'
+    )
+
+    # KB2 should have payment test best_practice instead
+    kb2_expected = {f'{TEST_PREFIX}bp_payment_test'}
+    assert kb2_expected.intersection(kb2_ids), (
+        f'KB2 should contain payment test docs, got {kb2_ids}'
+    )
+    assert not kb2_expected.intersection(kb1_ids), (
+        f'KB1 should NOT contain payment test docs, got {kb1_ids}'
+    )
+
+    print(f'  KB1 ({len(r_kb1)} results): ids={kb1_ids}')
+    print(f'  KB2 ({len(r_kb2)} results): ids={kb2_ids}')
+    print('  PASS: 跨知识库隔离正确')
+
+
 def test_error_handling():
-    """Test 12: Error handling — edge cases"""
-    print_sep('Test 12: 异常场景')
+    """Test 14: Error handling — edge cases"""
+    print_sep('Test 14: 异常场景')
 
     retriever = KnowledgeRetriever()
 
     # Empty query
-    r = retriever.search('', top_k=5)
+    r = retriever.search('', top_k=5, project_id=1)
     assert isinstance(r, list), 'Empty query should not crash'
     print('  Empty query: OK')
 
     # Special characters
-    r = retriever.search('!@#$%^&*()_+', top_k=5)
+    r = retriever.search('!@#$%^&*()_+', top_k=5, project_id=1)
     assert isinstance(r, list), 'Special chars should not crash'
     print('  Special chars: OK')
 
     # Very long query
-    r = retriever.search('测试' * 500, top_k=5)
+    r = retriever.search('测试' * 500, top_k=5, project_id=1)
     assert isinstance(r, list), 'Long query should not crash'
     print('  Super long query: OK')
 
     # Filter with no match
-    r = retriever.search('test', top_k=5, doc_types=['nonexistent'])
+    r = retriever.search('test', top_k=5, doc_types=['nonexistent'], project_id=1)
     print(f'  No-match filter: {len(r)} results (OK)')
 
     print('  PASS: 全部异常通过')
 
 
 def test_cli_demo():
-    """Test 13: Simulate CLI interaction"""
-    print_sep('Test 13: 模拟问答场景')
+    """Test 15: Simulate CLI interaction"""
+    print_sep('Test 15: 模拟问答场景')
 
     retriever = KnowledgeRetriever()
     test_cases = [
@@ -619,7 +717,7 @@ def test_cli_demo():
 
     all_ok = True
     for query, desc in test_cases:
-        r = retriever.search(query, top_k=3)
+        r = retriever.search(query, top_k=3, project_id=1)
         has_result = len(r) > 0
         status = '✅' if has_result else '❌'
         if not has_result:
@@ -633,8 +731,8 @@ def test_cli_demo():
 
 
 def test_data_cleanup():
-    """Test 14: Clean up test data"""
-    print_sep('Test 14: 数据清理')
+    """Test 16: Clean up test data"""
+    print_sep('Test 16: 数据清理')
     clean()
     bm25_count = BM25Index().count()
     print(f'  BM25 after cleanup: {bm25_count} (should be less)')
@@ -644,7 +742,7 @@ def test_data_cleanup():
 if __name__ == '__main__':
     print('=' * 65)
     print('  Full RAG Pipeline Test Suite')
-    print('  Coverage: Chunker | BM25 | Vector | RRF | Context | Logging')
+    print('  Coverage: Chunker | BM25 | Vector | RRF | Isolation | Logging')
     print('=' * 65)
 
     clean()
@@ -654,6 +752,8 @@ if __name__ == '__main__':
         test_ingest()
         test_hybrid_search()
         test_logging_format()
+        test_isolation_guard()
+        test_cross_kb_isolation()
         test_error_handling()
         test_cli_demo()
         test_data_cleanup()

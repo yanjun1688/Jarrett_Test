@@ -22,11 +22,12 @@ rag/
 ├── __init__.py                # 模块入口
 ├── knowledge_rag_agent.py     # 知识检索 Agent
 ├── rag_retriever_service.py   # RAG 检索器服务抽象
-├── knowledge_retriever.py     # 核心检索（双路 + RRF）
+├── knowledge_retriever.py     # 核心检索（双路 + RRF + 监控打点）
 ├── embedding_service.py       # Embedding 服务（MiniLM，384维）
 ├── vector_store.py            # ChromaDB 向量存储
 ├── bm25_index.py              # BM25 索引（Whoosh + jieba分词）
-└── chunker.py                 # 文档分块策略
+├── chunker.py                 # 文档分块策略
+└── rag_metrics.py             # 检索质量监控（RAGMetrics + Timer + 阈值）
 ```
 
 ## 核心组件
