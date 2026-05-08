@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from core.tools.base_tool import BaseTool, ToolResult
 from core.agents.llm import create_llm_service
@@ -30,11 +31,11 @@ class GenerateAPITestTool(BaseTool):
         return {
             'project_id': {
                 'type': 'integer',
-                'description': '项目 ID（必填）。如果用户未提供，请先询问用户选择项目。'
+                'description': '[DEPRECATED] 项目 ID（已弃用，后续版本移除）。保存脚本时需要通过 save_test_script 传入。'
             },
             'endpoint': {
                 'type': 'string',
-                'description': 'API 端点路径，如 /api/login'
+                'description': 'API 端点路径或完整 URL，如 /api/login 或 https://example.com/api/login'
             },
             'method': {
                 'type': 'string',
@@ -47,23 +48,21 @@ class GenerateAPITestTool(BaseTool):
             },
             'module_id': {
                 'type': 'integer',
-                'description': '模块 ID（可选）'
+                'description': '[DEPRECATED] 模块 ID（已弃用，后续版本移除）'
             }
         }
 
     def _get_required_parameters(self) -> List[str]:
-        return ['project_id', 'endpoint', 'method']
+        return ['endpoint', 'method']
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         """
         生成 API 测试用例，直接调用 LLM
 
         Args:
-            project_id: 项目 ID（必填）
-            endpoint: API 端点路径
+            endpoint: API 端点路径或完整 URL
             method: HTTP 方法
             description: 测试场景描述
-            module_id: 模块 ID
 
         Returns:
             包含测试用例的 ToolResult
@@ -72,14 +71,6 @@ class GenerateAPITestTool(BaseTool):
         endpoint = kwargs.get('endpoint')
         method = kwargs.get('method', 'GET').upper()
         description = kwargs.get('description', '')
-        module_id = kwargs.get('module_id')
-
-        if not project_id:
-            return ToolResult(
-                success=False,
-                data={},
-                error='缺少项目 ID。请先询问用户选择一个项目。'
-            )
 
         if not endpoint:
             return ToolResult(
@@ -87,6 +78,11 @@ class GenerateAPITestTool(BaseTool):
                 data={},
                 error='缺少必填参数: endpoint'
             )
+
+        # 兼容完整 URL：提取路径部分
+        parsed = urlparse(endpoint)
+        if parsed.path:
+            endpoint = parsed.path
 
         valid_methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
         if method not in valid_methods:
@@ -150,8 +146,6 @@ HTTP 方法: {method}
                 metadata={
                     'endpoint': endpoint,
                     'method': method,
-                    'project_id': project_id,
-                    'module_id': module_id,
                 },
             )
 

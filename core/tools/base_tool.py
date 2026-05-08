@@ -240,214 +240,41 @@ class BaseTool(ABC):
 
 
 class ToolRegistry:
-    """Registry for managing tools"""
-    
+    """唯一工具注册表"""
+
     def __init__(self) -> None:
         self._tools: Dict[str, BaseTool] = {}
         self.logger = logging.getLogger("tool.registry")
-    
+
     def register(self, tool: BaseTool, name: Optional[str] = None) -> None:
-        """
-        Register a tool
-        
-        Args:
-            tool: Tool to register
-            name: Optional name to register under (uses tool.name if not provided)
-        """
         register_name = name or tool.name
         if register_name in self._tools:
             self.logger.warning(f"Tool '{register_name}' already registered, overwriting")
-        
         self._tools[register_name] = tool
         self.logger.info(f"Tool '{register_name}' registered")
-    
+
     def get(self, name: str) -> Optional[BaseTool]:
-        """
-        Get a tool by name
-        
-        Args:
-            name: Tool name
-            
-        Returns:
-            Tool instance or None if not found
-        """
         return self._tools.get(name)
-    
-    def list(self) -> List[Dict[str, Any]]:
-        """
-        List all registered tools
-        
-        Returns:
-            List of tool information dictionaries
-        """
-        return [
-            {
-                'name': tool.name,
-                'description': tool.description,
-                'version': tool.version,
-                'schema': tool.get_schema()
-            }
-            for tool in self._tools.values()
-        ]
-    
-    async def execute(
-        self,
-        tool_name: str,
-        **kwargs: Any
-    ) -> ToolResult:
-        """
-        Execute a tool by name
-        
-        Args:
-            tool_name: Name of tool to execute
-            **kwargs: Tool parameters
-            
-        Returns:
-            Tool execution result
-        """
-        tool = self.get(tool_name)
-        if not tool:
-            return ToolResult(
-                success=False,
-                data={},
-                error=f"Tool '{tool_name}' not found"
-            )
-        
-        return await tool.execute_with_validation(**kwargs)
-    
+
+    def list_definitions(self) -> List[Dict[str, Any]]:
+        """返回 OpenAI function calling 格式的工具定义（不含过滤）"""
+        return [t.get_schema() for t in self._tools.values()]
+
+    def count(self) -> int:
+        return len(self._tools)
+
     def get_statistics(self) -> Dict[str, Any]:
-        """
-        Get registry statistics
-        
-        Returns:
-            Statistics dictionary
-        """
-        tools_stats = {}
+        tools_stats: Dict[str, Any] = {}
         total_executions = 0
         total_errors = 0
-        
         for name, tool in self._tools.items():
             stats = tool.get_statistics()
             tools_stats[name] = stats
             total_executions += stats['execution_count']
             total_errors += stats['error_count']
-        
         return {
             'total_tools': len(self._tools),
             'total_executions': total_executions,
             'total_errors': total_errors,
-            'tools': tools_stats
-        }
-
-
-# Global tool registry instance
-global_tool_registry: ToolRegistry = ToolRegistry()
-
-
-class LazyLoadingRegistry:
-    """
-    懒加载注册表 - 避免自动扫描技能目录
-    这个设计只在需要的时候才加载特定工具
-    """
-    
-    def __init__(self, max_tools: int = 10) -> None:
-        self._tools: Dict[str, BaseTool] = {}
-        self._loaded: bool = False
-        self._initial_tools: List[BaseTool] = []
-        self.logger = logging.getLogger("lazy_tool.registry")
-        
-    def register(self, tool: BaseTool, name: Optional[str] = None) -> None:
-        """
-        注册一个工具
-        
-        Args:
-            tool: 要注册的工具
-            name: 可选的工具名称（默认使用tool.name）
-        """
-        register_name = name or tool.name
-        if register_name not in self._tools:
-            self._tools[register_name] = tool
-        else:
-            self.logger.warning(f"Tool '{register_name}' already registered, overwriting")
-        
-        self.logger.info(f"Tool '{register_name}' registered")
-    
-    def get(self, name: str) -> Optional[BaseTool]:
-        """
-        根据名称获取工具
-        
-        Args:
-            name: 工具名称
-            
-        Returns:
-            工具实例或None
-        """
-        # 不进行自动加载，只返回已经注册的工具
-        return self._tools.get(name)
-    
-    def list(self) -> List[Dict[str, Any]]:
-        """
-        列出所有已注册的工具
-        
-        Returns:
-            工具信息字典列表
-        """
-        return [
-            {
-                'name': tool.name,
-                'description': tool.description,
-                'version': tool.version,
-                'schema': tool.get_schema()
-            }
-            for tool in self._tools.values()
-        ]
-    
-    async def execute(
-        self,
-        tool_name: str,
-        **kwargs: Any
-    ) -> ToolResult:
-        """
-        执行名为的工具
-        
-        Args:
-            tool_name: 要执行的工具名称
-            **kwargs: 工具参数
-            
-        Returns:
-            工具执行结果
-        """
-        tool = self.get(tool_name)
-        if not tool:
-            self.logger.error(f"Tool '{tool_name}' not found in registry")
-            return ToolResult(
-                success=False,
-                data={},
-                error=f"Tool '{tool_name}' not found"
-            )
-        
-        return await tool.execute_with_validation(**kwargs)
-    
-    def get_statistics(self) -> Dict[str, Any]:
-        """
-        获取注册表统计信息
-        
-        Returns:
-            统计信息字典
-        """
-        tools_stats = {}
-        total_executions = 0
-        total_errors = 0
-        
-        for name, tool in self._tools.items():
-            stats = tool.get_statistics()
-            tools_stats[name] = stats
-            total_executions += stats['execution_count']
-            total_errors += stats['error_count']
-        
-        return {
-            'total_tools': len(self._tools),
-            'total_executions': total_executions,
-            'total_errors': total_errors,
-            'tools': tools_stats
+            'tools': tools_stats,
         }

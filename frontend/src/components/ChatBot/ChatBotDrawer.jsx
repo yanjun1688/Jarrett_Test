@@ -123,18 +123,10 @@ const ChatBotDrawer = ({
     setMessages(prev => [...prev, userMessage]);
     setLoading(true);
 
-    const history = messages
-      .filter(m => m.role === 'user' || m.role === 'assistant')
-      .map(m => ({
-        role: m.role,
-        content: typeof m.content === 'string' ? m.content : (m.content?.response || m.content?.message || ''),
-      }));
-
     try {
       const response = await chatbotAPI.sendMessage({
         message: text,
         conversation_id: currentConvId,
-        conversation_history: history,
         provider: selectedModel.provider,
         model: selectedModel.name,
         system_message: systemMessage,
@@ -150,10 +142,11 @@ const ChatBotDrawer = ({
         const finalContent = response.data.response || response.data.message || '处理完成';
         const responseLogs = response.data.logs || [];
 
+        const hasOptions = response.data.options && response.data.options.length > 0;
         const aiMessage = {
           id: Date.now() + 1,
           role: 'assistant',
-          content: responseLogs.length > 0 ? {
+          content: (responseLogs.length > 0 || hasOptions) ? {
             type: 'progress',
             logs: responseLogs,
             processing: false,
@@ -161,6 +154,7 @@ const ChatBotDrawer = ({
               message: finalContent,
               response: finalContent,
               tool_result: response.data.tool_result,
+              options: response.data.options,
             },
           } : finalContent,
           timestamp: new Date().toISOString(),

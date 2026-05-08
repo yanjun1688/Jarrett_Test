@@ -113,14 +113,12 @@ ui_test_patterns = [
 ]
 
 skills_patterns = [
-    # [MCP] POST /skills/search/ - 新版 MCP Server 代理
+    # POST /skills/search/ - MCP Server 代理
     path('search/', skill_api_views.SkillSearchMCPView.as_view(), name='skill-search'),
-    
-    # GET /skills/local/ - 本地技能列表（保持兼容）
-    path('local/', skill_api_views.SkillLocalListView.as_view(), name='skill-local'),
-    
-    # POST /skills/execute/ - 执行技能（保持兼容）
-    path('execute/', skill_api_views.SkillExecuteView.as_view(), name='skill-execute'),
+    # POST /skills/install/ - MCP Server 代理
+    path('install/', skill_api_views.SkillInstallMCPView.as_view(), name='skill-install'),
+    # GET /skills/local/ - MCP Server 代理
+    path('local/', skill_api_views.SkillListMCPView.as_view(), name='skill-local'),
 ]
 
 urlpatterns = [

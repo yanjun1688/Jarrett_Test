@@ -97,15 +97,14 @@ class BehaviorRulesSection(PromptSection):
 
 ### 工具使用原则
 
-默认行为：直接回答，不调用工具。
-
-工具调用前提：
-- 用户意图与工具功能匹配
-- 参数可合理推断或已提供
+优先使用工具满足用户需求：
+- 用户请求涉及生成/执行/查询/保存 → 调用对应工具
+- 用户请求是闲聊或感谢 → 直接回复
 
 参数处理：
 - 参数完整 → 调用工具
-- 参数缺失或不明确 → 询问用户或直接回答
+- 参数缺失但可合理推断 → 补全后调用
+- 参数缺失且无法推断 → 询问用户
 
 保存到项目的规则：
 - 调用 save_test_script 或 save_test_case 前必须明确知道 project_id
@@ -153,12 +152,6 @@ class BehaviorRulesSection(PromptSection):
 
 知识库范围：仅包含用户上传的项目文档。
 
-历史推理规则：
-- 如果历史对话都是通用知识问答 → 继续直接回答，不调用工具
-- 如果历史包含成功工具调用且新请求参数完整 → 可能需要工具
-- 如果用户明确提到"项目文档"、"内部规范" → 考虑知识库工具
-- 保持回答风格一致性
-
 ### 必须遵守
 
 1. **先读代码再改代码**
@@ -174,6 +167,29 @@ class BehaviorRulesSection(PromptSection):
 3. **删除确认无用的东西**
    - 不保留"以防万一"的代码
    - 不搞兼容性垃圾
+
+### ReAct 任务完成规则
+
+1. **任务完成即停止**
+   - 当所有用户请求的操作都已成功执行（工具返回 success=True），**立即停止**调用工具，直接回复用户
+   - 不要重复执行已经成功的操作
+   - 不要为了"验证"而重新执行已完成的操作
+
+2. **一次到位**
+   - 能不调用工具就不要调用
+   - 如果用户只让"打开百度"，打开后直接回复"已打开"，不要继续做其他操作
+   - 如果工具返回了预期结果，认为该操作已完成
+
+3. **向用户展示选项时必须附带名称**
+   - 当工具返回了选项列表（如项目列表），向用户展示时**必须同时展示编号和名称**
+   - 正确示例："请选择项目：\\n- [1] 真实压测测试项目\\n- [2] crAPI压力测试项目"
+   - 错误示例："请选择项目 ID（1-2）"（用户看不到名称）
+
+### 生成测试用例规则
+
+1. 用户要求"生成测试"、"写个用例"等 → **必须调用 generate_api_test / generate_ui_test / generate_test 工具**
+2. 不要自己编示例，让工具生成
+3. project_id 在保存时才需要，生成时不需要
 
 ### 明确禁止
 
@@ -289,7 +305,19 @@ class ToolUsageGrammarSection(PromptSection):
 
 - 没有依赖关系的工具调用要并行
 - 例如：同时读取多个文件
-- 例如：同时执行多个搜索"""
+- 例如：同时执行多个搜索
+
+### 浏览器操作
+
+浏览器操作必须使用 mcp__playwright__* 工具：
+
+| 操作 | 必须使用 | 禁止使用 |
+|------|---------|---------|
+| 打开网页 | mcp__playwright__browser_navigate | bash + agent-browser |
+| 点击元素 | mcp__playwright__browser_click | bash + agent-browser |
+| 输入文本 | mcp__playwright__browser_type | bash + agent-browser |
+| 获取页面内容 | mcp__playwright__browser_snapshot | bash + agent-browser |
+| 填充表单 | mcp__playwright__browser_fill_form | bash + agent-browser |"""
 
 
 class ToneAndStyleSection(PromptSection):
@@ -430,30 +458,22 @@ class ToolsSchemaSection(PromptSection):
 
 
 class SkillsRegistrySection(PromptSection):
-    """Skills 注册表模块"""
-    
+    """Skills 注册表模块 — 渲染完整 SKILL.md 内容"""
+
     @property
     def name(self) -> str:
         return "skills_registry"
-    
+
     @property
     def is_static(self) -> bool:
         return False
-    
+
     def should_include(self, context: Dict[str, Any]) -> bool:
         return bool(context.get("include_skills", True))
-    
+
     def render(self, context: Dict[str, Any]) -> str:
         skills = context.get("installed_skills")
-        
-        if not skills:
-            try:
-                from core.agents.capability import global_capability_registry
-                manifest = global_capability_registry.get_manifest()
-                skills = [s.to_dict() for s in manifest.skills]
-            except ImportError:
-                skills = []
-        
+
         if not skills:
             return """### Skills 扩展能力
 
@@ -462,22 +482,23 @@ class SkillsRegistrySection(PromptSection):
 - agent-browser: 浏览器自动化
 - api-design-principles: API 设计原则
 - webapp-testing: Web 应用测试"""
-        
-        lines = ["### Skills 扩展能力", "以下 skills 已安装，可在任务中使用：", ""]
-        
-        for skill in skills:
-            name = skill.get("name", "")
-            description = skill.get("description", "")
-            allowed_tools = skill.get("allowed_tools", [])
-            
-            lines.append(f"#### {name}")
-            lines.append(f"{description}")
-            if allowed_tools:
-                lines.append(f"可用工具: {', '.join(allowed_tools)}")
-            lines.append("")
-        
-        lines.append("**使用方式**: 当任务匹配某个 skill 的触发场景时，调用 run_skill 工具执行。")
-        
+
+        lines = ["## Skills 指令", ""]
+        for s in skills:
+            name = s.get("name", "")
+            desc = s.get("description", "")
+            content = s.get("content", "")
+            tools = s.get("allowed_tools", [])
+
+            lines.append(f"### {name}")
+            if desc:
+                lines.append(f"**说明**: {desc}")
+            if tools:
+                lines.append(f"**可用工具**: {', '.join(tools)}")
+            if content:
+                lines.append(f"\n{content}\n")
+
+        lines.append("> 以上技能是操作指令，不是可调用函数。请使用 bash 等工具按指令执行。")
         return "\n".join(lines)
 
 
@@ -576,10 +597,9 @@ class EnvironmentInfoSection(PromptSection):
             }
             tool_name, test_desc, framework = tool_mapping.get(test_type, ('unknown', '未知类型', ''))
             
-            lines.append(f"**⚠️ 强制工具指令**: 用户已明确选择生成 **{test_desc}**")
-            lines.append(f"- **必须使用工具**: `{tool_name}`")
+            lines.append(f"**当前测试类型**: **{test_desc}**")
+            lines.append(f"- **推荐工具**: `{tool_name}`")
             lines.append(f"- **框架**: {framework}")
-            lines.append(f"- **禁止**: 使用其他生成工具（如 generate_ui_test/generate_api_test/generate_test）")
             lines.append("")
             
             if context.get("project_id"):

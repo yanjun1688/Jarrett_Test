@@ -30,6 +30,7 @@ class LLMConfig:
     provider: LLMProvider
     model_name: str
     api_key: str
+    base_url: Optional[str] = None
     temperature: float = 0.3
     max_tokens: int = 4096
     top_p: float = 1.0
@@ -126,15 +127,15 @@ class BaseLLMService:
         构建标准 OpenAI 格式的消息列表
 
         Args:
-            prompt: 用户提示
+            prompt: 用户提示（为空时不追加 user message）
             system_message: 系统消息
-            conversation_history: 对话历史
+            conversation_history: 对话历史（保留 tool_calls / tool_call_id）
             filter_system_from_history: 是否过滤历史中的 system 消息
 
         Returns:
             消息列表
         """
-        messages = []
+        messages: List[Dict[str, Any]] = []
 
         # 添加系统消息
         if system_message:
@@ -148,20 +149,31 @@ class BaseLLMService:
             for msg in conversation_history:
                 if filter_system_from_history and msg.get('role') == 'system':
                     continue
-                # 过滤掉 content 为空的消息（某些 API 不接受空 content）
-                content = msg.get('content')
-                if not content:
-                    continue
-                messages.append({
-                    "role": msg.get("role", "user"),
-                    "content": content
-                })
 
-        # 添加当前提示
-        messages.append({
-            "role": "user",
-            "content": prompt
-        })
+                role = msg.get('role', '')
+                content = msg.get('content')
+                tool_calls = msg.get('tool_calls')
+                tool_call_id = msg.get('tool_call_id')
+
+                # 跳过完全空的消息
+                if not content and not tool_calls and not tool_call_id:
+                    continue
+
+                if role == 'tool':
+                    new_msg: Dict[str, Any] = {'role': 'tool', 'tool_call_id': tool_call_id or '', 'content': content or ''}
+                elif role == 'assistant' and tool_calls:
+                    new_msg = {'role': 'assistant', 'content': content or '', 'tool_calls': tool_calls}
+                else:
+                    new_msg = {'role': role, 'content': content or ''}
+
+                messages.append(new_msg)
+
+        # 添加当前提示（仅当 prompt 非空）
+        if prompt:
+            messages.append({
+                "role": "user",
+                "content": prompt
+            })
 
         return messages
 
@@ -367,8 +379,8 @@ class OpenAICompatibleService(BaseLLMService):
         """
         import openai
 
-        # 子类可以通过设置 self.base_url 来自定义端点
-        base_url = getattr(self, 'base_url', None)
+        # 优先级: config.base_url (.env) > 子类 self.base_url > None
+        base_url = self.config.base_url or getattr(self, 'base_url', None)
 
         # 使用同步客户端
         self.client = openai.OpenAI(
