@@ -84,6 +84,9 @@ const ChatBotMessageRenderer = ({ content, onOptionSelect, onSendMessage }) => {
       if (result.message || result.response) {
         progressMd += '---\n\n' + parseMCPTextContent(result.message || result.response);
       }
+      if (result.options) {
+        toolResultData = { options: result.options };
+      }
       if (result.tool_result) {
         toolResultData = parseToolResultData(result.tool_result);
         if (!toolResultData) {

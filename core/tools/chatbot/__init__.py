@@ -9,7 +9,6 @@ from core.tools.chatbot.execute_pending_tests_tool import ExecutePendingTestsToo
 from core.tools.chatbot.query_knowledge_tool import QueryKnowledgeTool
 from core.tools.chatbot.query_test_scripts_tool import QueryTestScriptsTool
 from core.tools.chatbot.install_skill_tool import InstallSkillTool
-from core.tools.chatbot.run_skill_tool import RunSkillTool
 from core.tools.chatbot.query_project_tool import QueryProjectTool
 from core.tools.chatbot.generate_test_tool import GenerateTestTool
 from core.tools.chatbot.save_test_case_tool import SaveTestCaseTool
@@ -23,7 +22,6 @@ __all__ = [
     'QueryKnowledgeTool',
     'QueryTestScriptsTool',
     'InstallSkillTool',
-    'RunSkillTool',
     'QueryProjectTool',
     'GenerateTestTool',
     'SaveTestCaseTool',

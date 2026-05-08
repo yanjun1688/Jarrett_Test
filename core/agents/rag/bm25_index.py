@@ -61,10 +61,10 @@ class BM25Index:
         return cls._instance
 
     def __init__(self) -> None:
-        if hasattr(self, '_initialized') and self._initialized:
+        if getattr(self, '_initialized', False):
             return
         with self._lock:
-            if hasattr(self, '_initialized') and self._initialized:
+            if getattr(self, '_initialized', False):
                 return
             self._index_path = self._resolve_path()
             self._schema = Schema(
@@ -205,7 +205,7 @@ class BM25Index:
         count = writer.delete_by_query(Prefix('chunk_id', prefix))
         writer.commit()
         logger.info(f'[BM25] Deleted {count} docs with prefix {prefix}')
-        return count
+        return int(count)
 
     def delete_by_id(self, chunk_id: str) -> None:
         """Delete a single chunk by exact chunk_id."""
@@ -216,7 +216,7 @@ class BM25Index:
     def count(self) -> int:
         """Total documents in index."""
         with self._ix.searcher() as searcher:
-            return searcher.doc_count()
+            return int(searcher.doc_count())
 
     def rebuild_from_scratch(self) -> None:
         """Delete and recreate the entire index."""

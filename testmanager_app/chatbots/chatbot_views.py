@@ -489,29 +489,18 @@ class EnhancedChatBotView(APIView):
                 conversation.title = message[:30]
                 await sync_to_async(conversation.save)(update_fields=["title", "updated_at"])
 
-            if result.get("tool_result") and result.get("tool_used"):
-                tool_result = result.get("tool_result")
-                if isinstance(tool_result, dict):
-                    if "test_cases" in tool_result:
-                        await sync_to_async(ConversationService.set_pending_tests)(
-                            conversation_id=conv_id_str,
-                            user=request.user,  # type: ignore[arg-type]
-                            tests={"api": tool_result}
-                        )
-
             response_data = {
                 "success": result.get("success", True),
                 "response": assistant_message,
-                "intent": result.get("intent"),
-                "intent_details": result.get("intent_details"),
                 "tool_used": result.get("tool_used", False),
-                "tool_result": result.get("tool_result"),
-                "logs": result.get("logs", []),
+                "iterations": result.get("iterations"),
+                "stopped_reason": result.get("stopped_reason"),
                 "model": provider,
                 "provider": provider,
-                "timestamp": result.get("timestamp"),
-                "conversation_id": conv_id_str
+                "conversation_id": conv_id_str,
             }
+            if result.get("options"):
+                response_data["options"] = result["options"]
 
             return Response(response_data, status=status.HTTP_200_OK)
 

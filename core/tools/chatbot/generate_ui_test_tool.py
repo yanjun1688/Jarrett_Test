@@ -29,7 +29,7 @@ class GenerateUITestTool(BaseTool):
         return {
             'project_id': {
                 'type': 'integer',
-                'description': '项目 ID（必填）。如果用户未提供，请先询问用户选择项目。'
+                'description': '[DEPRECATED] 项目 ID（已弃用，后续版本移除）。保存脚本时需要通过 save_test_script 传入。'
             },
             'description': {
                 'type': 'string',
@@ -47,14 +47,13 @@ class GenerateUITestTool(BaseTool):
         }
 
     def _get_required_parameters(self) -> List[str]:
-        return ['project_id', 'description']
+        return ['description']
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         """
         生成 UI 测试脚本，直接调用 LLM
 
         Args:
-            project_id: 项目 ID（必填）
             description: 测试场景描述
             url: 要测试的网页 URL
             actions: 要执行的操作列表
@@ -66,13 +65,6 @@ class GenerateUITestTool(BaseTool):
         description = kwargs.get('description')
         url = kwargs.get('url')
         actions = kwargs.get('actions', [])
-
-        if not project_id:
-            return ToolResult(
-                success=False,
-                data={},
-                error='缺少项目 ID。请先询问用户选择一个项目。'
-            )
 
         if not description:
             return ToolResult(
@@ -146,7 +138,6 @@ class GenerateUITestTool(BaseTool):
                 metadata={
                     'url': url,
                     'description': description,
-                    'project_id': project_id,
                     'actions': actions
                 }
             )

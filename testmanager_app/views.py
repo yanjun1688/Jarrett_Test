@@ -32,10 +32,6 @@ from .chatbots.chatbot_views import (
     GetAvailableToolsView, TestToolExecutionView,
     ConversationListView, ConversationDetailView, CacheStatsView
 )
-from .controllers.skill_api_views import (
-    SkillRemoteSearchView, SkillLocalListView, SkillExecuteView
-)
-
 __all__ = [
     'yaml_to_collection',
     'validate_yaml_config',
@@ -77,10 +73,6 @@ __all__ = [
     'ConversationListView',
     'ConversationDetailView',
     'CacheStatsView',
-    
-    'SkillRemoteSearchView',
-    'SkillLocalListView',
-    'SkillExecuteView',
 ]
 
 from rest_framework.decorators import api_view, permission_classes

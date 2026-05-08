@@ -105,11 +105,12 @@ class AnthropicLLMService(BaseLLMService):
             
             if conversation_history:
                 messages = conversation_history
-            
-            messages.append({
-                "role": "user",
-                "content": prompt
-            })
+
+            if prompt:
+                messages.append({
+                    "role": "user",
+                    "content": prompt
+                })
             
             # 调用 Anthropic API with tools
             response = await self.client.messages.create(
@@ -131,8 +132,9 @@ class AnthropicLLMService(BaseLLMService):
                     generated_text += block.text
                 elif block.type == "tool_use":
                     tool_calls.append({
+                        "id": block.id,
                         "name": block.name,
-                        "input": block.input
+                        "input": block.input,
                     })
             
             return {

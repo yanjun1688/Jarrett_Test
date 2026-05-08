@@ -12,10 +12,10 @@ class JTestSettings(BaseSettings):
     """JTest项目统一配置"""
     
     # LLM配置
-    llm_provider: str = Field(default="zhipu", description="LLM提供商")
+    llm_provider: str = Field(default="qwen", description="LLM提供商")
     llm_api_key: Optional[str] = Field(default=None, description="LLM API密钥")
     llm_base_url: Optional[str] = Field(default=None, description="LLM基础URL")
-    llm_model: str = Field(default="glm-5", description="LLM模型名称")
+    llm_model: str = Field(default="qwen3-coder-plus", description="LLM模型名称")
     llm_temperature: float = Field(default=0.1, ge=0.0, le=2.0, description="LLM温度")
     llm_max_tokens: int = Field(default=4000, ge=1, description="LLM最大token数")
     
@@ -83,38 +83,67 @@ class JTestSettings(BaseSettings):
     @model_validator(mode='before')
     @classmethod
     def load_llm_config_from_env(cls, values):
-        """从环境变量读取正确的 LLM 配置"""
-        provider = values.get('llm_provider', 'zhipu')
-        
+        """从环境变量读取 LLM 配置，自动推断 provider"""
+        provider = values.get('llm_provider')
+
+        # 未显式设置 provider 时自动检测
+        if not provider:
+            provider = cls._detect_provider()
+        values['llm_provider'] = provider
+
         # 读取对应的 API Key
-        if not values.get('llm_api_key'):
-            if provider == 'zhipu':
-                values['llm_api_key'] = os.getenv('ZHIPU_API_KEY')
-            elif provider == 'qwen':
-                values['llm_api_key'] = os.getenv('DASHSCOPE_API_KEY')
-            elif provider == 'openai':
-                values['llm_api_key'] = os.getenv('OPENAI_API_KEY')
-            elif provider == 'anthropic':
-                values['llm_api_key'] = os.getenv('ANTHROPIC_API_KEY')
-            elif provider == 'deepseek':
-                values['llm_api_key'] = os.getenv('DEEPSEEK_API_KEY')
-        
+        key_map = {
+            'zhipu': 'ZHIPU_API_KEY',
+            'qwen': 'DASHSCOPE_API_KEY',
+            'openai': 'OPENAI_API_KEY',
+            'anthropic': 'ANTHROPIC_API_KEY',
+            'deepseek': 'DEEPSEEK_API_KEY',
+        }
+        env_key = key_map.get(provider)
+        if env_key and not values.get('llm_api_key'):
+            values['llm_api_key'] = os.getenv(env_key)
+
         # 读取对应的 Model Name
-        model_name = values.get('llm_model', '')
-        if provider == 'zhipu':
-            zhipu_model = os.getenv('ZHIPU_MODEL_NAME')
-            if zhipu_model:
-                values['llm_model'] = zhipu_model
-        elif provider == 'qwen':
-            qwen_model = os.getenv('QWEN_MODEL_NAME')
-            if qwen_model:
-                values['llm_model'] = qwen_model
-        elif provider == 'openai':
-            openai_model = os.getenv('OPENAI_MODEL_NAME')
-            if openai_model:
-                values['llm_model'] = openai_model
-        
+        model_map = {
+            'zhipu': 'ZHIPU_MODEL_NAME',
+            'qwen': 'QWEN_MODEL_NAME',
+            'openai': 'OPENAI_MODEL_NAME',
+        }
+        env_model = model_map.get(provider)
+        if env_model:
+            model_val = os.getenv(env_model)
+            if model_val:
+                values['llm_model'] = model_val
+
+        # 读取对应的 Base URL
+        url_map = {
+            'zhipu': 'ZHIPU_BASE_URL',
+            'qwen': 'QWEN_BASE_URL',
+            'openai': 'OPENAI_BASE_URL',
+        }
+        env_url = url_map.get(provider)
+        if env_url and not values.get('llm_base_url'):
+            url_val = os.getenv(env_url)
+            if url_val:
+                values['llm_base_url'] = url_val
+
         return values
+
+    @classmethod
+    def _detect_provider(cls) -> str:
+        """从 .env 中已有的 API key 自动推断 LLM 提供商"""
+        candidates = [
+            ('ZHIPU_API_KEY', 'zhipu'),
+            ('DASHSCOPE_API_KEY', 'qwen'),
+            ('OPENAI_API_KEY', 'openai'),
+            ('ANTHROPIC_API_KEY', 'anthropic'),
+            ('DEEPSEEK_API_KEY', 'deepseek'),
+        ]
+        for env_var, provider in candidates:
+            val = os.getenv(env_var, '')
+            if val and 'your-' not in val and val != 'sk-your-key-here':
+                return provider
+        return 'qwen'  # fallback
     
     @model_validator(mode='after')
     def validate_llm_config(self):

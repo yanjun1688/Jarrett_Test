@@ -157,12 +157,11 @@ class ChatBotConsumer(AsyncWebsocketConsumer):
         async def send_progress(msg):
             await self.send(json.dumps(msg))
         
-        llm_service = get_llm_service('qwen')
-        
-        chatbot_agent = ChatbotAgent(
-            llm_service=llm_service
-        )
-        await chatbot_agent.initialize()
+        # Cache agent instance across messages within same WebSocket session
+        if not hasattr(self, '_chatbot_agent') or self._chatbot_agent is None:
+            llm_service = get_llm_service('qwen')
+            self._chatbot_agent = ChatbotAgent(llm_service=llm_service)
+            await self._chatbot_agent.initialize()
         
         input_data = {
             "message": message,
@@ -171,7 +170,7 @@ class ChatBotConsumer(AsyncWebsocketConsumer):
         }
         
         try:
-            result = await chatbot_agent.execute(input_data)
+            result = await self._chatbot_agent.execute(input_data)
             await self.send(json.dumps({
                 'type': 'complete',
                 'result': result
