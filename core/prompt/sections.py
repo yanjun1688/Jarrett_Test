@@ -13,8 +13,7 @@ Prompt Section 模块定义
 
 动态政策模块（会话特定）：
 - KnowledgeContextSection: 知识库上下文
-- ToolsSchemaSection: 工具 Schema
-- SkillsRegistrySection: Skills 注册表
+- SkillsRegistrySection: Skills 注册表摘要
 - ConversationHistorySection: 对话历史
 - EnvironmentInfoSection: 环境信息
 
@@ -299,7 +298,14 @@ class ToolUsageGrammarSection(PromptSection):
 禁止使用 Bash：
 - 读取/编辑/创建文件
 - 搜索文件或内容
+- 查找/浏览 skill 文件（应使用 load_skill 工具）
 - 复杂的正则替换
+
+### Skills 使用规则
+
+- skill 文件位于 `skills/` 目录，由系统管理
+- 需要获取某 skill 的完整指令时，使用 `load_skill` 工具，不要用 bash 去磁盘查找
+- 找不到的 skill 可以使用 `install_skill` 工具从 GitHub/skills.sh 安装
 
 ### 并行调用
 
@@ -423,42 +429,8 @@ class KnowledgeContextSection(PromptSection):
         return "\n".join(lines)
 
 
-class ToolsSchemaSection(PromptSection):
-    """工具 Schema 模块"""
-    
-    @property
-    def name(self) -> str:
-        return "tools_schema"
-    
-    @property
-    def is_static(self) -> bool:
-        return False
-    
-    def should_include(self, context: Dict[str, Any]) -> bool:
-        return bool(context.get("include_tools_schema", False))
-    
-    def render(self, context: Dict[str, Any]) -> str:
-        tools = context.get("available_tools", [])
-        
-        if not tools:
-            return ""
-        
-        lines = ["### 可用工具", "以下工具可在本次请求中使用：", ""]
-        
-        for tool in tools:
-            func = tool.get("function", {})
-            name = func.get("name", "")
-            description = func.get("description", "")
-            lines.append(f"- **{name}**: {description}")
-        
-        lines.append("")
-        lines.append("调用工具时，模型会自动选择合适的工具执行。")
-        
-        return "\n".join(lines)
-
-
 class SkillsRegistrySection(PromptSection):
-    """Skills 注册表模块 — 渲染完整 SKILL.md 内容"""
+    """Skills 注册表模块 — 渲染技能名称+描述摘要，完整内容通过 load_skill 工具按需获取"""
 
     @property
     def name(self) -> str:
@@ -483,22 +455,21 @@ class SkillsRegistrySection(PromptSection):
 - api-design-principles: API 设计原则
 - webapp-testing: Web 应用测试"""
 
-        lines = ["## Skills 指令", ""]
+        lines = ["## Skills 扩展能力", ""]
+        lines.append("所有 skill 文件位于 `skills/` 目录（由系统管理，不要用 bash 去磁盘查找）。")
+        lines.append("需要完整指令时请调用 `load_skill` 工具获取：")
+        lines.append("")
         for s in skills:
             name = s.get("name", "")
             desc = s.get("description", "")
-            content = s.get("content", "")
             tools = s.get("allowed_tools", [])
 
-            lines.append(f"### {name}")
-            if desc:
-                lines.append(f"**说明**: {desc}")
+            lines.append(f"- **{name}**: {desc}")
             if tools:
-                lines.append(f"**可用工具**: {', '.join(tools)}")
-            if content:
-                lines.append(f"\n{content}\n")
+                lines.append(f"  可用工具: {', '.join(tools)}")
 
-        lines.append("> 以上技能是操作指令，不是可调用函数。请使用 bash 等工具按指令执行。")
+        lines.append("")
+        lines.append("使用 `load_skill(name=\"<skill_name>\")` 获取完整技能指令。")
         return "\n".join(lines)
 
 
@@ -579,10 +550,10 @@ class EnvironmentInfoSection(PromptSection):
         return False
     
     def should_include(self, context: Dict[str, Any]) -> bool:
-        # 当有 test_type 或其他环境信息时才包含
+        # 当有 test_type、平台信息或其他环境信息时才包含
         return bool(context.get("test_type") or context.get("project_path") or 
                     context.get("language") or context.get("test_framework") or 
-                    context.get("working_directory"))
+                    context.get("working_directory") or context.get("platform"))
     
     def render(self, context: Dict[str, Any]) -> str:
         lines = ["### 环境信息", ""]
@@ -616,5 +587,8 @@ class EnvironmentInfoSection(PromptSection):
         
         if context.get("working_directory"):
             lines.append(f"- 工作目录: {context['working_directory']}")
-        
+
+        if context.get("platform"):
+            lines.append(f"- 运行平台: {context['platform']}")
+
         return "\n".join(lines)

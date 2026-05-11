@@ -20,7 +20,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List, cast, TYPE_CHECKING
+from typing import Dict, Any, Optional, List, Tuple, cast, TYPE_CHECKING
 from datetime import datetime
 
 from core.context.markdown_store import MarkdownContextStore
@@ -99,207 +99,134 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         session_id: str,
         user_id: str
     ) -> List[Dict[str, Any]]:
-        """
-        获取用于 LLM 的消息列表（优化后）
-
-        实现三层管理：
-        - 热区: 最近 N 条完整消息
-        - 温区: 结构化摘要
-        - 冷区: 语义摘要
-
-        Args:
-            session_id: 会话 ID
-            user_id: 用户 ID
-
-        Returns:
-            优化后的消息列表，格式：
-            [
-                {"role": "user", "content": "...", "zone": "hot"},
-                {"role": "assistant", "content": "...", "zone": "hot"},
-                {"zone": "warm_summary", "content": "温区摘要"},
-                {"zone": "cold_summary", "content": "冷区摘要"}
-            ]
-        """
-        logger.info(f'[ContextStore] ========== get_messages_for_llm ==========')
-        logger.info(f'[ContextStore] Session: {session_id}, User: {user_id}')
-
-        context = self.get_context(session_id, user_id)
-
-        if not context:
-            logger.info(f'[ContextStore] 上下文不存在，返回空列表')
-            return []
-
-        messages = context.get('messages', [])
-
+        """获取用于 LLM 的消息列表（同步，正则摘要）"""
+        messages = self._get_context_messages(session_id, user_id, 'get_messages_for_llm')
         if not messages:
-            logger.info(f'[ContextStore] 无消息历史，返回空列表')
             return []
 
-        logger.info(f'[ContextStore] 原始消息数: {len(messages)}')
+        warm_summary = None
+        cold_summary = None
+        warm_msgs, cold_msgs = self._split_zones(messages)
 
-        hot_zone_size = self.DEFAULT_HOT_ZONE_SIZE
-        warm_zone_size = self.DEFAULT_WARM_ZONE_SIZE
+        if warm_msgs is not None:
+            warm_summary = self._get_cached_warm_summary(warm_msgs, session_id)
+        if cold_msgs is not None:
+            cold_summary = self._get_cached_cold_summary(cold_msgs, session_id)
 
-        result: List[Dict[str, Any]] = []
-        total_messages = len(messages)
-
-        if total_messages <= hot_zone_size:
-            logger.info(f'[ContextStore] 消息数<{hot_zone_size}，全部进入热区')
-            for msg in messages:
-                result.append({
-                    'role': msg.get('role', 'user'),
-                    'content': msg.get('content', ''),
-                    'zone': 'hot'
-                })
-        else:
-            logger.info(f'[ContextStore] 消息数>{hot_zone_size}，启动三层管理')
-            logger.info(f'[ContextStore] 热区={hot_zone_size}, 温区={warm_zone_size}')
-
-            hot_messages = messages[-hot_zone_size:]
-            for msg in hot_messages:
-                result.append({
-                    'role': msg.get('role', 'user'),
-                    'content': msg.get('content', ''),
-                    'zone': 'hot'
-                })
-            logger.info(f'[ContextStore] 热区消息: {len(hot_messages)}条')
-
-            remaining = total_messages - hot_zone_size
-
-            if remaining > warm_zone_size:
-                warm_start = total_messages - hot_zone_size - warm_zone_size
-                warm_messages = messages[warm_start:-hot_zone_size]
-
-                if warm_messages:
-                    warm_summary = self._get_cached_warm_summary(warm_messages, session_id)
-                    warm_content = self.summarizer.format_warm_summary_for_context(
-                        warm_summary, warm_messages
-                    )
-                    result.append({
-                        'zone': 'warm_summary',
-                        'content': warm_content
-                    })
-                logger.info(f'[ContextStore] 温区摘要: {len(warm_messages)}条 -> 1条摘要')
-
-                cold_messages = messages[:warm_start]
-                if cold_messages:
-                    cold_summary = self._get_cached_cold_summary(cold_messages, session_id)
-                    result.append({
-                        'zone': 'cold_summary',
-                        'content': cold_summary
-                    })
-                logger.info(f'[ContextStore] 冷区摘要: {len(cold_messages)}条 -> 1条摘要')
-            else:
-                warm_messages = messages[:-hot_zone_size]
-                if warm_messages:
-                    warm_summary = self._get_cached_warm_summary(warm_messages, session_id)
-                    warm_content = self.summarizer.format_warm_summary_for_context(
-                        warm_summary, warm_messages
-                    )
-                    result.append({
-                        'zone': 'warm_summary',
-                        'content': warm_content
-                    })
-                logger.info(f'[ContextStore] 温区摘要: {len(warm_messages)}条 -> 1条摘要')
-
-        logger.info(f'[ContextStore] 返回优化消息: {len(result)}条')
-        logger.info(f'[ContextStore] ========== get_messages_for_llm 完成 ==========')
-
-        return result
+        return self._build_zone_result(messages, warm_summary, cold_summary, warm_msgs, caller='get_messages_for_llm')
 
     async def get_messages_for_llm_async(
         self,
         session_id: str,
         user_id: str
     ) -> List[Dict[str, Any]]:
-        """
-        异步获取用于 LLM 的消息列表（使用 LLM 智能摘要）
+        """获取用于 LLM 的消息列表（异步，LLM 摘要）"""
+        messages = self._get_context_messages(session_id, user_id, 'get_messages_for_llm_async')
+        if not messages:
+            return []
 
-        Args:
-            session_id: 会话 ID
-            user_id: 用户 ID
+        warm_summary = None
+        cold_summary = None
+        warm_msgs, cold_msgs = self._split_zones(messages)
 
-        Returns:
-            优化后的消息列表
-        """
-        logger.info(f'[ContextStore] ========== get_messages_for_llm_async ==========')
+        if warm_msgs is not None:
+            warm_summary = await self._get_cached_warm_summary_async(warm_msgs, session_id)
+        if cold_msgs is not None:
+            cold_summary = await self._get_cached_cold_summary_async(cold_msgs, session_id)
+
+        return self._build_zone_result(messages, warm_summary, cold_summary, warm_msgs, caller='get_messages_for_llm_async')
+
+    # ── helpers: 消除 sync/async 重复 ──
+
+    def _get_context_messages(
+        self,
+        session_id: str,
+        user_id: str,
+        caller: str,
+    ) -> List[Dict[str, Any]]:
+        """获取会话消息列表（sync/async 共享前缀）"""
+        logger.info(f'[ContextStore] ========== {caller} ==========')
         logger.info(f'[ContextStore] Session: {session_id}, User: {user_id}')
 
         context = self.get_context(session_id, user_id)
-
         if not context:
             logger.info(f'[ContextStore] 上下文不存在，返回空列表')
             return []
 
-        messages = context.get('messages', [])
-
+        messages: List[Dict[str, Any]] = context.get('messages', [])
         if not messages:
             logger.info(f'[ContextStore] 无消息历史，返回空列表')
             return []
 
         logger.info(f'[ContextStore] 原始消息数: {len(messages)}')
+        return messages
 
-        hot_zone_size = self.DEFAULT_HOT_ZONE_SIZE
-        warm_zone_size = self.DEFAULT_WARM_ZONE_SIZE
+    def _split_zones(
+        self,
+        messages: List[Dict[str, Any]],
+    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[List[Dict[str, Any]]]]:
+        """按三层区域拆分消息，返回 warm_msgs, cold_msgs（热区由 _build_zone_result 直接取）"""
+        total = len(messages)
+        hot_size = self.DEFAULT_HOT_ZONE_SIZE
+        warm_size = self.DEFAULT_WARM_ZONE_SIZE
 
+        warm_msgs = None
+        cold_msgs = None
+
+        if total > hot_size:
+            if total - hot_size > warm_size:
+                warm_start = max(0, total - hot_size - warm_size)
+                warm_msgs = messages[warm_start:-hot_size] if warm_start < total - hot_size else None
+                cold_msgs = messages[:warm_start] if warm_start > 0 else None
+            else:
+                warm_msgs = messages[:-hot_size] if total > hot_size else None
+
+        return warm_msgs, cold_msgs
+
+    def _build_zone_result(
+        self,
+        messages: List[Dict[str, Any]],
+        warm_summary: Optional[StructuredSummary],
+        cold_summary: Optional[str],
+        warm_msgs: Optional[List[Dict[str, Any]]],
+        caller: str = "",
+    ) -> List[Dict[str, Any]]:
+        """将消息和摘要拼装为三层结果列表（sync/async 共享后缀）"""
+        hot_size = self.DEFAULT_HOT_ZONE_SIZE
         result: List[Dict[str, Any]] = []
-        total_messages = len(messages)
 
-        if total_messages <= hot_zone_size:
-            logger.info(f'[ContextStore] 消息数<{hot_zone_size}，全部进入热区')
+        if len(messages) <= hot_size:
+            logger.info(f'[ContextStore] 消息数<={hot_size}，全部进入热区')
             for msg in messages:
                 result.append({
                     'role': msg.get('role', 'user'),
                     'content': msg.get('content', ''),
-                    'zone': 'hot'
+                    'zone': 'hot',
                 })
         else:
-            logger.info(f'[ContextStore] 消息数>{hot_zone_size}，启动三层管理')
-
-            hot_messages = messages[-hot_zone_size:]
+            logger.info(f'[ContextStore] 消息数>{hot_size}，启动三层管理')
+            hot_messages = messages[-hot_size:]
             for msg in hot_messages:
                 result.append({
                     'role': msg.get('role', 'user'),
                     'content': msg.get('content', ''),
-                    'zone': 'hot'
+                    'zone': 'hot',
                 })
+            logger.info(f'[ContextStore] 热区消息: {len(hot_messages)}条')
 
-            remaining = total_messages - hot_zone_size
+            if warm_summary is not None:
+                warm_content = self.summarizer.format_warm_summary_for_context(
+                    warm_summary, warm_msgs or []
+                )
+                result.append({'zone': 'warm_summary', 'content': warm_content})
+                logger.info(f'[ContextStore] 温区摘要: {len(warm_msgs or [])}条 -> 1条摘要')
 
-            if remaining > warm_zone_size:
-                warm_start = total_messages - hot_zone_size - warm_zone_size
-                warm_messages = messages[warm_start:-hot_zone_size]
-
-                if warm_messages:
-                    warm_summary = await self._get_cached_warm_summary_async(warm_messages, session_id)
-                    warm_content = self.summarizer.format_warm_summary_for_context(
-                        warm_summary, warm_messages
-                    )
-                    result.append({
-                        'zone': 'warm_summary',
-                        'content': warm_content
-                    })
-
-                cold_messages = messages[:warm_start]
-                if cold_messages:
-                    cold_summary = await self._get_cached_cold_summary_async(cold_messages, session_id)
-                    result.append({
-                        'zone': 'cold_summary',
-                        'content': cold_summary
-                    })
-            else:
-                warm_messages = messages[:-hot_zone_size]
-                if warm_messages:
-                    warm_summary = await self._get_cached_warm_summary_async(warm_messages, session_id)
-                    warm_content = self.summarizer.format_warm_summary_for_context(
-                        warm_summary, warm_messages
-                    )
-                    result.append({
-                        'zone': 'warm_summary',
-                        'content': warm_content
-                    })
+            if cold_summary:
+                result.append({'zone': 'cold_summary', 'content': cold_summary})
+                logger.info(f'[ContextStore] 冷区摘要 -> 1条摘要')
 
         logger.info(f'[ContextStore] 返回优化消息: {len(result)}条')
+        logger.info(f'[ContextStore] ========== {caller} 完成 ==========')
         return result
 
     def check_budget(
@@ -335,7 +262,7 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         total_tokens = self.token_calc.count_messages_tokens(messages)
         logger.info(f'[ContextStore] 总Token数: {total_tokens}')
 
-        status = self.budget_manager.check_budget(total_tokens)
+        budget_status = self.budget_manager.check_budget(total_tokens)
 
         hot_tokens = 0
         warm_tokens = 0
@@ -364,7 +291,7 @@ class TokenEconomicsContextStore(MarkdownContextStore):
                 warm_messages = messages[:-hot_zone_size]
                 warm_tokens = self.token_calc.count_messages_tokens(warm_messages)
 
-        status.tier_breakdown = {
+        budget_status.tier_breakdown = {
             'hot': hot_tokens,
             'warm': warm_tokens,
             'cold': cold_tokens,
@@ -374,11 +301,11 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         }
 
         logger.info(f'[ContextStore] 分层Token: hot={hot_tokens}, warm={warm_tokens}, cold={cold_tokens}')
-        logger.info(f'[ContextStore] 分层消息数: hot={status.tier_breakdown["hot_count"]}, warm={status.tier_breakdown["warm_count"]}, cold={status.tier_breakdown["cold_count"]}')
-        logger.info(f'[ContextStore] 预算状态: {status.status.value}, 利用率={status.utilization:.2%}')
+        logger.info(f'[ContextStore] 分层消息数: hot={budget_status.tier_breakdown["hot_count"]}, warm={budget_status.tier_breakdown["warm_count"]}, cold={budget_status.tier_breakdown["cold_count"]}')
+        logger.info(f'[ContextStore] 预算状态: {budget_status.status.value}, 利用率={budget_status.utilization:.2%}')
         logger.info(f'[ContextStore] ========== check_budget 完成 ==========')
 
-        return status
+        return budget_status
 
     def get_token_statistics(
         self,
@@ -449,74 +376,67 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         msg_metadata = metadata or {}
         msg_metadata['token_count'] = token_count
 
-        return super().append_message(
+        return bool(super().append_message(
             session_id=session_id,
             user_id=user_id,
             role=role,
             content=content,
             metadata=msg_metadata
-        )
+        ))
 
-    def _get_cached_warm_summary(
-        self,
-        messages: List[Dict[str, Any]],
-        session_id: str
-    ) -> StructuredSummary:
-        """
-        获取缓存的温区摘要（同步，使用正则 fallback）
+    # ── helpers: 消除 warm/cold 缓存 sync/async 重复 ──
 
-        缓存策略：
-        - first_hash: 检测温区边界变化（首条消息变化 = 边界移动）
-        - last_hash: 检测尾部新增消息（最后一条消息变化 = 有新消息）
-        - count: 消息数量一致性校验
-
-        Args:
-            messages: 温区消息列表
-            session_id: 会话 ID
-
-        Returns:
-            StructuredSummary 对象
-        """
-        if not messages:
-            return StructuredSummary()
-
-        session_cache = self._summary_cache.get(session_id, {})
-        cached = session_cache.get('warm')
-
+    def _check_warm_cache(
+        self, messages: List[Dict[str, Any]], session_id: str
+    ) -> Tuple[Optional[StructuredSummary], str, str]:
+        """检查温区缓存命中。返回 (summary | None, first_hash, last_hash)。"""
+        cache_entry = self._summary_cache.get(session_id, {}).get('warm') if session_id else None
         first_hash = self._compute_first_message_hash(messages)
         last_hash = self._compute_last_message_hash(messages)
 
-        if cached and cached.get('first_hash') == first_hash:
-            cached_summary = cached.get('summary')
-            cached_count = cached.get('count', 0)
-            cached_last_hash = cached.get('last_hash')
+        if cache_entry and cache_entry.get('first_hash') == first_hash:
+            cs = cache_entry.get('summary')
+            if (cache_entry.get('count') == len(messages)
+                    and cache_entry.get('last_hash') == last_hash
+                    and cs is not None):
+                return cast(StructuredSummary, cs), first_hash, last_hash
 
-            if (cached_count == len(messages)
-                    and cached_last_hash == last_hash
-                    and cached_summary):
-                self._cache_stats['warm_hits'] += 1
-                logger.info(
-                    f'[ContextStore] [CACHE HIT] 温区摘要完全命中 (count={len(messages)})'
-                )
-                return cast(StructuredSummary, cached_summary)
+        return None, first_hash, last_hash
 
-        summary = self.summarizer.generate_warm_summary(messages, self.token_calc)
-
-        self._cache_stats['warm_misses'] += 1
-        logger.info(
-            f'[ContextStore] [CACHE MISS] 温区摘要重新生成 (count={len(messages)})'
-        )
-
+    def _store_warm_cache(
+        self,
+        session_id: str,
+        messages: List[Dict[str, Any]],
+        summary: StructuredSummary,
+        first_hash: str,
+        last_hash: str,
+    ) -> None:
         if session_id:
-            if session_id not in self._summary_cache:
-                self._summary_cache[session_id] = {}
-            self._summary_cache[session_id]['warm'] = {
+            self._summary_cache.setdefault(session_id, {})['warm'] = {
                 'count': len(messages),
                 'first_hash': first_hash,
                 'last_hash': last_hash,
                 'summary': summary,
             }
 
+    def _get_cached_warm_summary(
+        self,
+        messages: List[Dict[str, Any]],
+        session_id: str
+    ) -> StructuredSummary:
+        if not messages:
+            return StructuredSummary()
+
+        cached, first_hash, last_hash = self._check_warm_cache(messages, session_id)
+        if cached is not None:
+            self._cache_stats['warm_hits'] += 1
+            logger.info(f'[ContextStore] [CACHE HIT] 温区摘要完全命中 (count={len(messages)})')
+            return cached
+
+        summary = self.summarizer.generate_warm_summary(messages, self.token_calc)
+        self._cache_stats['warm_misses'] += 1
+        logger.info(f'[ContextStore] [CACHE MISS] 温区摘要重新生成 (count={len(messages)})')
+        self._store_warm_cache(session_id, messages, summary, first_hash, last_hash)
         return summary
 
     async def _get_cached_warm_summary_async(
@@ -524,105 +444,67 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         messages: List[Dict[str, Any]],
         session_id: str
     ) -> StructuredSummary:
-        """
-        获取缓存的温区摘要（异步，使用 LLM）
-
-        缓存策略同 _get_cached_warm_summary：first_hash + last_hash + count
-
-        Args:
-            messages: 温区消息列表
-            session_id: 会话 ID
-
-        Returns:
-            StructuredSummary 对象
-        """
         if not messages:
             return StructuredSummary()
 
-        session_cache = self._summary_cache.get(session_id, {})
-        cached = session_cache.get('warm')
-
-        first_hash = self._compute_first_message_hash(messages)
-        last_hash = self._compute_last_message_hash(messages)
-
-        if cached and cached.get('first_hash') == first_hash:
-            cached_summary = cached.get('summary')
-            cached_count = cached.get('count', 0)
-            cached_last_hash = cached.get('last_hash')
-
-            if (cached_count == len(messages)
-                    and cached_last_hash == last_hash
-                    and cached_summary):
-                self._cache_stats['warm_hits'] += 1
-                logger.info(
-                    f'[ContextStore] [CACHE HIT] 温区摘要完全命中 (count={len(messages)})'
-                )
-                return cast(StructuredSummary, cached_summary)
+        cached, first_hash, last_hash = self._check_warm_cache(messages, session_id)
+        if cached is not None:
+            self._cache_stats['warm_hits'] += 1
+            logger.info(f'[ContextStore] [CACHE HIT] 温区摘要完全命中 (count={len(messages)})')
+            return cached
 
         summary = await self.summarizer.generate_warm_summary_async(messages, self.token_calc)
-
         self._cache_stats['warm_misses'] += 1
-        logger.info(
-            f'[ContextStore] [CACHE MISS] 温区摘要重新生成 (count={len(messages)})'
-        )
+        logger.info(f'[ContextStore] [CACHE MISS] 温区摘要重新生成 (count={len(messages)})')
+        self._store_warm_cache(session_id, messages, summary, first_hash, last_hash)
+        return summary
 
+    def _check_cold_cache(
+        self, messages: List[Dict[str, Any]], session_id: str
+    ) -> Tuple[Optional[str], str]:
+        """检查冷区缓存命中。返回 (summary | None, cold_hash)。"""
+        cache_entry = self._summary_cache.get(session_id, {}).get('cold') if session_id else None
+        cold_hash = self._compute_cold_messages_hash(messages)
+
+        if cache_entry and cache_entry.get('count') == len(messages) and cache_entry.get('hash') == cold_hash:
+            cs = cache_entry.get('summary')
+            if cs is not None:
+                return str(cs), cold_hash
+
+        return None, cold_hash
+
+    def _store_cold_cache(
+        self,
+        session_id: str,
+        messages: List[Dict[str, Any]],
+        summary: str,
+        cold_hash: str,
+    ) -> None:
         if session_id:
-            if session_id not in self._summary_cache:
-                self._summary_cache[session_id] = {}
-            self._summary_cache[session_id]['warm'] = {
+            self._summary_cache.setdefault(session_id, {})['cold'] = {
                 'count': len(messages),
-                'first_hash': first_hash,
-                'last_hash': last_hash,
+                'hash': cold_hash,
                 'summary': summary,
             }
-
-        return summary
 
     def _get_cached_cold_summary(
         self,
         messages: List[Dict[str, Any]],
         session_id: str
     ) -> str:
-        """
-        获取缓存的冷区摘要（同步）
-
-        Args:
-            messages: 冷区消息列表
-            session_id: 会话 ID
-
-        Returns:
-            摘要文本
-        """
         if not messages:
             return ''
 
-        session_cache = self._summary_cache.get(session_id, {})
-        cached = session_cache.get('cold')
+        cached, cold_hash = self._check_cold_cache(messages, session_id)
+        if cached is not None:
+            self._cache_stats['cold_hits'] += 1
+            logger.info(f'[ContextStore] [CACHE HIT] 冷区摘要完全命中 (count={len(messages)})')
+            return cached
 
-        if cached and cached.get('count') == len(messages):
-            cached_summary = cached.get('summary')
-            if cached_summary:
-                self._cache_stats['cold_hits'] += 1
-                logger.info(
-                    f'[ContextStore] [CACHE HIT] 冷区摘要完全命中 (count={len(messages)})'
-                )
-                return str(cached_summary)
-
-        summary = self.summarizer.generate_cold_summary([], messages)
-
+        summary = str(self.summarizer.generate_cold_summary([], messages))
         self._cache_stats['cold_misses'] += 1
-        logger.info(
-            f'[ContextStore] [CACHE MISS] 冷区摘要重新生成 (count={len(messages)})'
-        )
-
-        if session_id:
-            if session_id not in self._summary_cache:
-                self._summary_cache[session_id] = {}
-            self._summary_cache[session_id]['cold'] = {
-                'count': len(messages),
-                'summary': summary,
-            }
-
+        logger.info(f'[ContextStore] [CACHE MISS] 冷区摘要重新生成 (count={len(messages)})')
+        self._store_cold_cache(session_id, messages, summary, cold_hash)
         return summary
 
     async def _get_cached_cold_summary_async(
@@ -630,46 +512,19 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         messages: List[Dict[str, Any]],
         session_id: str
     ) -> str:
-        """
-        获取缓存的冷区摘要（异步，使用 LLM）
-
-        Args:
-            messages: 冷区消息列表
-            session_id: 会话 ID
-
-        Returns:
-            摘要文本
-        """
         if not messages:
             return ''
 
-        session_cache = self._summary_cache.get(session_id, {})
-        cached = session_cache.get('cold')
+        cached, cold_hash = self._check_cold_cache(messages, session_id)
+        if cached is not None:
+            self._cache_stats['cold_hits'] += 1
+            logger.info(f'[ContextStore] [CACHE HIT] 冷区摘要完全命中 (count={len(messages)})')
+            return cached
 
-        if cached and cached.get('count') == len(messages):
-            cached_summary = cached.get('summary')
-            if cached_summary:
-                self._cache_stats['cold_hits'] += 1
-                logger.info(
-                    f'[ContextStore] [CACHE HIT] 冷区摘要完全命中 (count={len(messages)})'
-                )
-                return str(cached_summary)
-
-        summary = await self.summarizer.generate_cold_summary_async([], messages)
-
+        summary = str(await self.summarizer.generate_cold_summary_async([], messages))
         self._cache_stats['cold_misses'] += 1
-        logger.info(
-            f'[ContextStore] [CACHE MISS] 冷区摘要重新生成 (count={len(messages)})'
-        )
-
-        if session_id:
-            if session_id not in self._summary_cache:
-                self._summary_cache[session_id] = {}
-            self._summary_cache[session_id]['cold'] = {
-                'count': len(messages),
-                'summary': summary,
-            }
-
+        logger.info(f'[ContextStore] [CACHE MISS] 冷区摘要重新生成 (count={len(messages)})')
+        self._store_cold_cache(session_id, messages, summary, cold_hash)
         return summary
 
     def _compute_first_message_hash(
@@ -688,7 +543,7 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         if not messages:
             return ''
         first_content = messages[0].get('content', '')[:200]
-        return hashlib.sha256(first_content.encode('utf-8')).hexdigest()[:12]
+        return hashlib.sha256(first_content.encode('utf-8')).hexdigest()[:16]
 
     def _compute_last_message_hash(
         self,
@@ -706,7 +561,19 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         if not messages:
             return ''
         last_content = messages[-1].get('content', '')[:200]
-        return hashlib.sha256(last_content.encode('utf-8')).hexdigest()[:12]
+        return hashlib.sha256(last_content.encode('utf-8')).hexdigest()[:16]
+
+    def _compute_cold_messages_hash(
+        self,
+        messages: List[Dict[str, Any]]
+    ) -> str:
+        """计算冷区消息内容哈希（用于缓存校验）"""
+        if not messages:
+            return ''
+        content_sample = ''.join(
+            str(m.get('content', ''))[:100] for m in messages
+        )
+        return hashlib.sha256(content_sample.encode('utf-8')).hexdigest()[:16]
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """获取摘要缓存统计"""

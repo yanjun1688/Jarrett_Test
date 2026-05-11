@@ -13,6 +13,7 @@ from core.tools.chatbot.query_project_tool import QueryProjectTool
 from core.tools.chatbot.generate_test_tool import GenerateTestTool
 from core.tools.chatbot.save_test_case_tool import SaveTestCaseTool
 from core.tools.chatbot.save_test_script_tool import SaveTestScriptTool
+from core.tools.chatbot.load_skill_tool import LoadSkillTool
 
 __all__ = [
     'GenerateAPITestTool',
@@ -22,6 +23,7 @@ __all__ = [
     'QueryKnowledgeTool',
     'QueryTestScriptsTool',
     'InstallSkillTool',
+    'LoadSkillTool',
     'QueryProjectTool',
     'GenerateTestTool',
     'SaveTestCaseTool',

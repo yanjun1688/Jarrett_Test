@@ -157,14 +157,32 @@ class ChatBotConsumer(AsyncWebsocketConsumer):
         async def send_progress(msg):
             await self.send(json.dumps(msg))
         
-        # Cache agent instance across messages within same WebSocket session
+        # Cache agent instance and conversation_id across messages within same WebSocket session
         if not hasattr(self, '_chatbot_agent') or self._chatbot_agent is None:
             llm_service = get_llm_service('qwen')
             self._chatbot_agent = ChatbotAgent(llm_service=llm_service)
             await self._chatbot_agent.initialize()
-        
+
+        conversation_id = data.get('conversation_id') or getattr(self, '_conversation_id', None)
+        if not conversation_id:
+            from core.services.conversation_service import ConversationService
+            conversation, error = await sync_to_async(ConversationService.create_conversation)(
+                user=self.user
+            )
+            if error or conversation is None:
+                await self.send(json.dumps({
+                    'type': 'error',
+                    'message': error or '创建会话失败'
+                }))
+                return
+            self._conversation_id = str(conversation.conversation_id)
+            conversation_id = self._conversation_id
+        elif not getattr(self, '_conversation_id', None):
+            self._conversation_id = conversation_id
+
         input_data = {
             "message": message,
+            "conversation_id": conversation_id,
             "user_id": user_id,
             "context": {}
         }

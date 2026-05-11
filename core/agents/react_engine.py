@@ -10,7 +10,7 @@ ReAct Engine — 标准 ReAct 多轮循环引擎
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 
 from core.tools.base_tool import ToolRegistry, ToolResult
@@ -139,6 +139,8 @@ class ReActEngine:
                     options=last_options,
                 )
 
+            messages = self._compact_messages(messages)
+
         logger.warning(f"[ReAct] === 结束 === 达到最大轮次 {self.max_iterations}, 共 {total_tool_calls} 次工具调用")
         return ReActResult(
             response="任务超过最大执行轮次，部分操作可能未完成。",
@@ -252,3 +254,45 @@ class ReActEngine:
         if provider is None:
             return True  # 默认走 OpenAI 兼容格式
         return getattr(provider, 'value', None) in ('openai', 'deepseek', 'qwen', 'zhipu')
+
+    def _compact_messages(
+        self,
+        messages: List[Dict[str, Any]],
+        max_messages: int = 20,
+        keep_recent: int = 6,
+    ) -> List[Dict[str, Any]]:
+        """超过阈值时裁剪消息列表，保留 system prompt 和最近消息，中间截断"""
+        if len(messages) <= max_messages:
+            return messages
+
+        system = messages[:1]
+        recent = messages[-keep_recent:]
+        middle = messages[1:-keep_recent]
+
+        user_c = sum(1 for m in middle if m.get("role") == "user")
+        asst_c = sum(1 for m in middle if m.get("role") == "assistant")
+        tool_c = sum(1 for m in middle if m.get("role") == "tool")
+
+        tool_names: list[str] = []
+        for m in middle:
+            tcs = m.get("tool_calls", [])
+            for tc in tcs:
+                tn = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
+                if tn and tn not in tool_names:
+                    tool_names.append(tn)
+
+        tool_info = f"已执行: {', '.join(tool_names)}" if tool_names else ""
+
+        logger.info(
+            f"[ReAct] 消息裁剪: {len(messages)} -> {1 + 1 + keep_recent} "
+            f"(省略 {user_c} 用户/{asst_c} 助手/{tool_c} 工具) {tool_info}"
+        )
+
+        summary = {
+            "role": "system",
+            "content": (
+                f"[上下文裁剪] 省略了 {user_c} 条用户消息、{asst_c} 条助手回复、"
+                f"{tool_c} 次工具调用。{tool_info}。继续当前任务。"
+            ),
+        }
+        return system + [summary] + recent

@@ -13,7 +13,7 @@ Prompt 动态组装模块
 - 各具体 Section 实现
 
 接口约定：
-- build_for_chatbot() -> (system_prompt, user_prompt, tokens)
+- build_for_chatbot() -> {"system_prompt": str, "system_prompt_tokens": int}
 - CACHE_BOUNDARY_MARKER: 缓存边界标记
 
 Reference: docs/2026/04/01/prompt_dynamic_assembly_design.md
@@ -28,7 +28,6 @@ from .sections import (
     ToneAndStyleSection,
     OutputEfficiencySection,
     KnowledgeContextSection,
-    ToolsSchemaSection,
     SkillsRegistrySection,
     ConversationHistorySection,
     EnvironmentInfoSection,
@@ -48,7 +47,6 @@ __all__ = [
     "ToneAndStyleSection",
     "OutputEfficiencySection",
     "KnowledgeContextSection",
-    "ToolsSchemaSection",
     "SkillsRegistrySection",
     "ConversationHistorySection",
     "EnvironmentInfoSection",

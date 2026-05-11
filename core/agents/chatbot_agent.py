@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Set
 import logging
+import sys
 
 from core.agents.base_agent import BaseAgent
 from core.agents.react_engine import ReActEngine
@@ -66,9 +67,8 @@ class ChatbotAgent(BaseAgent):
 
         # 唯一注册表
         self.registry = ToolRegistry()
-        # 技能加载器（只扫描，不执行）
-        self.skill_loader = SkillLoader(skill_dirs=["skills", ".agents/skills"])
-        self._skill_infos = self.skill_loader.discover()  # 启动时缓存，运行时不变
+        # 技能加载器（只扫描 skills/，.agents/skills/ 归 opencode 管理）
+        self.skill_loader = SkillLoader(skill_dirs=["skills"])
         # ReAct 引擎
         self.react = ReActEngine(
             registry=self.registry,
@@ -83,7 +83,7 @@ class ChatbotAgent(BaseAgent):
 
     def _filter_tool_definitions(self, test_type: Optional[str]) -> List[Dict[str, Any]]:
         """根据 test_type 白名单过滤工具定义"""
-        definitions = self.registry.list_definitions()
+        definitions: List[Dict[str, Any]] = self.registry.list_definitions()
         if not test_type:
             return definitions
         allowed = TOOL_WHITELIST.get(test_type, set())
@@ -102,6 +102,7 @@ class ChatbotAgent(BaseAgent):
             QueryKnowledgeTool,
             QueryTestScriptsTool,
             InstallSkillTool,
+            LoadSkillTool,
             QueryProjectTool,
             GenerateTestTool,
             SaveTestCaseTool,
@@ -118,6 +119,7 @@ class ChatbotAgent(BaseAgent):
             QueryTestScriptsTool(),
             QueryProjectTool(),
             InstallSkillTool(),
+            LoadSkillTool(skill_loader=self.skill_loader),
             SaveTestCaseTool(),
             SaveTestScriptTool(),
         ]
@@ -160,28 +162,27 @@ class ChatbotAgent(BaseAgent):
         logger.info('[ChatBot] ========== 开始处理消息 ==========')
         logger.info(f'[ChatBot] 会话ID: {conversation_id}, test_type: {test_type}')
 
-        # Build context
+        # Build context — 每次请求重新 discover，确保 install_skill 后立即感知新 skill
+        skill_infos = self.skill_loader.discover()
         skills_data = [
-            {"name": s.name, "description": s.description, "content": s.content,
+            {"name": s.name, "description": s.description,
              "allowed_tools": s.allowed_tools}
-            for s in self._skill_infos
+            for s in skill_infos
         ]
         tool_defs = self._filter_tool_definitions(test_type)
 
-        environment: Dict[str, Any] = {"include_conversation_history": False}
+        environment: Dict[str, Any] = {
+            "include_conversation_history": False,
+            "platform": f"{sys.platform} ({ 'PowerShell' if sys.platform == 'win32' else 'bash' })",
+        }
         if test_type:
             environment["test_type"] = test_type
         if project_id:
             environment["project_id"] = project_id
 
         prompts = await sync_to_async(self.prompt_builder.build_for_chatbot)(
-            message=message,
-            intent="chatbot",
-            knowledge=[],
             tools=tool_defs,
             skills=skills_data,
-            session_id=str(conversation_id) if conversation_id else None,
-            user_id=str(user_id) if user_id else None,
             environment=environment,
         )
 
