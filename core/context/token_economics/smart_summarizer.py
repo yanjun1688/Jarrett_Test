@@ -127,9 +127,9 @@ class SmartSummarizer:
         (r'\b性能\b|\bperformance\b', '性能测试'),
     ]
 
-    FALLBACK_DECISION_PATTERN = r'(?:决定|确定|选择|使用|最终方案|采纳|采用)(.+?)(?=[，。。\n]|$)'
+    FALLBACK_DECISION_PATTERN = r'(?:决定|确定|选择|使用|最终方案|采纳|采用)(.+?)(?=[，。,.\n]|$)'
 
-    FALLBACK_ACTION_PATTERN = r'(?:需要|待办|TODO|下一步|接下来|稍后|本周|尽快)(.+?)(?=[，。。\n]|$)'
+    FALLBACK_ACTION_PATTERN = r'(?:需要|待办|TODO|下一步|接下来|稍后|本周|尽快)(.+?)(?=[，。,.\n]|$)'
 
     def __init__(
         self,
@@ -411,6 +411,10 @@ class SmartSummarizer:
             content = msg.get('content', '')
             if isinstance(content, str):
                 contents.append(content)
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get('type') == 'text':
+                        contents.append(block.get('text', ''))
         return '\n'.join(contents)
 
     def _format_summary_text(
@@ -531,7 +535,7 @@ class SmartSummarizer:
         try:
             assert self.llm_service is not None
             response = await self.llm_service.generate(prompt)
-            return response.strip()[:500]
+            return str(response).strip()[:500]
         except Exception as e:
             logger.warning(f"LLM 冷区摘要生成失败: {e}")
             return self._generate_simple_cold_summary(summary_history, messages)

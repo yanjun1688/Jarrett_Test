@@ -86,25 +86,25 @@ class BudgetStatus:
     used_tokens: int
     available_tokens: int
     utilization: float
-    status: str
+    status: BudgetStatusType
     recommendations: List[str] = field(default_factory=list)
     tier_breakdown: Dict[str, int] = field(default_factory=dict)
     
     @property
     def is_ok(self) -> bool:
-        return self.status == BudgetStatusType.OK.value
+        return self.status == BudgetStatusType.OK
     
     @property
     def is_warning(self) -> bool:
-        return self.status == BudgetStatusType.WARNING.value
+        return self.status == BudgetStatusType.WARNING
     
     @property
     def is_critical(self) -> bool:
-        return self.status == BudgetStatusType.CRITICAL.value
+        return self.status == BudgetStatusType.CRITICAL
     
     @property
     def is_exceeded(self) -> bool:
-        return self.status == BudgetStatusType.EXCEEDED.value
+        return self.status == BudgetStatusType.EXCEEDED
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -112,7 +112,7 @@ class BudgetStatus:
             "used_tokens": self.used_tokens,
             "available_tokens": self.available_tokens,
             "utilization": self.utilization,
-            "status": self.status,
+            "status": self.status.value,
             "recommendations": self.recommendations,
             "tier_breakdown": self.tier_breakdown
         }
@@ -452,13 +452,20 @@ MODEL_CONFIGS = {
 
 
 def get_model_config(model_name: str) -> Dict[str, Any]:
-    """获取模型配置"""
-    model_lower = model_name.lower()
-    
+    """获取模型配置（精确匹配 > 前缀匹配 > 包含匹配 > 兜底）"""
+    normalized = model_name.lower()
+
+    if normalized in MODEL_CONFIGS:
+        return MODEL_CONFIGS[normalized]
+
+    matches = [(k, v) for k, v in MODEL_CONFIGS.items() if normalized.startswith(k)]
+    if matches:
+        return max(matches, key=lambda x: len(x[0]))[1]
+
     for key, config in MODEL_CONFIGS.items():
-        if key in model_lower or model_lower in key:
+        if key in normalized:
             return config
-    
+
     return {
         "tokenizer": "unknown",
         "context_window": 8192,

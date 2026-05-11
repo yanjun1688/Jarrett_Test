@@ -8,7 +8,7 @@ PromptBuilder 统一入口
 4. 提供统一调用入口
 
 接口约定：
-- build_for_chatbot() -> (system_prompt, user_prompt, tokens)
+- build_for_chatbot() -> {"system_prompt": str, "system_prompt_tokens": int}
 - build_system_prompt() -> (prompt, token_count)
 - CACHE_BOUNDARY_MARKER: 缓存边界标记
 
@@ -28,7 +28,6 @@ from .sections import (
     ToneAndStyleSection,
     OutputEfficiencySection,
     KnowledgeContextSection,
-    ToolsSchemaSection,
     SkillsRegistrySection,
     ConversationHistorySection,
     EnvironmentInfoSection,
@@ -53,19 +52,14 @@ class PromptBuilder:
     
     使用示例：
         builder = PromptBuilder()
-        
+
         prompts = builder.build_for_chatbot(
-            message="帮我生成 UI 测试",
-            intent="generate_ui_test",
-            knowledge=[],
             tools=tools_schema,
             skills=skills_data,
-            session_id="xxx",
-            user_id="1"
+            environment={"test_type": "api"},
         )
-        
+
         system_prompt = prompts["system_prompt"]
-        user_prompt = prompts["user_prompt"]
     
     Reference: docs/2026/04/01/prompt_dynamic_assembly_design.md
     """
@@ -105,7 +99,6 @@ class PromptBuilder:
         
         self._dynamic_sections: List[PromptSection] = [
             KnowledgeContextSection(),
-            ToolsSchemaSection(),
             SkillsRegistrySection(),
             ConversationHistorySection(),
             EnvironmentInfoSection(),
@@ -199,35 +192,9 @@ class PromptBuilder:
     def _count_tokens(self, text: str) -> int:
         """计算 Token 数量"""
         if self.token_calc:
-            return self.token_calc.count_tokens(text)
+            return int(self.token_calc.count_tokens(text))
         return len(text) // 4
-    
-    def build_user_prompt(
-        self,
-        message: str,
-        context: Optional[Dict[str, Any]] = None
-    ) -> Tuple[str, int]:
-        """
-        构建 user prompt
-        
-        Args:
-            message: 用户消息
-            context: 上下文信息
-            
-        Returns:
-            (prompt_text, token_count)
-        """
-        prompt = f"## 用户请求\n\n{message}"
-        
-        if context:
-            additional_info = context.get("additional_user_context")
-            if additional_info:
-                prompt += f"\n\n## 补充信息\n\n{additional_info}"
-        
-        token_count = self._count_tokens(prompt)
-        
-        return prompt, token_count
-    
+
     def get_static_part_for_cache(self) -> str:
         """
         获取静态部分用于 API 缓存
@@ -244,144 +211,43 @@ class PromptBuilder:
     
     def build_for_chatbot(
         self,
-        message: str,
-        intent: str,
-        knowledge: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
         skills: List[Dict[str, Any]],
-        session_id: Optional[str] = None,
-        user_id: Optional[str] = None,
         environment: Optional[Dict[str, Any]] = None,
-        conversation_history: Optional[List[Dict[str, str]]] = None
     ) -> Dict[str, Any]:
         """
         为 ChatbotAgent 构建 prompt
-        
+
         Args:
-            message: 用户消息
-            intent: 检测到的意图
-            knowledge: 知识库检索结果
             tools: 可用工具 schema
             skills: 已安装 skills
-            session_id: 会话 ID
-            user_id: 用户 ID
-            environment: 环境信息
-            conversation_history: 对话历史
-            
+            environment: 环境信息 (test_type, project_id, include_conversation_history 等)
+
         Returns:
             {
                 "system_prompt": str,
-                "user_prompt": str,
                 "system_prompt_tokens": int,
-                "user_prompt_tokens": int,
-                "history_tokens": dict
             }
         """
-        logger.debug(f"[PromptBuilder] build_for_chatbot: intent={intent}, skills={len(skills)}, tools={len(tools)}, knowledge={len(knowledge)}")
-        
-        optimized_history = []
-        history_token_info = {}
-        
-        if self.context_store and session_id and user_id:
-            logger.debug(f"[PromptBuilder] 调用 TokenEconomicsContextStore...")
-            try:
-                optimized_history = self.context_store.get_messages_for_llm(
-                    session_id=session_id,
-                    user_id=user_id
-                )
-                logger.debug(f"[PromptBuilder] ContextStore返回: {len(optimized_history)}条优化历史")
-                
-                budget_status = self.context_store.check_budget(
-                    session_id=session_id,
-                    user_id=user_id
-                )
-                logger.debug(f"[PromptBuilder] Token预算状态: {budget_status.status.value}, 已用={budget_status.used_tokens}")
-                
-                history_token_info = {
-                    "total": budget_status.used_tokens,
-                    "hot": budget_status.tier_breakdown.get("hot", 0),
-                    "warm": budget_status.tier_breakdown.get("warm", 0),
-                    "cold": budget_status.tier_breakdown.get("cold", 0)
-                }
-                logger.debug(f"[PromptBuilder] 分层Token: hot={history_token_info['hot']}, warm={history_token_info['warm']}, cold={history_token_info['cold']}")
-            except Exception as e:
-                logger.warning(f"[PromptBuilder] ContextStore调用失败: {e}")
-        else:
-            logger.debug(f"[PromptBuilder] 跳过ContextStore: context_store={self.context_store is not None}, session={session_id}, user={user_id}")
-        
+        logger.debug(f"[PromptBuilder] build_for_chatbot: skills={len(skills)}, tools={len(tools)}")
+
         context = {
-            "intent": intent,
-            "knowledge": knowledge,
+            "knowledge": [],
             "available_tools": tools,
             "installed_skills": skills,
-            "optimized_history": optimized_history,
-            "conversation_history": conversation_history or [],
-            "history_token_info": history_token_info,
-            "include_conversation_history": True,
-            "include_tools_schema": bool(tools),
             "include_skills": True,
             **(environment or {})
         }
-        
+
         logger.debug(f"[PromptBuilder] 构建上下文完成，调用 build_system_prompt...")
         system_prompt, system_tokens = self.build_system_prompt(context)
         logger.debug(f"[PromptBuilder] System prompt构建完成: tokens={system_tokens}")
-        
-        user_prompt, user_tokens = self.build_user_prompt(message, context)
-        logger.debug(f"[PromptBuilder] User prompt构建完成: tokens={user_tokens}")
-        
-        logger.debug(f"[PromptBuilder] ========== Prompt构建完成 ==========")
-        logger.debug(f"[PromptBuilder] 总Token: system={system_tokens}, user={user_tokens}, history={history_token_info.get('total', 0)}")
-        
+
         return {
             "system_prompt": system_prompt,
-            "user_prompt": user_prompt,
             "system_prompt_tokens": system_tokens,
-            "user_prompt_tokens": user_tokens,
-            "history_tokens": history_token_info
         }
     
-    def build_for_tool_execution(
-        self,
-        tool_name: str,
-        tool_description: str,
-        original_message: str,
-        tool_result: Dict[str, Any]
-    ) -> Dict[str, str]:
-        """
-        为工具执行后的解释构建 prompt
-        
-        Args:
-            tool_name: 工具名称
-            tool_description: 工具描述
-            original_message: 用户原始消息
-            tool_result: 工具执行结果
-            
-        Returns:
-            {"system_prompt": str, "user_prompt": str}
-        """
-        system_prompt = """你是测试助手，负责解释工具执行结果。
-
-解释要求：
-1. 简洁说明工具执行了什么
-2. 总结关键结果
-3. 如果有错误，说明原因和建议
-4. 不要前言和后语"""
-        
-        user_prompt = f"""用户原始请求: {original_message}
-
-执行工具: {tool_name}
-工具描述: {tool_description}
-
-执行结果:
-{tool_result}
-
-请根据工具执行结果，生成一个简洁的自然语言回复。"""
-        
-        return {
-            "system_prompt": system_prompt,
-            "user_prompt": user_prompt
-        }
 
 
 _global_prompt_builder: Optional[PromptBuilder] = None

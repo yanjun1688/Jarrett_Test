@@ -15,7 +15,7 @@
 - ContextTierManager: 三层上下文管理器
 - SmartSummarizer: 智能摘要生成器
 - IncrementalStore: 增量写入引擎
-- CacheOptimizer: 缓存优化器
+- CacheOptimizer: 缓存优化器（实验性，未集成）
 
 接口约定（对齐 PromptBuilder）：
 - get_messages_for_llm() -> optimized_history
@@ -35,7 +35,6 @@ from .token_economics import (
     ContextTierManager,
     SmartSummarizer,
     IncrementalStore,
-    CacheOptimizer,
     TierConfig,
     ZoneType,
 )
@@ -51,7 +50,6 @@ __all__ = [
     "ContextTierManager",
     "SmartSummarizer",
     "IncrementalStore",
-    "CacheOptimizer",
     "TierConfig",
     "ZoneType",
 ]
