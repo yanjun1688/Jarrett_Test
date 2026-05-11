@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Any
 from django.contrib import admin
-from core.models import Project, Module, TestCase, TestExecution
+from core.models import Project, Module, TestExecution
 from testmanager_app.models import TestReport, AuthToken, ApiRequest, RequestCollection, FeatureTestCase
 
 
@@ -21,19 +21,11 @@ class ModuleAdmin(admin.ModelAdmin):
     ordering = ['project', 'name']
 
 
-@admin.register(TestCase)
-class TestCaseAdmin(admin.ModelAdmin):
-    list_display = ['title', 'project', 'module', 'priority', 'created_by', 'created_at']
-    list_filter = ['project', 'module', 'priority', 'created_at']
-    search_fields = ['title', 'steps', 'expected_result']
-    ordering = ['-created_at']
-
-
 @admin.register(TestExecution)
 class TestExecutionAdmin(admin.ModelAdmin):
-    list_display = ['test_case', 'executed_by', 'status', 'executed_at']
+    list_display = ['executed_by', 'status', 'executed_at']
     list_filter = ['status', 'executed_by', 'executed_at']
-    search_fields = ['test_case__title', 'actual_result', 'notes']
+    search_fields = ['actual_result', 'notes']
     ordering = ['-executed_at']
 
 

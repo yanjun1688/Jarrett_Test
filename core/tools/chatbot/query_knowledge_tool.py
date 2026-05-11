@@ -263,7 +263,7 @@ class QueryKnowledgeTool(BaseTool):
 
             def _get() -> Optional[Dict[str, Any]]:
                 try:
-                    doc = KnowledgeDocument.objects.get(id=document_id)
+                    doc: Any = KnowledgeDocument.objects.get(id=document_id)
                     content = doc.content or ''
                     if not content and doc.file_path:
                         try:
@@ -349,8 +349,8 @@ class QueryKnowledgeTool(BaseTool):
         try:
             kb = KnowledgeBase.objects.filter(name__icontains=kb_name).first()
             if kb:
-                logger.info(f'[QueryKnowledge] 识别知识库: {kb_name!r} -> kb_id={kb.id}')
-                return kb.id
+                logger.info(f'[QueryKnowledge] 识别知识库: {kb_name!r} -> kb_id={kb.id}')  # pyright: ignore[reportAttributeAccessIssue]
+                return kb.id  # pyright: ignore[reportAttributeAccessIssue]
         except Exception as e:
             logger.warning(f'[QueryKnowledge] 查询知识库失败: {e}')
 

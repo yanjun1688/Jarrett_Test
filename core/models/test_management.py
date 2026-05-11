@@ -13,113 +13,12 @@ from django.utils import timezone
 
 from .project import Project, Module
 
-
-class TestCase(models.Model):
-    """统一测试用例模型 - 扩展支持AI生成"""
-    
-    PRIORITY_CHOICES = [
-        ('low', '低'),
-        ('medium', '中'),
-        ('high', '高'),
-        ('critical', '紧急'),
-    ]
-    
-    class Source(models.TextChoices):
-        CHATBOT = 'chatbot', 'Chatbot生成'
-        MANUAL_UPLOAD = 'manual_upload', '手动上传PRD'
-        MANUAL_CREATE = 'manual_create', '手动创建'
-    
-    title = models.CharField(max_length=200, verbose_name='用例标题')
-    project = models.ForeignKey(
-        Project,
-        on_delete=models.CASCADE,
-        related_name='testcases',
-        verbose_name='所属项目'
-    )
-    module = models.ForeignKey(
-        Module,
-        on_delete=models.CASCADE,
-        related_name='testcases',
-        verbose_name='所属模块',
-        null=True,
-        blank=True
-    )
-    priority = models.CharField(
-        max_length=10,
-        choices=PRIORITY_CHOICES,
-        default='medium',
-        verbose_name='优先级'
-    )
-    precondition = models.TextField(blank=True, verbose_name='前置条件')
-    steps = models.TextField(verbose_name='测试步骤')
-    expected_result = models.TextField(verbose_name='预期结果')
-    created_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='testcases',
-        verbose_name='创建人'
-    )
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
-    
-    source = models.CharField(
-        max_length=20,
-        choices=Source.choices,
-        default=Source.MANUAL_CREATE,
-        verbose_name='来源',
-        db_index=True
-    )
-    
-    prd_document = models.ForeignKey(
-        'core.KnowledgeDocument',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='关联PRD文档'
-    )
-    
-    conversation = models.ForeignKey(
-        'core.AgentConversation',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='生成会话'
-    )
-    
-    quality_score = models.IntegerField(
-        null=True,
-        blank=True,
-        verbose_name='质量评分'
-    )
-    
-    generation_metadata = models.JSONField(
-        default=dict,
-        verbose_name='生成元数据'
-    )
-    
-    class Meta:
-        verbose_name = '测试用例'
-        verbose_name_plural = '测试用例'
-        ordering = ['-created_at']
-        db_table = 'core_test_case'
-        indexes = [
-            models.Index(fields=['project', 'source']),
-            models.Index(fields=['prd_document']),
-        ]
-    
-    def __str__(self) -> str:
-        return self.title
-
-
 class TestExecutionQuerySet(QuerySet['TestExecution']):
     """测试执行记录的自定义 QuerySet"""
 
     def by_project(self, project: Any) -> 'TestExecutionQuerySet':
         """按项目过滤"""
         return self.filter(
-            Q(test_case__project=project) |
             Q(api_request__project=project) |
             Q(collection_execution__collection__project=project) |
             Q(test_script__project=project)
@@ -137,8 +36,7 @@ class TestExecutionQuerySet(QuerySet['TestExecution']):
             failed_executions=Count('id', filter=Q(status='failed')),
             blocked_executions=Count('id', filter=Q(status='blocked')),
             skipped_executions=Count('id', filter=Q(status='skipped')),
-            total_cases=Count('test_case', distinct=True, filter=Q(test_case__isnull=False)) +
-                        Count('api_request', distinct=True, filter=Q(api_request__isnull=False)) +
+            total_cases=Count('api_request', distinct=True, filter=Q(api_request__isnull=False)) +
                         Count('collection_execution', distinct=True, filter=Q(collection_execution__isnull=False)) +
                         Count('test_script', distinct=True, filter=Q(test_script__isnull=False))
         )
@@ -181,16 +79,6 @@ class TestExecution(models.Model):
         choices=TEST_TYPE_CHOICES,
         default='functional',
         verbose_name='测试类型'
-    )
-    
-    test_case = models.ForeignKey(
-        TestCase,
-        on_delete=models.CASCADE,
-        related_name='executions',
-        null=True,
-        blank=True,
-        verbose_name='功能测试用例',
-        db_index=True
     )
     
     api_request = models.ForeignKey(
@@ -291,8 +179,6 @@ class TestExecution(models.Model):
             return f"{self.collection_execution.collection.name} - {self.get_status_display()}"
         elif self.test_type == 'api':
             return f"API测试 - {self.get_status_display()}"
-        elif self.test_case:
-            return f"{self.test_case.title} - {self.get_status_display()}"
         else:
             return f"测试执行 - {self.get_status_display()}"
 
