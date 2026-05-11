@@ -1,6 +1,5 @@
 """
-测试用例相关视图
-包含：TestCaseViewSet, TestExecutionViewSet
+测试执行相关视图
 """
 
 from typing import Any
@@ -10,54 +9,13 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from core.models import TestCase, TestExecution
+from core.models import TestExecution
 from testmanager_app.serializers import (
-    TestCaseSerializer, TestCaseCreateSerializer,
     TestExecutionSerializer, TestExecutionCreateSerializer, TestExecutionListSerializer
 )
 from testmanager_app.viewsets import BaseViewSet, QueryOptimizerMixin, CommonFilterMixin
 
 logger = logging.getLogger(__name__)
-
-
-class TestCaseViewSet(QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
-    """测试用例管理API
-
-    继承BaseViewSet实现：
-    - 自动设置 permission_classes = [RoleBasedPermission]
-    - 自动填充 created_by (TestCase模型有这个字段)
-    """
-    queryset = TestCase.objects.all()
-    serializer_class = TestCaseSerializer
-
-    query_parameters = ['project', 'module', 'priority']
-
-    select_related_fields = ['project', 'module', 'created_by']
-
-    filter_int_fields = ['project', 'module']
-
-    def get_serializer_class(self) -> type[BaseSerializer]:
-        if self.action in ['create', 'update', 'partial_update']:
-            return TestCaseCreateSerializer
-        return TestCaseSerializer
-
-    @action(detail=True, methods=['post'])
-    def execute(self, request: Any, pk: Any = None) -> Response:
-        """执行测试用例"""
-        testcase = self.get_object()
-
-        execution = TestExecution.objects.create(
-            test_case=testcase,
-            executed_by=request.user,
-            status='running'
-        )
-
-        return Response({
-            'id': execution.id,
-            'testcase_id': testcase.id,
-            'status': execution.status,
-            'message': '测试用例执行已启动'
-        }, status=status.HTTP_201_CREATED)
 
 
 class TestExecutionViewSet(QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
@@ -72,7 +30,7 @@ class TestExecutionViewSet(QueryOptimizerMixin, CommonFilterMixin, BaseViewSet):
     serializer_class = TestExecutionSerializer
     filter_int_fields = ['api_request']
 
-    select_related_fields = ['test_case', 'api_request', 'executed_by']
+    select_related_fields = ['api_request', 'executed_by']
 
     def get_serializer_class(self) -> type[BaseSerializer]:
         if self.action == 'list':

@@ -179,7 +179,6 @@ class ReportService:
             )
             # 复用 TestExecution 的 by_project 过滤逻辑
             chatbot_logs = chatbot_logs.filter(
-                Q(execution__test_case__project=proj) |
                 Q(execution__api_request__project=proj) |
                 Q(execution__collection_execution__collection__project=proj)
             )

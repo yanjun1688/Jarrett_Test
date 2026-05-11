@@ -27,7 +27,7 @@ from testmanager_app.serializers import (
 from testmanager_app.viewsets import BaseViewSet, QueryOptimizerMixin, CommonFilterMixin, CacheMixin
 from testmanager_app.utils.api_exceptions import api_exception_handler
 from testmanager_app.services import TestExecutionService
-from testmanager_app.tasks import execute_collection_task
+# from testmanager_app.tasks import execute_collection_task
 
 logger = logging.getLogger(__name__)
 

@@ -49,7 +49,6 @@ router = DefaultRouter()
 
 router.register(r'projects', tm_views.ProjectViewSet, basename='project')
 router.register(r'modules', tm_views.ModuleViewSet, basename='module')
-router.register(r'testcases', tm_views.TestCaseViewSet, basename='testcase')
 router.register(r'executions', tm_views.TestExecutionViewSet, basename='execution')
 router.register(r'reports', tm_views.TestReportViewSet, basename='report')
 router.register(r'test-scripts', tm_views.TestScriptViewSet, basename='test-script')

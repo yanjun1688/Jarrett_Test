@@ -496,7 +496,7 @@ class FeatureTestCase(models.Model):
     )
     pre_steps: models.TextField[str, str] = models.TextField(blank=True, verbose_name='前置步骤')
     steps: models.TextField[str, str] = models.TextField(verbose_name='操作步骤')
-    expected_result: models.TextField[str, str] = models.TextField(verbose_name='预期结果')
+    expected_result: models.TextField[str, str] = models.TextField(blank=True, verbose_name='预期结果')
     actual_result: models.TextField[str, str] = models.TextField(blank=True, verbose_name='实际结果')
     to_confirm: models.TextField[str, str] = models.TextField(blank=True, verbose_name='待确定')
     is_passed: models.BooleanField[Optional[bool], Optional[bool]] = models.BooleanField(null=True, blank=True, verbose_name='是否通过')

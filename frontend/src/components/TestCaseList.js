@@ -96,28 +96,8 @@ function TestCaseList({ projectId }) {
         allTestCases.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         setTestCases(allTestCases);
       } else {
-        let testcaseUrl = '/testcases/';
-        const testcaseParams = new URLSearchParams();
-
-        if (currentFilter.project) {
-          testcaseParams.append('project', currentFilter.project);
-        }
-
-        const testcaseQueryString = testcaseParams.toString();
-        if (testcaseQueryString) {
-          testcaseUrl += `?${testcaseQueryString}`;
-        }
-
-        const testcasesRes = await apiClient.get(testcaseUrl);
-
-        const allTestCases = (testcasesRes.data.results || []).map(item => ({
-          ...item,
-          test_type: 'feature',
-          project_name: item.project_name || item.project?.name,
-        }));
-
-        allTestCases.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        setTestCases(allTestCases);
+        // 功能测试用例通过 FeatureTestCaseManager 组件管理，直接显示即可
+        setTestCases([]);
       }
     } catch (error) {
       notification.error({ message: '获取测试用例失败', description: error.message });

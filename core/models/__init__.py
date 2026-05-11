@@ -6,7 +6,7 @@ It consolidates models from multiple apps into a single, coherent structure.
 """
 
 from .project import Project, Module
-from .test_management import TestCase, TestExecution
+from .test_management import TestExecution
 from .knowledge import KnowledgeBase, KnowledgeDocument
 from .agents import AgentConversation, AgentExecution
 from .chatbot_execution_log import ChatBotExecutionLog
@@ -15,7 +15,6 @@ from .unified import UnifiedScript, UnifiedExecution, ScriptType, UnifiedStatus
 __all__ = [
     'Project',
     'Module',
-    'TestCase',
     'TestExecution',
     'KnowledgeBase',
     'KnowledgeDocument',

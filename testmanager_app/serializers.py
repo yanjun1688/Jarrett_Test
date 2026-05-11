@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
 from rest_framework import serializers
-from core.models import Project, Module, TestCase, TestExecution
+from core.models import Project, Module, TestExecution
 from testmanager_app.models import (
     TestReport, TestScript, ScriptExecution, ApiRequest, ApiAssertion,
     RequestCollection, CollectionExecution, FeatureTestCase, CollectionRequest,
@@ -33,26 +33,7 @@ class ModuleSerializer(serializers.ModelSerializer[Module]):
         fields = '__all__'
 
 
-class TestCaseSerializer(serializers.ModelSerializer[TestCase]):
-    project_name = serializers.CharField(source='project.name', read_only=True)
-    module_name = serializers.CharField(source='module.name', read_only=True)
-    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
-    
-    class Meta:
-        model = TestCase
-        fields = '__all__'
-
-
-class TestCaseCreateSerializer(serializers.ModelSerializer[TestCase]):
-    """测试用例创建序列化器（用于创建和更新操作）"""
-    class Meta:
-        model = TestCase
-        fields = ['id', 'title', 'project', 'module', 'priority', 'precondition', 'steps', 'expected_result']
-        read_only_fields = ['id']
-
-
 class TestExecutionSerializer(serializers.ModelSerializer[TestExecution]):
-    testcase_title = serializers.CharField(source='testcase.title', read_only=True, default=None)
     api_request_name = serializers.CharField(source='api_request.name', read_only=True, default=None)
     test_script_name = serializers.CharField(source='test_script.name', read_only=True, default=None)
     executor_name = serializers.CharField(source='executed_by.username', read_only=True, default=None)
@@ -66,7 +47,7 @@ class TestExecutionCreateSerializer(serializers.ModelSerializer[TestExecution]):
     class Meta:
         model = TestExecution
         fields = [
-            'test_type', 'testcase', 'api_request', 'test_script',
+            'test_type', 'api_request', 'test_script',
             'status', 'actual_result', 'comments', 'duration',
             'api_response_data', 'api_logs', 'error_message', 'step_results',
         ]

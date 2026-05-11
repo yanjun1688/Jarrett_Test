@@ -198,8 +198,6 @@ def _get_script_name_for_execution(sender: Type[Any], instance: Any) -> str:
             return str(instance.test_script.name)
         if instance.api_request:
             return str(instance.api_request.name)
-        if instance.test_case:
-            return str(instance.test_case.title)
         return f'TestExecution #{instance.pk}'
     if sender is ChatBotExecutionLog:
         return str(instance.title) or f'ChatBot #{instance.pk}'
@@ -222,8 +220,6 @@ def _get_project_for_execution(sender: Type[Any], instance: Any) -> Any:
             return instance.test_script.project
         if instance.api_request and instance.api_request.project:
             return instance.api_request.project
-        if instance.test_case and instance.test_case.project:
-            return instance.test_case.project
         return None
     if sender is ChatBotExecutionLog:
         # ChatBotExecutionLog 通过 execution FK 间接获取 project

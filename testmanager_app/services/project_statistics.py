@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from typing import Dict, Any, Optional
 from django.db.models import Count, Q
-from core.models import Project, TestCase, TestExecution
+from core.models import Project, TestExecution
+from testmanager_app.models import FeatureTestCase
 
 
 def get_project_statistics(project_id: int) -> Optional[Dict[str, Any]]:
@@ -29,7 +30,7 @@ def get_project_statistics(project_id: int) -> Optional[Dict[str, Any]]:
         return None
 
     # 统计功能测试用例
-    total_testcases = TestCase.objects.filter(project=project).count()
+    total_testcases = FeatureTestCase.objects.filter(project=project).count()
 
     # 使用自定义 QuerySet 方法统一聚合统计
     stats = TestExecution.objects.by_project(project).aggregate_stats()  # type: ignore[attr-defined]
@@ -45,17 +46,15 @@ def get_project_statistics(project_id: int) -> Optional[Dict[str, Any]]:
     pass_rate = round((passed_executions / total_executions * 100), 2) if total_executions > 0 else 0
 
     # 按测试类型细分统计
-    testcase_executions = TestExecution.objects.filter(
-        test_type='testcase',
-        test_case__project=project
-    )
-    testcase_stats = testcase_executions.aggregate(
-        total=Count('id'),
-        passed=Count('id', filter=Q(status='passed')),
-        failed=Count('id', filter=Q(status='failed')),
-        blocked=Count('id', filter=Q(status='blocked')),
-        skipped=Count('id', filter=Q(status='skipped')),
-    )
+    # 功能测试用例：FeatureTestCase 无执行状态字段，此处只统计数量
+    feature_total = FeatureTestCase.objects.filter(project=project).count()
+    feature_stats: Dict[str, Any] = {
+        'total': feature_total,
+        'passed': 0,
+        'failed': 0,
+        'blocked': 0,
+        'skipped': 0,
+    }
 
     api_executions = TestExecution.objects.filter(
         test_type='api',
@@ -80,12 +79,12 @@ def get_project_statistics(project_id: int) -> Optional[Dict[str, Any]]:
         'skipped_executions': skipped_executions,
         'pass_rate': pass_rate,
         'detail': {
-            'testcase': {
-                'total': testcase_stats.get('total', 0),
-                'passed': testcase_stats.get('passed', 0),
-                'failed': testcase_stats.get('failed', 0),
-                'blocked': testcase_stats.get('blocked', 0),
-                'skipped': testcase_stats.get('skipped', 0),
+            'feature': {
+                'total': feature_stats.get('total', 0),
+                'passed': feature_stats.get('passed', 0),
+                'failed': feature_stats.get('failed', 0),
+                'blocked': feature_stats.get('blocked', 0),
+                'skipped': feature_stats.get('skipped', 0),
             },
             'api': {
                 'total': api_stats.get('total', 0),

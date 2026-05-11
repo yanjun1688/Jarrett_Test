@@ -136,7 +136,14 @@ class SaveTestCaseTool(BaseTool):
             )
     
     def _parse_test_cases(self, content: str) -> List[Dict[str, Any]]:
-        """解析 Markdown 内容提取用例"""
+        """解析 Markdown 内容提取用例
+        
+        支持多种格式：
+        - [预期结果] xxx
+        - 预期结果：xxx
+        - | **预期结果** | xxx |
+        - | 预期结果 | xxx |
+        """
         cases: List[Dict[str, Any]] = []
         
         sections = re.split(r'^##\s+', content, flags=re.MULTILINE)
@@ -153,13 +160,34 @@ class SaveTestCaseTool(BaseTool):
             precondition = ''
             steps = remaining_lines
             
-            expected_match = re.search(r'(?:\[预期结果\]|预期结果[：:])\s*(.+)', remaining_lines)
-            if expected_match:
-                expected = expected_match.group(1).strip()
+            expected_patterns = [
+                r'\[预期结果\]\s*(.+)',
+                r'预期结果[：:]\s*(.+)',
+                r'\*\*预期结果\*\*\s*\|\s*(.+?)\s*\|',
+                r'预期结果\s*\|\s*(.+?)\s*\|',
+            ]
             
-            precondition_match = re.search(r'(?:\[前置条件\]|前置条件[：:])\s*(.+)', remaining_lines)
-            if precondition_match:
-                precondition = precondition_match.group(1).strip()
+            for pattern in expected_patterns:
+                match = re.search(pattern, remaining_lines)
+                if match:
+                    expected = match.group(1).strip()
+                    break
+            
+            precondition_patterns = [
+                r'\[前置条件\]\s*(.+)',
+                r'前置条件[：:]\s*(.+)',
+                r'\*\*前置条件\*\*\s*\|\s*(.+?)\s*\|',
+                r'前置条件\s*\|\s*(.+?)\s*\|',
+            ]
+            
+            for pattern in precondition_patterns:
+                match = re.search(pattern, remaining_lines)
+                if match:
+                    precondition = match.group(1).strip()
+                    break
+            
+            if not expected:
+                expected = '待补充'
             
             cases.append({
                 "title": title,
@@ -172,7 +200,7 @@ class SaveTestCaseTool(BaseTool):
             cases.append({
                 "title": "Generated Test Case",
                 "steps": content,
-                "expected": "",
+                "expected": "待补充",
                 "precondition": ""
             })
         

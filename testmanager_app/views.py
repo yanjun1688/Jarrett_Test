@@ -10,7 +10,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from .project_views import ProjectViewSet, ModuleViewSet
-from .testcase_views import TestCaseViewSet, TestExecutionViewSet
+from .testcase_views import TestExecutionViewSet
 from .controllers.api_views import (
     ApiRequestViewSet, ApiAssertionViewSet,
     RequestCollectionViewSet, CollectionExecutionViewSet,
@@ -39,7 +39,6 @@ __all__ = [
     'ProjectViewSet',
     'ModuleViewSet',
     
-    'TestCaseViewSet',
     'TestExecutionViewSet',
     
     'ApiRequestViewSet',
