@@ -50,7 +50,13 @@ class MCPConnection(ABC):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Clean up MCP server connection resources."""
         if self._stack:
-            await self._stack.__aexit__(exc_type, exc_val, exc_tb)
+            try:
+                await self._stack.__aexit__(exc_type, exc_val, exc_tb)
+            except RuntimeError as e:
+                if "cancel scope" in str(e):
+                    pass
+                else:
+                    raise
         self.session = None
         self._stack = None
 
