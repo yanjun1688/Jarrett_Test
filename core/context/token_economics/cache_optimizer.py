@@ -3,6 +3,9 @@
 
 实现 API 层 Prompt 缓存优化。
 
+NOTE: 此模块已实现但尚未集成到 PromptBuilder 或 ContextStore。
+保留供未来 prompt caching 优化使用（机制6）。
+
 功能：
 - 静态前缀分离
 - 缓存边界标记
@@ -15,6 +18,8 @@
 
 Reference: docs/2026/04/01/DESIGN_CONTEXT_TOKEN_ECONOMICS.md 机制6
 """
+
+from __future__ import annotations
 
 import hashlib
 import logging

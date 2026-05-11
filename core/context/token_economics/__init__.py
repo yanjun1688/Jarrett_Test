@@ -13,7 +13,7 @@ Token Economics 模块
 - ContextTierManager: 三层上下文管理器
 - SmartSummarizer: 智能摘要生成器
 - IncrementalStore: 增量写入引擎
-- CacheOptimizer: 缓存优化器
+- CacheOptimizer: 缓存优化器（实验性，未集成）
 
 接口约定（对齐 PromptBuilder）：
 - get_messages_for_llm() -> optimized_history
@@ -51,8 +51,6 @@ Reference: docs/2026/04/01/DESIGN_CONTEXT_TOKEN_ECONOMICS.md
 from .token_calculator import TokenCalculator
 from .budget_manager import (
     BudgetStatus,
-    BudgetStatusType,
-    BudgetConfig,
     TokenBudgetManager,
 )
 from .context_store import TokenEconomicsContextStore
@@ -70,13 +68,16 @@ from .incremental_store import (
     SessionIndex,
     IndexEntry,
 )
-from .cache_optimizer import (
-    CacheOptimizer,
-    CacheStats,
-    CacheConfig,
-    CacheFriendlyPromptBuilder,
-)
+# CacheOptimizer/CacheFriendlyPromptBuilder 已实现但未集成到 prompt 构建流程，暂不导出
+# from .cache_optimizer import (
+#     CacheOptimizer,
+#     CacheStats,
+#     CacheConfig,
+#     CacheFriendlyPromptBuilder,
+# )
 from .base import (
+    BudgetStatusType,
+    BudgetConfig,
     OptimizedContext,
     CompressionResult,
     TokenStatistics,
@@ -104,10 +105,6 @@ __all__ = [
     "IncrementalStore",
     "SessionIndex",
     "IndexEntry",
-    "CacheOptimizer",
-    "CacheStats",
-    "CacheConfig",
-    "CacheFriendlyPromptBuilder",
     "OptimizedContext",
     "CompressionResult",
     "TokenStatistics",

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -83,21 +84,19 @@ class InstallSkillTool(BaseTool):
 
         logger.info(f"[InstallSkill] 执行: {' '.join(cmd)}")
 
-        # 异步执行子进程，不阻塞事件循环
+        # 在子线程中同步执行（跨平台兼容，Windows 上 asyncio 子进程不可用）
         try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(project_root),
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    cwd=str(project_root),
+                    timeout=self.timeout,
+                ),
             )
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                process.communicate(), timeout=self.timeout
-            )
-        except asyncio.TimeoutError:
-            if process:
-                process.kill()
-                await process.wait()
+        except subprocess.TimeoutExpired:
             logger.error(f"[InstallSkill] 超时 ({self.timeout}s): {skill_id}")
             return ToolResult(success=False, data={}, error=f"安装超时（{self.timeout}秒），请重试")
         except FileNotFoundError:
@@ -106,10 +105,10 @@ class InstallSkillTool(BaseTool):
             logger.error(f"[InstallSkill] 执行异常: {e}", exc_info=True)
             return ToolResult(success=False, data={}, error=f"安装失败: {e}")
 
-        stdout = _ANSI_RE.sub("", stdout_bytes.decode("utf-8", errors="replace"))
-        stderr = _ANSI_RE.sub("", stderr_bytes.decode("utf-8", errors="replace"))
+        stdout = _ANSI_RE.sub("", result.stdout.decode("utf-8", errors="replace"))
+        stderr = _ANSI_RE.sub("", result.stderr.decode("utf-8", errors="replace"))
 
-        if process.returncode != 0:
+        if result.returncode != 0:
             error_msg = stderr or stdout or "未知错误"
             logger.error(f"[InstallSkill] 失败: {error_msg[:500]}")
             return ToolResult(success=False, data={}, error=f"安装失败: {error_msg[:500]}")

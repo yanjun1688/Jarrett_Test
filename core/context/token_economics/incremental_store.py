@@ -11,10 +11,12 @@
 Reference: docs/2026/04/01/DESIGN_CONTEXT_TOKEN_ECONOMICS.md 机制3
 """
 
-import logging
+from __future__ import annotations
+
 import json
 import os
 import threading
+import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple, Union, Generator
 from datetime import datetime
@@ -33,7 +35,7 @@ def _file_lock(filepath: Path) -> Generator[None, None, None]:
         if os.name == 'nt':
             import msvcrt
             lock_fd = open(lock_path, 'w')
-            msvcrt.locking(lock_fd.fileno(), msvcrt.LK_NBLCK, 1)
+            msvcrt.locking(lock_fd.fileno(), msvcrt.LK_LOCK, 1)
         else:
             import fcntl
             lock_fd = open(lock_path, 'w')

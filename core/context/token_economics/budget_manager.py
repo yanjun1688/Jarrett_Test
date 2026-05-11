@@ -6,27 +6,25 @@ Token 预算管理器
 Reference: docs/2026/04/01/DESIGN_CONTEXT_TOKEN_ECONOMICS.md
 """
 
+from __future__ import annotations
+
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
-from enum import Enum
 import logging
+
+from .base import BudgetStatusType, BudgetConfig as BaseBudgetConfig
 
 logger = logging.getLogger(__name__)
 
 
-class BudgetStatusType(Enum):
-    """预算状态类型"""
-    OK = "ok"
-    WARNING = "warning"
-    CRITICAL = "critical"
-    EXCEEDED = "exceeded"
+BudgetConfig = BaseBudgetConfig  # re-export for backward compatibility
 
 
 @dataclass
 class BudgetStatus:
     """
     Token 预算状态
-    
+
     Attributes:
         total_budget: 总预算
         used_tokens: 已使用 Token
@@ -43,7 +41,7 @@ class BudgetStatus:
     status: BudgetStatusType
     recommendations: List[str] = field(default_factory=list)
     tier_breakdown: Dict[str, int] = field(default_factory=dict)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
@@ -55,20 +53,6 @@ class BudgetStatus:
             "recommendations": self.recommendations,
             "tier_breakdown": self.tier_breakdown,
         }
-
-
-@dataclass
-class BudgetConfig:
-    """预算配置"""
-    total_limit: int = 8192
-    output_reserve: int = 2048
-    safety_buffer: int = 512
-    soft_limit_ratio: float = 0.8
-    
-    @property
-    def effective_budget(self) -> int:
-        """有效预算（扣除预留）"""
-        return self.total_limit - self.output_reserve - self.safety_buffer
 
 
 class TokenBudgetManager:
@@ -85,16 +69,21 @@ class TokenBudgetManager:
     Reference: docs/2026/04/01/DESIGN_CONTEXT_TOKEN_ECONOMICS.md
     """
     
-    DEFAULT_CONFIGS = {
+    DEFAULT_CONFIGS: Dict[str, BudgetConfig] = {
         "gpt-4": BudgetConfig(total_limit=8192, output_reserve=2048, safety_buffer=512),
         "gpt-4-turbo": BudgetConfig(total_limit=128000, output_reserve=8192, safety_buffer=1024),
         "gpt-3.5-turbo": BudgetConfig(total_limit=16384, output_reserve=4096, safety_buffer=512),
         "glm-4": BudgetConfig(total_limit=128000, output_reserve=8192, safety_buffer=1024),
         "glm-4-plus": BudgetConfig(total_limit=128000, output_reserve=8192, safety_buffer=1024),
         "glm-4-flash": BudgetConfig(total_limit=128000, output_reserve=4096, safety_buffer=512),
-        "glm-4.7-flash": BudgetConfig(total_limit=8192, output_reserve=2048, safety_buffer=256),
-        "glm-5": BudgetConfig(total_limit=4096, output_reserve=1024, safety_buffer=128),
+        "qwen-turbo": BudgetConfig(total_limit=128000, output_reserve=8192, safety_buffer=1024),
         "qwen-plus": BudgetConfig(total_limit=128000, output_reserve=8192, safety_buffer=1024),
+        "qwen-max": BudgetConfig(total_limit=32000, output_reserve=4096, safety_buffer=512),
+        "qwen3-coder-plus": BudgetConfig(total_limit=128000, output_reserve=8192, safety_buffer=1024),
+        "deepseek-chat": BudgetConfig(total_limit=32000, output_reserve=4096, safety_buffer=512),
+        "deepseek-coder": BudgetConfig(total_limit=16384, output_reserve=4096, safety_buffer=512),
+        "claude-3-opus": BudgetConfig(total_limit=200000, output_reserve=8192, safety_buffer=1024),
+        "claude-3-sonnet": BudgetConfig(total_limit=200000, output_reserve=8192, safety_buffer=1024),
     }
     
     def __init__(self, model_name: str, config: Optional[BudgetConfig] = None):
@@ -114,11 +103,20 @@ class TokenBudgetManager:
         self.total_budget = config.effective_budget
     
     def _get_default_config(self, model_name: str) -> BudgetConfig:
-        """获取模型的默认配置"""
+        """获取模型的默认配置（精确匹配 > 前缀匹配 > 包含匹配 > 兜底）"""
+        normalized = model_name.lower()
+
+        if normalized in self.DEFAULT_CONFIGS:
+            return self.DEFAULT_CONFIGS[normalized]
+
+        matches = [(k, v) for k, v in self.DEFAULT_CONFIGS.items() if normalized.startswith(k)]
+        if matches:
+            return max(matches, key=lambda x: len(x[0]))[1]
+
         for key, config in self.DEFAULT_CONFIGS.items():
-            if key in model_name or model_name in key:
+            if key in normalized:
                 return config
-        
+
         return BudgetConfig()
     
     def check_budget(self, current_tokens: int) -> BudgetStatus:

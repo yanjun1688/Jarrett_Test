@@ -9,12 +9,9 @@
 - 冷区 (Cold Zone): 语义摘要，Token占比 10%
 
 功能：
-- 自动层级升降
-- Token 预算分配
-- 压缩触发判断
+- 自动层级升降"""
 
-Reference: docs/2026/04/01/DESIGN_CONTEXT_TOKEN_ECONOMICS.md 机制1
-"""
+from __future__ import annotations
 
 import logging
 from typing import Dict, Any, Optional, List, Tuple

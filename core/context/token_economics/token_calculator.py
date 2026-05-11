@@ -13,20 +13,16 @@ Token 精确计算器
 Reference: docs/2026/04/01/DESIGN_CONTEXT_TOKEN_ECONOMICS.md
 """
 
+from __future__ import annotations
+
 import re
 import logging
 from typing import Dict, Optional, Any, List, Union
 from dataclasses import dataclass
-from enum import Enum
+
+from .base import CalculationMethod
 
 logger = logging.getLogger(__name__)
-
-
-class CalculationMethod(Enum):
-    """Token 计算方式"""
-    TIKTOKEN = "tiktoken"
-    API_OR_ESTIMATE = "api_or_estimate"
-    ESTIMATE = "estimate"
 
 
 @dataclass
@@ -186,13 +182,20 @@ class TokenCalculator:
             self._init_tiktoken()
     
     def _get_model_config(self, model_name: str) -> ModelTokenConfig:
-        """获取模型配置"""
+        """获取模型配置（精确匹配 > 前缀匹配 > 包含匹配 > 兜底）"""
         normalized = model_name.lower()
-        
+
+        if normalized in MODEL_CONFIGS:
+            return MODEL_CONFIGS[normalized]
+
+        matches = [(k, v) for k, v in MODEL_CONFIGS.items() if normalized.startswith(k)]
+        if matches:
+            return max(matches, key=lambda x: len(x[0]))[1]
+
         for key, config in MODEL_CONFIGS.items():
-            if key in normalized or normalized in key:
+            if key in normalized:
                 return config
-        
+
         if any(x in normalized for x in ["gpt", "deepseek"]):
             return MODEL_CONFIGS["gpt-4"]
         elif any(x in normalized for x in ["glm", "qwen", "claude"]):
@@ -203,7 +206,7 @@ class TokenCalculator:
                 calculation_method=CalculationMethod.API_OR_ESTIMATE,
                 conservative_ratio=1.3,
             )
-        
+
         return MODEL_CONFIGS[self.DEFAULT_MODEL]
     
     def _init_tiktoken(self) -> None:
