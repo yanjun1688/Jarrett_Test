@@ -5,13 +5,11 @@ This module contains test case, test execution, and test flow models.
 """
 
 from __future__ import annotations
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from django.db import models
 from django.contrib.auth.models import User
 from django.db.models import Q, Count, Manager, QuerySet
 from django.utils import timezone
-
-from .project import Project, Module
 
 class TestExecutionQuerySet(QuerySet['TestExecution']):
     """测试执行记录的自定义 QuerySet"""

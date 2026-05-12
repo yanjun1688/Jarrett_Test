@@ -12,7 +12,7 @@ Skill Loader — 技能扫描和元数据解析
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from pathlib import Path
 from dataclasses import dataclass, field
 import logging

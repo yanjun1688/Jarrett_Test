@@ -3,7 +3,7 @@
 使用pydantic进行类型安全的配置管理
 """
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Any
 from pydantic_settings import BaseSettings
 from pydantic import Field, model_validator
 

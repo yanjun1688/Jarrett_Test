@@ -9,10 +9,8 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from asgiref.sync import sync_to_async
-
-from ..llm.base_llm import BaseLLMService, LLMProvider, create_llm_service
-from ..rag.rag_retriever_service import RAGRetriever, DjangoORMRAGRetriever
+from ..llm.base_llm import BaseLLMService, create_llm_service
+from ..rag.rag_retriever_service import RAGRetriever
 
 logger = logging.getLogger(__name__)
 

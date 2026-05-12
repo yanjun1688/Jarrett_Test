@@ -61,5 +61,6 @@ class LoadSkillTool(BaseTool):
         logger.warning(f"[LoadSkill] skill 不存在: {name}, 可用: {available}")
         return ToolResult(
             success=False,
+            data={},
             error=f"Skill '{name}' 未安装。可用技能: {', '.join(available) if available else '无'}",
         )

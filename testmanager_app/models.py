@@ -11,7 +11,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
-from django.db.models import Manager, QuerySet, Count, Q
+
 from django_stubs_ext.db.models import TypedModelMeta
 from django.core.exceptions import ValidationError
 

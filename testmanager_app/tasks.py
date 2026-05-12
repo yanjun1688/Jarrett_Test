@@ -12,12 +12,9 @@ DEPRECATED: 2026-04-15
 from __future__ import annotations
 import warnings
 import logging
-import sys
-import asyncio
 from typing import Any
 
 from celery import shared_task
-from asgiref.sync import async_to_sync
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -60,7 +57,7 @@ def execute_collection_task(
     )
     
     from testmanager_app.models import (
-        RequestCollection, CollectionExecution, CollectionRequest
+        RequestCollection, CollectionExecution
     )
     from testmanager_app.services.strategy.collection_execution_strategies import (
         CollectionExecutionStrategyFactory

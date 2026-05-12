@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 class TransactionContext:
     """事务上下文，步骤间通过 ${variable} 传递数据"""

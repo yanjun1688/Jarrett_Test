@@ -108,7 +108,6 @@ JTest/
 ├── core/                          # 核心 AI Agent 系统
 │   ├── agents/                    # Agent 实现
 │   │   ├── generation/           # 测试生成 Agent
-│   │   ├── planning/             # 测试规划 Agent
 │   │   ├── chatbot_agent.py      # Chatbot Agent (Native Function Calling)
 │   │   ├── rag/                  # RAG 知识库 Agent
 │   │   └── llm/                  # LLM 服务层
@@ -124,7 +123,6 @@ JTest/
 ├── api/v1/                        # RESTful API v1
 │   ├── execution/                # 执行相关 API
 │   ├── knowledge/                # 知识库 API
-│   └── planning/                 # 规划 API
 │
 ├── testmanager_app/              # API 测试管理应用
 │   ├── models.py                 # 数据模型

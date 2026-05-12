@@ -3,10 +3,9 @@
 """
 from __future__ import annotations
 import uuid
-import json
 import logging
 from typing import Any
-from datetime import datetime, timedelta
+from datetime import datetime
 from django.core.cache import cache
 
 logger = logging.getLogger(__name__)

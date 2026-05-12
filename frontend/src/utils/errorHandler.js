@@ -56,36 +56,4 @@ export const handleApiError = (error, customMessage, options = {}) => {
   return errorMessage;
 };
 
-/**
- * 处理通用错误
- * @param {Error} error - 错误对象
- * @param {string} customMessage - 自定义错误消息
- */
-export const handleError = (error, customMessage) => {
-  const errorMessage = customMessage || error?.message || '发生了未知错误';
-  
-  logger.error('Error:', error);
-  
-  notification.error({
-    message: '错误',
-    description: errorMessage,
-    duration: 4,
-  });
-  
-  return errorMessage;
-};
 
-/**
- * 处理表单验证错误
- * @param {object} errorFields - Ant Design表单错误字段
- */
-export const handleFormError = (errorFields) => {
-  if (errorFields && errorFields.length > 0) {
-    const firstError = errorFields[0];
-    notification.warning({
-      message: '表单验证失败',
-      description: firstError.errors?.[0] || '请检查表单填写',
-      duration: 3,
-    });
-  }
-};

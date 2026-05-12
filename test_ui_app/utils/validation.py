@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Tuple, cast
+from typing import TYPE_CHECKING, Tuple
 
-from .validators.script_validator import ScriptValidator, ValidationError
+from .validators.script_validator import ScriptValidator
 
 if TYPE_CHECKING:
     from test_ui_app.models import UITestScript

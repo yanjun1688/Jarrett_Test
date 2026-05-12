@@ -6,39 +6,20 @@ UI测试服务层
 """
 from __future__ import annotations
 
-import asyncio
-import sys
-import base64
-from typing import Dict, List, Optional, Any, Union, cast, Callable, Literal
+from typing import Dict, List, Any, cast, Literal
 
 from asgiref.sync import sync_to_async, async_to_sync
 from django.utils import timezone
 from django.db import transaction
-from django.db.models import QuerySet, Model
-
 from .models import (
     UITestScript,
     UITestExecution,
 )
 from .playwright_engine import PlaywrightEngine
-from .execution.execution_manager import ExecutionManager
 from .converters.action_converter import convert_to_actions
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def get_python_executable() -> str:
-    """
-    获取当前虚拟环境的Python可执行文件路径
-    
-    使用 sys.executable 确保始终使用当前Django应用运行的Python解释器，
-    这样可以保证子脚本能够访问虚拟环境中安装的所有包（如playwright）。
-    
-    Returns:
-        str: Python可执行文件的完整路径
-    """
-    return sys.executable
 
 
 class UITestService:

@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional
 import logging
 
 from asgiref.sync import sync_to_async
-from django.utils import timezone
 
 from core.tools.base_tool import BaseTool, ToolResult
 

@@ -21,7 +21,6 @@ import hashlib
 import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple, cast, TYPE_CHECKING
-from datetime import datetime
 
 from core.context.markdown_store import MarkdownContextStore
 from .token_calculator import TokenCalculator

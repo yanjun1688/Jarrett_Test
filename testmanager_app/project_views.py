@@ -4,14 +4,10 @@
 """
 
 import logging
-from rest_framework import status
-from rest_framework.decorators import action
-from rest_framework.response import Response
 
 from core.models import Project, Module
-from testmanager_app.serializers import ProjectSerializer, ModuleSerializer, ProjectStatisticsSerializer
+from testmanager_app.serializers import ProjectSerializer, ModuleSerializer
 from testmanager_app.viewsets import BaseViewSet, QueryOptimizerMixin, CommonFilterMixin
-from testmanager_app.services import get_project_statistics
 
 logger = logging.getLogger(__name__)
 

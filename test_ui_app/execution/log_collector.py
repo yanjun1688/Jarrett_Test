@@ -3,8 +3,7 @@
 """
 import json
 import logging
-import sys
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from datetime import datetime
 
 from asgiref.sync import sync_to_async

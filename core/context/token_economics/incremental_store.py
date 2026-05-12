@@ -13,12 +13,12 @@ Reference: docs/2026/04/01/DESIGN_CONTEXT_TOKEN_ECONOMICS.md 机制3
 
 from __future__ import annotations
 
-import json
 import os
 import threading
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple, Union, Generator
+
+from typing import Dict, Any, Optional, List, Tuple, Generator
 from datetime import datetime
 from dataclasses import dataclass, field
 import contextlib

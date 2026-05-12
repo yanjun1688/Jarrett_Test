@@ -4,12 +4,7 @@
 # pyright: reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
 import logging
 from typing import List, Dict, Any, Optional
-from urllib.parse import urlparse
-
-from playwright.async_api import Page, Browser, BrowserContext
-from django.conf import settings
 from django.utils import timezone
-from pathlib import Path
 
 from ..playwright_engine import PlaywrightEngine
 

@@ -5,7 +5,6 @@ export { apiRequestsAPI } from './apiRequests';
 export { pressureTestAPI } from './pressureTest';
 export { unifiedExecutionsAPI } from './unifiedExecutions';
 
-export { featureTestsAPI } from './featureTests';
 export { uiTestsAPI } from './uiTests';
 export { agentAPI } from './agent';
 export { chatbotAPI } from './chatbot';

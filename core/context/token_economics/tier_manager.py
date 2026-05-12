@@ -15,14 +15,11 @@ from __future__ import annotations
 
 import logging
 from typing import Dict, Any, Optional, List, Tuple
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 
 from .base import (
     TierConfig,
     ZoneType,
-    StructuredSummary,
-    CompressionResult
 )
 
 logger = logging.getLogger(__name__)

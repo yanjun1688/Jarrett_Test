@@ -14,7 +14,6 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
-    from django.contrib.auth.models import User
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -23,20 +22,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 import logging
 import json
-import os
-from django.http import StreamingHttpResponse
 from asgiref.sync import async_to_sync, sync_to_async
-import threading
-import queue
 import time
-import re
 
-from core.agents.llm.openai_llm import OpenAILLMService
-from core.agents.llm.deepseek_llm import DeepSeekLLMService
-from core.agents.llm.anthropic_llm import AnthropicLLMService
-from core.agents.llm.zhipu_llm import ZhipuLLMService
-from core.agents.llm.qwen_llm import QwenLLMService
-from core.agents.llm.base_llm import LLMProvider, LLMConfig, create_llm_service, BaseLLMService
+from core.agents.llm.base_llm import create_llm_service, BaseLLMService
 from core.agents.chatbot_agent import ChatbotAgent
 from core.config import get_settings
 from core.services.conversation_service import ConversationService

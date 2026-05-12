@@ -21,10 +21,8 @@ shared/
 └── utils/              # 工具函数
     ├── __init__.py
     ├── async_utils.py  # 异步工具
-    ├── date_utils.py   # 日期时间工具
     ├── http_utils.py   # HTTP 请求工具
     ├── logging_utils.py # 日志工具
-    ├── string_utils.py # 字符串工具
     ├── validation.py   # 验证工具
     └── command_utils.py # 命令行工具
 ```
@@ -36,7 +34,7 @@ shared/
 集中管理项目所有常量，避免魔法字符串和数字。
 
 ```python
-from shared.constants import TestType, NodeType, ExecutionStatus, TimeConstants
+from shared.constants import TestType, NodeType, ExecutionStatus, DocType
 
 # 测试类型
 TestType.UI       # "ui"
@@ -54,9 +52,9 @@ ExecutionStatus.SUCCESS   # "success"
 ExecutionStatus.FAILED    # "failed"
 ExecutionStatus.is_completed("success")  # True
 
-# 时间常量
-TimeConstants.DEFAULT_TIMEOUT  # 30 (秒)
-TimeConstants.HOUR             # 3600 (秒)
+# 文档类型
+DocType.KNOWLEDGE         # "knowledge"
+DocType.is_valid("knowledge")  # True
 ```
 
 #### 常量类列表
@@ -65,19 +63,8 @@ TimeConstants.HOUR             # 3600 (秒)
 |------|------|
 | `TestType` | 测试类型 (UI, API, Integration) |
 | `NodeType` | 流程节点类型 |
-| `HttpMethod` | HTTP 方法 |
 | `ExecutionStatus` | 执行状态 |
-| `AssertionType` | 断言类型 |
-| `LogLevel` | 日志级别 |
-| `ErrorCode` | 错误代码 |
-| `TimeConstants` | 时间常量 |
-| `FileSize` | 文件大小常量 |
-| `DatabaseConstants` | 数据库常量 |
-| `ApiConstants` | API 常量 |
-| `RegexPattern` | 正则表达式模式 |
-| `IntentType` | Chatbot 意图类型 |
 | `DocType` | 文档类型 |
-| `EnvVar` | 环境变量名称 |
 
 ---
 
@@ -89,10 +76,6 @@ TimeConstants.HOUR             # 3600 (秒)
 from shared.exceptions import (
     JTestError,
     ValidationError,
-    ExecutionError,
-    ResourceNotFoundError,
-    LLMError,
-    handle_exception
 )
 
 # 基础异常
@@ -100,39 +83,16 @@ raise JTestError("发生错误", code="INTERNAL_ERROR", details={"key": "value"}
 
 # 验证错误
 raise ValidationError("用户名不能为空", field="username")
-
-# 执行错误
-raise ExecutionError("节点执行失败", node_id="node_1", node_type="ui_click")
-
-# 资源未找到
-raise ResourceNotFoundError("测试用例", case_id)
-
-# LLM 错误
-raise LLMError("API 调用失败", provider="openai")
-
-# 异常转换
-try:
-    some_function()
-except Exception as e:
-    raise handle_exception(e)  # 自动转换为 JTestError
 ```
 
 #### 异常层次
 
 ```
 JTestError (基类)
-├── ConfigurationError      # 配置错误
 ├── ValidationError         # 验证错误
-├── PlanningError           # 规划错误
-├── ExecutionError          # 执行错误
-├── ResourceNotFoundError   # 资源未找到
-├── AuthenticationError     # 认证错误
-├── AuthorizationError      # 授权错误
-├── RateLimitError          # 限流错误
-├── DatabaseError           # 数据库错误
-└── ExternalServiceError    # 外部服务错误
-    ├── RequestError        # HTTP 请求错误
-    └── LLMError            # LLM 服务错误
+├── ExternalServiceError    # 外部服务错误
+│   └── RequestError        # HTTP 请求错误
+└── IsolationViolation      # RAG 检索隔离违规
 ```
 
 ---
@@ -195,7 +155,6 @@ await queue.process(process_func, num_workers=3)
 
 ```python
 from shared.utils import setup_logging, get_logger, log_execution_time
-from shared.utils.logging_utils import StructuredLogger, log_api_call
 
 # 初始化日志
 setup_logging(level="DEBUG", filename="app.log")
@@ -208,11 +167,6 @@ logger.info("操作完成")
 @log_execution_time()
 def slow_function():
     time.sleep(1)
-
-# 结构化日志
-slogger = StructuredLogger(__name__)
-slogger.info("用户登录", user_id=123, ip="192.168.1.1", action="login")
-# 输出: 用户登录 | user_id=123 | ip=192.168.1.1 | action=login
 
 # API 调用日志
 @log_api_call
@@ -227,87 +181,7 @@ def call_openai():
 
 ---
 
-### 5. utils/string_utils.py - 字符串工具
-
-字符串处理函数。
-
-```python
-from shared.utils import (
-    truncate_string,
-    safe_json_parse,
-    safe_json_stringify,
-    generate_hash,
-    sanitize_filename,
-    extract_emails,
-    extract_urls,
-    camel_to_snake,
-    snake_to_camel
-)
-
-# 截断字符串
-truncate_string("很长的文本...", max_length=10)  # "很长的文..."
-
-# 安全 JSON 解析
-data = safe_json_parse('{"key": "value"}', default={})
-
-# JSON 序列化
-json_str = safe_json_stringify({"key": "中文"}, default="{}")
-
-# 哈希生成
-generate_hash("password", algorithm="sha256")
-
-# 文件名清理
-sanitize_filename('file<>:"/name.txt')  # "file_name.txt"
-
-# 提取邮箱
-extract_emails("联系 support@example.com 或 admin@test.org")
-# ["support@example.com", "admin@test.org"]
-
-# 提取 URL
-extract_urls("访问 https://example.com 或 http://test.org")
-# ["https://example.com", "http://test.org"]
-
-# 命名转换
-camel_to_snake("userName")  # "user_name"
-snake_to_camel("user_name")  # "userName"
-```
-
----
-
-### 6. utils/date_utils.py - 日期时间工具
-
-日期时间处理函数。
-
-```python
-from shared.utils import (
-    format_datetime,
-    parse_datetime,
-    get_time_ago,
-    convert_timezone,
-    get_date_range
-)
-from datetime import datetime
-
-# 格式化
-format_datetime(datetime.now(), "%Y-%m-%d %H:%M:%S")
-
-# 解析
-dt = parse_datetime("2024-01-15 10:30:00")
-
-# 相对时间
-get_time_ago(datetime(2024, 1, 1))  # "3个月前", "2天前" 等
-
-# 时区转换
-convert_timezone(dt, from_tz="UTC", to_tz="Asia/Shanghai")
-
-# 日期范围
-dates = get_date_range("2024-01-01", "2024-01-05")
-# [date(2024, 1, 1), date(2024, 1, 2), ...]
-```
-
----
-
-### 7. utils/http_utils.py - HTTP 工具
+### 5. utils/http_utils.py - HTTP 工具
 
 HTTP 请求相关函数。
 
@@ -344,7 +218,7 @@ build_query_string({"page": 1, "size": 10})  # "page=1&size=10"
 
 ---
 
-### 8. utils/validation.py - 验证工具
+### 6. utils/validation.py - 验证工具
 
 数据验证函数。
 
@@ -365,18 +239,11 @@ validate_and_raise(data, {
     "status": {"enum": ["active", "inactive"]},
     "metadata": {"type": "object"},
     "tags": {"type": "array"}
-})
-
-# FlowIR 验证
-validate_flow_ir(flow_data)
-
-# 页面结构验证
-validate_page_structure(elements)
-```
+})```
 
 ---
 
-### 9. utils/command_utils.py - 命令行工具
+### 7. utils/command_utils.py - 命令行工具
 
 跨平台命令检测。
 
@@ -397,12 +264,12 @@ if check_command_available("python"):
 
 ```python
 from shared.utils import get_logger, with_timeout, retry_async
-from shared.exceptions import ValidationError, ExecutionError
-from shared.constants import ExecutionStatus, TimeConstants
+from shared.exceptions import ValidationError
+from shared.constants import ExecutionStatus
 
 logger = get_logger(__name__)
 
-@with_timeout(TimeConstants.DEFAULT_TIMEOUT)
+@with_timeout(30.0)
 async def process_test_case(case_id: str) -> dict:
     """处理测试用例"""
     logger.info(f"开始处理: {case_id}")
@@ -415,7 +282,7 @@ async def process_test_case(case_id: str) -> dict:
         # 执行（带重试）
         result = await retry_async(
             lambda: execute_test(case_id),
-            max_attempts=TimeConstants.DEFAULT_MAX_RETRIES,
+            max_attempts=3,
             exceptions=(ConnectionError,)
         )
         
@@ -424,7 +291,7 @@ async def process_test_case(case_id: str) -> dict:
         
     except Exception as e:
         logger.error(f"处理失败: {case_id}", exc_info=True)
-        raise ExecutionError(f"测试执行失败: {str(e)}")
+        raise
 ```
 
 ## 设计原则
@@ -435,7 +302,7 @@ async def process_test_case(case_id: str) -> dict:
 
 - `constants.py`: 只有常量定义
 - `exceptions.py`: 只有异常类
-- `utils/string_utils.py`: 只有字符串处理
+- `utils/`: 每个工具文件只负责一类功能
 
 ### 2. 无业务依赖
 
