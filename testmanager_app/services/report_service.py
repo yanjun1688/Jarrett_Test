@@ -10,7 +10,7 @@ import json
 import os
 from datetime import datetime
 from typing import Dict, Any, Optional, List
-from django.db import models, transaction
+from django.db import transaction
 from django.db.models import Q, Count, QuerySet
 from django.conf import settings
 from django.contrib.auth.models import User

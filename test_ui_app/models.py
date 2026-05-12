@@ -6,9 +6,7 @@ from typing import Any, List, Optional, Dict, TYPE_CHECKING
 from datetime import datetime
 from django.db import models
 from django.contrib.auth.models import User
-from django.utils import timezone
 from django_stubs_ext.db.models import TypedModelMeta
-import json
 
 if TYPE_CHECKING:
     from core.models import Project

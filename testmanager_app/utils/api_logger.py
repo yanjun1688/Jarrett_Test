@@ -77,45 +77,6 @@ class RequestLogger:
             logger.error(f"[Request] {'=' * 60}")
 
 
-class ExecutionLogger:
-    """执行日志记录器（测试执行、脚本执行等）"""
-
-    @staticmethod
-    def log_execution_start(execution_type: str, execution_id: Union[int, str], **kwargs: Any) -> None:
-        """记录执行开始"""
-        logger.info(f"[Execution] {'=' * 60}")
-        logger.info(f"[Execution] {execution_type} 开始 - ExecutionID: {execution_id}")
-
-        for key, value in kwargs.items():
-            logger.info(f"[Execution] {key}: {value}")
-
-        logger.info(f"[Execution] {'=' * 60}")
-
-    @staticmethod
-    def log_execution_step(execution_id: Union[int, str], step_name: str, message: str, level: str = "info") -> None:
-        """记录执行步骤"""
-        log_func = logger.info if level == "info" else logger.debug
-        log_func(f"[Execution] [Step: {step_name}] ExecutionID: {execution_id} - {message}")
-
-    @staticmethod
-    def log_execution_end(execution_type: str, execution_id: Union[int, str], status: str, duration: Optional[float] = None) -> None:
-        """记录执行结束"""
-        duration_msg = f" - 耗时: {duration:.2f}s" if duration else ""
-        logger.info(f"[Execution] {'=' * 60}")
-        logger.info(f"[Execution] {execution_type} 结束 - ExecutionID: {execution_id} - 状态: {status}{duration_msg}")
-        logger.info(f"[Execution] {'=' * 60}")
-
-    @staticmethod
-    def log_execution_error(execution_type: str, execution_id: Union[int, str], error_message: str, stack_trace: Optional[str] = None) -> None:
-        """记录执行错误"""
-        logger.error(f"[Execution] {'=' * 60}")
-        logger.error(f"[Execution] {execution_type} 错误 - ExecutionID: {execution_id}")
-        logger.error(f"[Execution] 错误信息: {error_message}")
-        if stack_trace:
-            logger.error(f"[Execution] 堆栈跟踪:\n{stack_trace}")
-        logger.error(f"[Execution] {'=' * 60}")
-
-
 class DatabaseLogger:
     """数据库操作日志记录器"""
 

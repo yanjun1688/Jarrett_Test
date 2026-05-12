@@ -8,7 +8,6 @@ from .anthropic_llm import AnthropicLLMService
 from .deepseek_llm import DeepSeekLLMService
 from .zhipu_llm import ZhipuLLMService
 from .qwen_llm import QwenLLMService
-from .context_aware_llm import ContextAwareLLMService
 
 __all__ = [
     'BaseLLMService',
@@ -18,7 +17,6 @@ __all__ = [
     'DeepSeekLLMService',
     'ZhipuLLMService',
     'QwenLLMService',
-    'ContextAwareLLMService',
     'LLMProvider',
     'LLMConfig',
     'create_llm_service',

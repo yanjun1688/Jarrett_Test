@@ -5,7 +5,7 @@ Response validation tool for API testing
 import re
 import jsonschema
 import json
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 import logging
 from jsonpath_ng import parse as jsonpath_parse
 

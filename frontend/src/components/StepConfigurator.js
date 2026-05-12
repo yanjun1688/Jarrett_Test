@@ -7,9 +7,6 @@ const { TextArea } = Input;
 const { Option } = Select;
 
 const StepConfigurator = ({ steps = [], onChange, title = "测试步骤" }) => {
-  // 注释：editingStateIndex 以前用于跟踪编辑状态，但现在未使用
-  // const [editingStepIndex, setEditingStepIndex] = useState(null);
-
   const addNewStep = () => {
     const newStep = {
       id: uuidv4(),
@@ -29,8 +26,6 @@ const StepConfigurator = ({ steps = [], onChange, title = "测试步骤" }) => {
     } else {
       onChange([newStep]);
     }
-    
-    // setEditingStepIndex(steps.length); // 注释掉不使用的代码
   };
 
   const updateStep = (index, updatedStep) => {

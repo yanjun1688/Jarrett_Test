@@ -9,8 +9,7 @@
 该目录当前为空目录，测试执行功能通过以下方式实现：
 
 1. **Tool 系统**: `core/tools/` 模块提供测试执行工具
-2. **Flow 执行**: `core/flow/` 模块提供 FlowIR 执行引擎
-3. **Agent 协作**: `ChatbotAgent` 和 `ToolOrchestrator` 协调执行
+2. **Agent 协作**: `ChatbotAgent` 和 `ToolOrchestrator` 协调执行
 
 ## 规划中的功能
 
@@ -30,13 +29,6 @@
 - `execute_test.py` - 测试执行工具
 - `execute_pending_tests.py` - 待执行测试工具
 - `api_test_orchestrator.py` - API 测试编排
-
-### Flow 执行
-
-`core/flow/` 模块提供：
-
-- `flow_executor.py` - FlowIR 执行器
-- `node_executor.py` - 节点执行器
 
 ## 执行流程
 
@@ -65,8 +57,8 @@
          │
          ▼
 ┌─────────────────┐
-│  FlowExecutor   │
-│  流程执行       │
+│  ExecuteTest    │
+│  工具执行       │
 └────────┬────────┘
          │
          ▼
@@ -91,15 +83,6 @@ from core.tools.chatbot import ExecuteTestTool
 
 tool = ExecuteTestTool()
 result = await tool.execute(test_id=123)
-```
-
-### 通过 FlowIR 执行
-
-```python
-from core.flow import FlowExecutor
-
-executor = FlowExecutor()
-result = await executor.execute(flow_ir)
 ```
 
 ## 扩展指南
@@ -134,13 +117,7 @@ class TestExecutionAgent(BaseAgent):
 
 ## 配置
 
-执行相关配置在 `shared/constants.py`：
-
-```python
-class TimeConstants:
-    DEFAULT_EXECUTION_TIMEOUT = 300  # 默认超时（秒）
-    MAX_RETRY_COUNT = 3              # 最大重试次数
-```
+执行配置通过 `core.config.settings` 统一管理。
 
 ## 注意事项
 

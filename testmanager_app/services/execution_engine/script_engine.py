@@ -6,12 +6,10 @@
 from typing import Any, Dict, List, Optional
 import yaml
 import json
-import re
 from jsonpath_ng import parse as jsonpath_parse
 import httpx
 import json as json_lib
 from datetime import datetime
-from django.utils import timezone
 import logging
 
 logger = logging.getLogger(__name__)

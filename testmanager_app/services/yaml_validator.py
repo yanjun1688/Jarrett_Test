@@ -12,7 +12,6 @@ import yaml
 from typing import List, Dict, Any, Tuple
 from jsonpath_ng import parse
 from jsonpath_ng.exceptions import JsonPathParserError
-from django.core.exceptions import ValidationError
 
 
 class YamlValidator:

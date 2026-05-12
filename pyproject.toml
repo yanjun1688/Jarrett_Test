@@ -72,7 +72,6 @@ module = [
     "test_ui_app.recording.sync_recorder",
     "test_ui_app.playwright_engine",
     "test_ui_app.execution.action_runner",
-    "test_ui_app.agent_views",
     "test_ui_app.services",
     "shared.utils.http_utils",
     "core.agents.llm.*",

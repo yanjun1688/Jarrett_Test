@@ -4,9 +4,8 @@ HTTP client tool for making API requests
 
 import httpx
 import json
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 import logging
-from urllib.parse import urlparse, urljoin
 
 from core.tools.base_tool import BaseTool, ToolResult
 from shared.exceptions import RequestError, ValidationError
@@ -113,12 +112,12 @@ class HTTPClientTool(BaseTool):
             verify_ssl = kwargs.get('verify_ssl', True)
             
             # Validate URL
-            if not validate_url(url):  # type: ignore[arg-type]
+            if not url or not isinstance(url, str) or not validate_url(url):
                 raise ValidationError(f"Invalid URL: {url}")
-            
+
             # Prepare request
             request_data = self._prepare_request(
-                url=url,  # type: ignore[arg-type]
+                url=url,
                 method=method,
                 headers=headers,
                 body=body,

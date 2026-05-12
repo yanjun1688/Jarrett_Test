@@ -3,22 +3,10 @@ Base tool class for all tools
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 import logging
 import time
-from enum import Enum
-
-
-class ToolStatus(Enum):
-    """Tool execution status"""
-    PENDING = "pending"
-    RUNNING = "running"
-    SUCCESS = "success"
-    FAILED = "failed"
-    TIMEOUT = "timeout"
-
-
 @dataclass
 class ToolResult:
     """Result of tool execution"""

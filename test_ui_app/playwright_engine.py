@@ -3,9 +3,8 @@ Playwright执行引擎
 """
 # pyright: reportAttributeAccessIssue=false, reportOptionalMemberAccess=false
 import asyncio
-import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 from urllib.parse import urlparse
 from playwright.async_api import async_playwright, Page, Browser, BrowserContext
 from django.conf import settings

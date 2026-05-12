@@ -11,7 +11,6 @@ Token 经济学基础数据模型
 
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
-from datetime import datetime
 from enum import Enum
 
 

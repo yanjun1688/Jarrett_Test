@@ -7,7 +7,7 @@ Script Config Schema
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Tuple
 
 SCRIPT_CONFIG_EXAMPLE: Dict[str, Any] = {
     'name': '用户登录查询流程',

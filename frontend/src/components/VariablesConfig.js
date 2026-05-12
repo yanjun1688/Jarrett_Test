@@ -3,9 +3,6 @@ import { Table, Button, Input, Tooltip, Space, Tag } from 'antd';
 import { PlusOutlined, DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
 
 const VariablesConfig = ({ value = [], onChange }) => {
-  // 注释：使用hover状态可在未来扩展，例如高亮当前编辑的行
-  // const [hoveredRow, setHoveredRow] = useState(null);
-
   const handleAdd = () => {
     const newVariable = { key: '', value: '' };
     onChange([...value, newVariable]);
@@ -122,18 +119,6 @@ const VariablesConfig = ({ value = [], onChange }) => {
         size="small"
         rowKey={(record, index) => index}
         locale={{ emptyText: '暂无变量，点击下方按钮添加' }}
-        /* 
-        onRow={(record, rowIndex) => {
-          return {
-            onMouseEnter: () => {
-              setHoveredRow(rowIndex);
-            },
-            onMouseLeave: () => {
-              setHoveredRow(null);
-            },
-          };
-        }}
-        */
         expandable={{
           expandedRowRender: (record) => {
             const variableName = record.key || '未命名';

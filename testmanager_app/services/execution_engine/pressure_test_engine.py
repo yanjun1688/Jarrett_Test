@@ -9,7 +9,7 @@ import math
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Callable, Any
+from typing import Dict, List, Optional, Any
 from asgiref.sync import sync_to_async
 import httpx
 

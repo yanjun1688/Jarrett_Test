@@ -1,11 +1,5 @@
 """
 Test execution API views
+
+This module is reserved for future execution-related views.
 """
-
-from .views import (
-    PageStructureView
-)
-
-__all__ = [
-    'PageStructureView'
-]

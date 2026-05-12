@@ -13,12 +13,6 @@ from django.utils import timezone
 from datetime import timedelta
 
 
-class UserSerializer(serializers.ModelSerializer[User]):
-    class Meta:
-        model = User
-        fields = ['id', 'username', 'first_name', 'last_name']
-
-
 class ProjectSerializer(serializers.ModelSerializer[Project]):
     class Meta:
         model = Project
@@ -445,26 +439,6 @@ class KnowledgeDocumentSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
-class AgentConversationSerializer(serializers.ModelSerializer):
-    """Agent对话历史序列化器"""
-    
-    class Meta:
-        from core.models.agents import AgentConversation
-        model = AgentConversation
-        fields = '__all__'
-        read_only_fields = ['id', 'created_at']
-
-
-class AgentExecutionSerializer(serializers.ModelSerializer):
-    """Agent执行记录序列化器"""
-    
-    class Meta:
-        from core.models.agents import AgentExecution
-        model = AgentExecution
-        fields = '__all__'
-        read_only_fields = ['id', 'started_at', 'ended_at']
-
-
 # ============================================================================
 # 压测配置序列化器 (Pressure Test)
 # ============================================================================
@@ -771,31 +745,3 @@ class AdvancedPressureTestExecuteResponseSerializer(serializers.Serializer):
     web_ui_url = serializers.CharField(required=False, allow_null=True)
     message = serializers.CharField()
 
-
-class AdvancedPressureTestRealtimeStatsSerializer(serializers.Serializer):
-    """高级压测实时统计序列化器"""
-    current_users = serializers.IntegerField()
-    total_requests = serializers.IntegerField()
-    success_count = serializers.IntegerField()
-    failed_count = serializers.IntegerField()
-    rps = serializers.FloatField()
-    fail_ratio = serializers.FloatField()
-    avg_response_time = serializers.FloatField()
-    min_response_time = serializers.FloatField()
-    max_response_time = serializers.FloatField()
-    peak_users = serializers.IntegerField()
-
-
-class AdvancedPressureTestResultSerializer(serializers.Serializer):
-    """高级压测单次结果序列化器"""
-    name = serializers.CharField()
-    request_type = serializers.CharField()
-    response_time_ms = serializers.FloatField()
-    response_length = serializers.IntegerField()
-    success = serializers.BooleanField()
-    error_message = serializers.CharField(required=False, allow_blank=True)
-    timestamp = serializers.DateTimeField()
-    context = serializers.SerializerMethodField()  # type: ignore[assignment]
-    
-    def get_context(self, obj: Any) -> Dict[str, Any]:
-        return getattr(obj, 'context', {})

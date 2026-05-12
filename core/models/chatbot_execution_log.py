@@ -8,7 +8,6 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from django.db import models
-from django.contrib.auth.models import User
 
 
 class ChatBotExecutionLog(models.Model):

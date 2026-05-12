@@ -20,8 +20,7 @@ import re
 import types
 from typing import Dict, Any, List, Tuple, Optional, Union, Set
 from django.db import transaction
-from django.contrib.auth.models import User
-from core.models import Project
+
 from testmanager_app.models import (
     RequestCollection,
     ApiRequest,

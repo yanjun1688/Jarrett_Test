@@ -4,7 +4,7 @@ YAML 解析器 - 纯解析层，无 Django 依赖
 仅负责解析 YAML 内容，不涉及任何数据库操作
 """
 import yaml
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Tuple
 from dataclasses import dataclass
 import logging
 

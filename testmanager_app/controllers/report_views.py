@@ -6,17 +6,16 @@
 
 import logging
 from django.db import transaction
-from rest_framework import status, viewsets
+from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.contrib.auth.models import User
 
 from core.models import Project, TestExecution
 from testmanager_app.models import TestReport, ScriptExecution
 from testmanager_app.serializers import (
     TestReportSerializer, GenerateReportSerializer,
-    UserListSerializer, TestExecutionListSerializer, ScriptExecutionSerializer
+    TestExecutionListSerializer, ScriptExecutionSerializer
 )
 from testmanager_app.viewsets import BaseViewSet, QueryOptimizerMixin, CommonFilterMixin
 from testmanager_app.utils.api_exceptions import api_exception_handler

@@ -3,7 +3,6 @@
 """
 # pyright: reportAttributeAccessIssue=false
 import logging
-import asyncio
 import tempfile
 import shutil
 from pathlib import Path

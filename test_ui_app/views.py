@@ -2,16 +2,13 @@
 UI测试应用的视图
 """
 from __future__ import annotations
-import sys
-import asyncio
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 from rest_framework.request import Request
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
-from django.db import transaction
 from django.db.models import QuerySet
 from django.utils import timezone
 from .models import (

@@ -5,7 +5,7 @@ WebSocket Handler - WebSocket通信处理器
 """
 import json
 import uuid
-from typing import Dict, Any, Optional, Set, Callable, Awaitable
+from typing import Dict, Any, Optional, Callable, Awaitable
 from dataclasses import dataclass, field
 from datetime import datetime
 from threading import Lock

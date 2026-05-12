@@ -2,7 +2,7 @@
 
 ## 概述
 
-`core/agents` 是 JTest 平台的核心 Agent 模块，提供测试规划、执行和知识检索的 Agent 抽象。该模块采用分层架构，包含基础 Agent 类、多个专业化 Agent 实现以及支持模块。
+`core/agents` 是 JTest 平台的核心 Agent 模块，提供测试执行和知识检索的 Agent 抽象。该模块采用分层架构，包含基础 Agent 类、多个专业化 Agent 实现以及支持模块。
 
 ## 模块结构
 
@@ -22,7 +22,6 @@ core/agents/
 ├── generation/              # 代码生成子模块
 ├── intent/                  # 意图分类子模块
 ├── llm/                     # LLM 服务子模块
-├── planning/                # 测试规划子模块
 ├── rag/                     # 知识检索子模块
 └── execution/               # 测试执行子模块
 ```
@@ -37,7 +36,6 @@ core/agents/
 - **状态管理**: 状态追踪、历史记录、统计信息
 - **异步上下文管理**: 支持 `async with` 语法
 - **输入输出验证**: 可扩展的验证机制
-- **工厂模式**: `AgentFactory` 支持动态注册和创建
 
 ```python
 from core.agents import BaseAgent
@@ -78,29 +76,6 @@ result = await agent.run({
     "message": "生成登录功能的测试用例",
     "project_id": 1
 })
-```
-
-### TestPlanningAgent
-
-统一的测试规划 Agent：
-
-- **多类型支持**: UI、API、集成测试
-- **自动检测**: 根据描述自动判断测试类型
-- **RAG 增强**: 使用知识库增强规划质量
-- **FlowIR 生成**: 生成可执行的测试流程
-
-```python
-from core.agents import TestPlanningAgent
-
-agent = TestPlanningAgent(
-    llm_service=llm_service,
-    knowledge_rag_agent=rag_agent
-)
-
-result = await agent.plan(
-    description="测试用户登录功能",
-    test_type="ui"
-)
 ```
 
 ### UITestAgent
@@ -206,7 +181,6 @@ await handler.broadcast_to_all({"type": "notification"})
 - [generation/](./generation/README.md) - 测试代码生成
 - [intent/](./intent/README.md) - 意图分类系统
 - [llm/](./llm/README.md) - LLM 服务层
-- [planning/](./planning/README.md) - 测试规划
 - [rag/](./rag/README.md) - 知识检索
 - [execution/](./execution/README.md) - 测试执行
 
@@ -231,15 +205,6 @@ class CustomAgent(BaseAgent):
 # 使用
 async with CustomAgent() as agent:
     result = await agent.run({"input": "data"})
-```
-
-### 注册到工厂
-
-```python
-from core.agents.base_agent import AgentFactory
-
-AgentFactory.register("custom", CustomAgent)
-agent = AgentFactory.create("custom", config={...})
 ```
 
 ## 配置

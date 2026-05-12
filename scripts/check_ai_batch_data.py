@@ -22,7 +22,7 @@ def check_same_minute_data() -> None:
     # feature_test_case
     print("\n【feature_test_case 表】")
     all_cases = list(FeatureTestCase.objects.all().order_by('created_at'))
-    minute_groups = {}
+    minute_groups: dict[str, list[FeatureTestCase]] = {}
     for tc in all_cases:
         minute_key = tc.created_at.strftime('%Y-%m-%d %H:%M')
         if minute_key not in minute_groups:
@@ -38,14 +38,14 @@ def check_same_minute_data() -> None:
     # test_script
     print("\n【test_script 表】")
     all_scripts = list(TestScript.objects.all().order_by('created_at'))
-    minute_groups = {}
+    script_groups: dict[str, list[TestScript]] = {}
     for s in all_scripts:
         minute_key = s.created_at.strftime('%Y-%m-%d %H:%M')
-        if minute_key not in minute_groups:
-            minute_groups[minute_key] = []
-        minute_groups[minute_key].append(s)
+        if minute_key not in script_groups:
+            script_groups[minute_key] = []
+        script_groups[minute_key].append(s)
     
-    for minute, scripts in sorted(minute_groups.items(), reverse=True):
+    for minute, scripts in sorted(script_groups.items(), reverse=True):
         if len(scripts) > 1:
             print(f"\n  时间: {minute} ({len(scripts)} 条)")
             for s in scripts:

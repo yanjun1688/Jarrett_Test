@@ -6,11 +6,11 @@ API测试相关视图
 
 from typing import Any
 import logging
-from rest_framework import status, viewsets
+from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from core.models import Project, TestExecution
+from core.models import Project
 from testmanager_app.models import (
     ApiRequest, ApiAssertion, RequestCollection, CollectionExecution,
     PressureTestConfig, PressureTestExecution
@@ -27,7 +27,7 @@ from testmanager_app.serializers import (
 from testmanager_app.viewsets import BaseViewSet, QueryOptimizerMixin, CommonFilterMixin, CacheMixin
 from testmanager_app.utils.api_exceptions import api_exception_handler
 from testmanager_app.services import TestExecutionService
-# from testmanager_app.tasks import execute_collection_task
+from testmanager_app.tasks import execute_collection_task
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +209,6 @@ class ApiRequestViewSet(CacheMixin, QueryOptimizerMixin, CommonFilterMixin, Base
             "stop_on_failure": true  // 可选，默认 true
         }
         """
-        from django.utils import timezone
         from core.models import TestExecution
         from testmanager_app.utils.sync_http_utils import execute_request_direct
         from testmanager_app.services.template_renderer import TemplateRenderer

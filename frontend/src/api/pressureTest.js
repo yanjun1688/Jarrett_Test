@@ -28,13 +28,6 @@ export const pressureTestConfigAPI = {
   },
 
   /**
-   * 获取单个压测配置
-   * @param {number} id - 配置ID
-   * @returns {Promise}
-   */
-  getById: (id) => apiClient.get(`/pressure-test-configs/${id}/`),
-
-  /**
    * 创建压测配置
    * @param {Object} data - 配置数据
    * @param {string} data.name - 配置名称
@@ -60,14 +53,6 @@ export const pressureTestConfigAPI = {
   update: (id, data) => apiClient.put(`/pressure-test-configs/${id}/`, data),
 
   /**
-   * 部分更新压测配置
-   * @param {number} id - 配置ID
-   * @param {Object} data - 更新数据
-   * @returns {Promise}
-   */
-  patch: (id, data) => apiClient.patch(`/pressure-test-configs/${id}/`, data),
-
-  /**
    * 删除压测配置
    * @param {number} id - 配置ID
    * @returns {Promise}
@@ -89,54 +74,8 @@ export const pressureTestConfigAPI = {
   getHistory: (id) => apiClient.get(`/pressure-test-configs/${id}/history/`),
 };
 
-/**
- * 压测执行记录 API
- */
 export const pressureTestExecutionAPI = {
-  /**
-   * 获取执行记录列表
-   * @param {Object} params - 查询参数
-   * @param {number} [params.config] - 配置ID过滤
-   * @param {string} [params.status] - 状态过滤 (pending/running/completed/stopped/failed)
-   * @param {number} [params.page] - 页码
-   * @returns {Promise}
-   */
-  getAll: (params = {}) => {
-    const queryParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        queryParams.append(key, value);
-      }
-    });
-    const queryString = queryParams.toString();
-    return apiClient.get(`/pressure-test-executions/${queryString ? `?${queryString}` : ''}`);
-  },
-
-  /**
-   * 获取单个执行记录
-   * @param {number} id - 执行记录ID
-   * @returns {Promise}
-   */
   getById: (id) => apiClient.get(`/pressure-test-executions/${id}/`),
-
-  /**
-   * 获取执行详细结果（分页）
-   * @param {number} id - 执行记录ID
-   * @param {Object} params - 分页参数
-   * @param {number} [params.page] - 页码
-   * @param {number} [params.page_size] - 每页数量
-   * @returns {Promise} 返回 { results, count, page }
-   */
-  getResults: (id, params = {}) => {
-    const queryParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        queryParams.append(key, value);
-      }
-    });
-    const queryString = queryParams.toString();
-    return apiClient.get(`/pressure-test-executions/${id}/results/${queryString ? `?${queryString}` : ''}`);
-  },
 };
 
 /**

@@ -2,10 +2,8 @@
 Anthropic Claude LLM 服务实现
 提供基于 Anthropic API 的 LLM 服务
 """
-import os
-import asyncio
 from typing import Optional, Dict, Any, List
-from .base_llm import BaseLLMService, LLMConfig
+from .base_llm import BaseLLMService
 import logging
 
 logger = logging.getLogger(__name__)

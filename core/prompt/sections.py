@@ -21,7 +21,7 @@ Reference: docs/2026/04/01/prompt_dynamic_assembly_design.md
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 
 class PromptSection(ABC):

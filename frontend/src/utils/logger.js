@@ -20,10 +20,6 @@ const logger = {
    */
   error: (...args) => {
     console.error(...args);
-    // TODO: 可以在这里集成错误监控服务（如Sentry）
-    // if (window.Sentry) {
-    //   window.Sentry.captureException(args[0]);
-    // }
   },
 
   /**

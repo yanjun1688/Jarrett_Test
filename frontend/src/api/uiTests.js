@@ -9,11 +9,6 @@ export const uiTestsAPI = {
   },
   getScriptById: (id) => apiClient.get(`/ui-scripts/${id}/`),
 
-  // 录制/可视化配置模式创建脚本
-  createScriptFromRecording: (data) =>
-    apiClient.post('/ui-scripts/record/', data),
-
-  // 直接创建/更新脚本（不带 steps，也可用）
   createScript: (data) => apiClient.post('/ui-scripts/', data),
   updateScript: (id, data) => apiClient.put(`/ui-scripts/${id}/`, data),
 
@@ -31,19 +26,7 @@ export const uiTestsAPI = {
   qualityCheck: (data) =>
     apiClient.post('/ui-scripts/quality_check/', data),
 
-  // 获取页面预览和元素选择
-  previewPage: (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return apiClient.get(`/ui-scripts/preview_page/${queryString ? `?${queryString}` : ''}`);
-  },
-  selectElement: (data) =>
-    apiClient.post('/ui-scripts/select_element/', data),
-
   // 执行记录
-  getExecutions: (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return apiClient.get(`/ui-executions/${queryString ? `?${queryString}` : ''}`);
-  },
   getExecutionById: (id) =>
     apiClient.get(`/ui-executions/${id}/`),
   // 获取执行日志详情

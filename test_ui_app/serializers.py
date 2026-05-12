@@ -2,9 +2,8 @@
 UI测试应用的序列化器
 """
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 from rest_framework import serializers
-from django.contrib.auth.models import User
 from .models import (
     UITestScript,
     UITestExecution,
@@ -83,30 +82,6 @@ class UITestExecutionSerializer(serializers.ModelSerializer[UITestExecution]):
         read_only_fields = ['id', 'status', 'started_at', 'completed_at', 'duration',
                            'result_summary', 'error_message', 'screenshots', 'execution_log',
                            'created_at']
-
-
-class UITestExecutionListSerializer(serializers.ModelSerializer[UITestExecution]):
-    """轻量级UI测试执行记录序列化器，用于列表展示，优化性能"""
-    script_name = serializers.CharField(source='script.name', read_only=True)
-    executed_by_username = serializers.CharField(source='executed_by.username', read_only=True)
-    
-    class Meta:
-        model = UITestExecution
-        fields = [
-            'id', 'script', 'script_name', 'status', 
-            'executed_by', 'executed_by_username', 'created_at'
-        ]
-
-
-class ScriptExecutionRequestSerializer(serializers.Serializer[Any]):
-    """脚本执行请求序列化器"""
-    script_id = serializers.IntegerField()
-    # 可选：覆盖浏览器配置
-    browser_type = serializers.CharField(required=False)
-    headless = serializers.BooleanField(required=False)
-    viewport_width = serializers.IntegerField(required=False)
-    viewport_height = serializers.IntegerField(required=False)
-    timeout = serializers.IntegerField(required=False)
 
 
 class RecordedStepSerializer(serializers.Serializer[Any]):

@@ -5,8 +5,7 @@
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer

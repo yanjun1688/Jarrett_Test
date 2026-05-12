@@ -7,7 +7,6 @@ Structure:
     ├── auth/                      # Authentication
     ├── chatbot/                   # Chatbot AI
     ├── knowledge/                 # Knowledge base
-    ├── planning/                  # Test planning
     ├── projects/                  # Project management (ViewSet)
     ├── modules/                   # Module management (ViewSet)
     ├── testcases/                 # Test cases (ViewSet)
@@ -27,14 +26,10 @@ Structure:
 """
 from __future__ import annotations
 
-from typing import Any
-
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from rest_framework.urlpatterns import format_suffix_patterns
 
 from api.v1.knowledge import views as knowledge_views
-from api.v1.planning import views as planning_views
 
 from testmanager_app.chatbots import chatbot_views
 from testmanager_app.controllers import skill_api_views
@@ -102,11 +97,6 @@ knowledge_patterns = [
     path('documents/<int:pk>/sync/', knowledge_views.SyncDocumentView.as_view(), name='sync-document'),
 ]
 
-planning_patterns = [
-    path('plan/', planning_views.PlanTestView.as_view(), name='plan-test'),
-    path('refine/', planning_views.RefinePlanView.as_view(), name='refine-plan'),
-]
-
 ui_test_patterns = [
     path('extract-elements/', ui_views.ExtractElementsView.as_view(), name='extract-elements'),
 ]
@@ -126,7 +116,6 @@ urlpatterns = [
     path('auth/', include((auth_patterns, 'auth'), namespace='auth')),
     path('chatbot/', include((chatbot_patterns, 'chatbot'), namespace='chatbot')),
     path('knowledge/', include((knowledge_patterns, 'knowledge'), namespace='knowledge')),
-    path('planning/', include((planning_patterns, 'planning'), namespace='planning')),
     path('ui-test/', include((ui_test_patterns, 'ui-test'), namespace='ui-test')),
     path('skills/', include((skills_patterns, 'skills'), namespace='skills')),
     

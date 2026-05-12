@@ -14,10 +14,10 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import httpx
-from asgiref.sync import sync_to_async, async_to_sync
+from asgiref.sync import sync_to_async
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,6 @@ async def execute_single_request_async(api_request: Any, user: Any = None) -> Di
         dict: 包含执行结果的字典
     """
     # 如果 api_request 是模型实例，获取实际数据
-    from testmanager_app.models import ApiAssertion
     import inspect
 
     if inspect.isawaitable(api_request):

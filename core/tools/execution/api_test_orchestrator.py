@@ -2,14 +2,13 @@
 API test orchestrator tool that combines HTTP client and validation tools
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 import logging
 import asyncio
 
 from core.tools.base_tool import BaseTool, ToolResult
 from core.tools.api.http_client import HTTPClientTool
 from core.tools.validation.response_validator import ResponseValidatorTool
-from shared.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 

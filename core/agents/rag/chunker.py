@@ -149,7 +149,8 @@ class EndpointStrategy(BaseChunkStrategy):
     def _parse_spec(content: str) -> Dict | None:
         try:
             if content.strip().startswith('{') or content.strip().startswith('['):
-                return json.loads(content)
+                parsed = json.loads(content)
+                return parsed if isinstance(parsed, dict) else None
             import yaml
             result = yaml.safe_load(content)
             return result if isinstance(result, dict) else None
