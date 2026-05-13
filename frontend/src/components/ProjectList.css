@@ -1,0 +1,71 @@
+.project-workbench {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.project-workbench .header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.project-workbench .header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.project-workbench .header .subtitle {
+  margin-top: 4px;
+  color: #666;
+  font-size: 14px;
+}
+
+.project-list-section .section-title {
+  margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+/* 全局统计 */
+.stats-container { display: flex; gap: 16px; margin-bottom: 24px; padding: 0 24px; }
+.stats-left { width: 50%; }
+.stats-right { width: 50%; display: flex; gap: 12px; }
+.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+/* 数字卡片（替代 StatisticCard） */
+.stat-card { display: flex; flex-direction: column; align-items: center; padding: 8px 0; }
+.stat-card-icon { font-size: 20px; color: #1677ff; line-height: 1; }
+.stat-card-value { font-size: 24px; font-weight: 600; margin-top: 4px; }
+.stat-card-label { font-size: 12px; color: #888; margin-top: 2px; }
+
+/* 通用 */
+.chart-wrap { flex: 1; }
+
+/* 项目卡片 */
+.project-description { color: #666; margin-top: 0; margin-bottom: 16px; font-size: 14px; }
+.project-stats-body { display: flex; gap: 16px; }
+.project-stats-numbers { width: 35%; }
+.project-stats-numbers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+.project-stats-charts { width: 65%; display: flex; gap: 8px; }
+
+/* 数字标签 */
+.stat-label { color: #888; font-size: 12px; }
+.stat-value { font-size: 20px; font-weight: 600; }
+
+/* Drawer */
+.drawer-charts { display: flex; gap: 16px; }
+
+/* 抽屉拖拽手柄 */
+.resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: ew-resize;
+  z-index: 1000;
+}
+

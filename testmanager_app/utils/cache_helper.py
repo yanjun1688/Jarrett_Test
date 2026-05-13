@@ -143,10 +143,14 @@ def get_cached_project_statistics(project_id: Union[int, str]) -> Optional[Dict[
 def invalidate_project_statistics(project_id: Optional[Union[int, str]] = None) -> None:
     """
     使项目统计缓存失效
+
+    同时清除全局统计缓存 (project_stats:all)，确保聚合数据也能即时刷新。
     """
     if project_id:
         cache_key = get_cache_key(CACHE_KEY_PREFIX['project_stats'], project_id)
         cache.delete(cache_key)
         logger.info(f"Invalidated project statistics cache: project_id={project_id}")
-    else:
-        logger.warning("Clearing all project statistics cache not fully supported")
+
+    global_key = get_cache_key(CACHE_KEY_PREFIX['project_stats'], 'all')
+    cache.delete(global_key)
+    logger.info("Invalidated global project statistics cache")
