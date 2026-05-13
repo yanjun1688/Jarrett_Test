@@ -5,14 +5,9 @@ Query Knowledge Tool
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-import logging
 import re
 
-from asgiref.sync import sync_to_async
-
 from core.tools.base_tool import BaseTool, ToolResult
-
-logger = logging.getLogger(__name__)
 
 
 class QueryKnowledgeTool(BaseTool):
@@ -65,23 +60,26 @@ class QueryKnowledgeTool(BaseTool):
         return ['mode']
 
     async def execute(self, **kwargs: Any) -> ToolResult:
-        mode = kwargs.get('mode')
-        knowledge_base_id = kwargs.get('knowledge_base_id')
-        query = kwargs.get('query')
-        document_id = kwargs.get('document_id')
-        doc_type = kwargs.get('doc_type')
-        project_id = kwargs.get('project_id')
+        err = self.validate_required(kwargs, "mode")
+        if err:
+            return err
 
-        logger.info(f'[QueryKnowledge] mode={mode}, kb_id={knowledge_base_id}, '
-                     f'query={query!r}, doc_id={document_id}, doc_type={doc_type}, '
-                     f'project_id={project_id}')
+        mode = self.get_param(kwargs, "mode")
+        knowledge_base_id = self.get_param(kwargs, "knowledge_base_id")
+        query = self.get_param(kwargs, "query")
+        document_id = self.get_param(kwargs, "document_id")
+        doc_type = self.get_param(kwargs, "doc_type")
+        project_id = self.get_param(kwargs, "project_id")
 
-        # list 和 search 模式：从 query 中自动识别知识库名称
+        self.logger.info(
+            f'[QueryKnowledge] mode={mode}, kb_id={knowledge_base_id}, '
+            f'query={query!r}, doc_id={document_id}'
+        )
+
         if mode in ('list', 'search') and not knowledge_base_id and query:
-            extracted_kb_id = self._extract_knowledge_base_from_query(query)
-            if extracted_kb_id:
-                knowledge_base_id = extracted_kb_id
-                logger.info(f'[QueryKnowledge] 从 query 识别知识库: kb_id={extracted_kb_id}')
+            extracted = self._extract_knowledge_base_from_query(query)
+            if extracted:
+                knowledge_base_id = extracted
 
         if mode == 'list':
             return await self._handle_list(knowledge_base_id)
@@ -90,77 +88,45 @@ class QueryKnowledgeTool(BaseTool):
         elif mode == 'get':
             return await self._handle_get(document_id)
         else:
-            return ToolResult(
-                success=False,
-                data={},
-                error=f'无效的 mode: {mode}，可选值: list, search, get',
-            )
+            return ToolResult(success=False, data={}, error=f'无效的 mode: {mode}')
 
     async def _handle_list(self, knowledge_base_id: Optional[int]) -> ToolResult:
         if not knowledge_base_id:
-            return ToolResult(
-                success=False,
-                data={},
-                error='list 模式需要 knowledge_base_id 参数',
-            )
+            return ToolResult(success=False, data={}, error='list 模式需要 knowledge_base_id')
 
-        try:
-            from core.models.knowledge import KnowledgeDocument
+        from core.models.knowledge import KnowledgeDocument
 
-            def _query() -> List[Dict[str, Any]]:
-                return list(
-                    KnowledgeDocument.objects.filter(  # type: ignore[arg-type]
-                        knowledge_base_id=knowledge_base_id,
-                        chunk_index=-1,  # root documents only
-                    ).values('id', 'document_type', 'content', 'file_path', 'metadata').order_by('-created_at')
-                )
+        docs = await self.run_query(
+            lambda: list(
+                KnowledgeDocument.objects.filter(
+                    knowledge_base_id=knowledge_base_id,
+                    chunk_index=-1,
+                ).values('id', 'document_type', 'content', 'file_path', 'metadata')
+                .order_by('-created_at')
+            ),
+            "查询文档列表失败",
+        )
 
-            docs = await sync_to_async(_query)()
-            logger.info(f'[QueryKnowledge] list mode: 查到 {len(docs)} 个文档')
-
-            if not docs:
-                return ToolResult(
-                    success=True,
-                    data={
-                        'documents': [],
-                        'message': f'知识库 (ID={knowledge_base_id}) 中没有文档',
-                    },
-                )
-
-            documents = [
-                {
-                    'id': d['id'],
-                    'title': (d.get('metadata') or {}).get('title', d['file_path'].split('/')[-1] if d['file_path'] else f'文档_{d["id"]}'),
-                    'doc_type': d['document_type'],
-                    'description': ((d.get('metadata') or {}).get('description', ''))[:200],
-                }
-                for d in docs
-            ]
-
-            titles = '\n'.join(f'  {d["id"]}. [{d["doc_type"]}] {d["title"]}' for d in documents)
-            answer = f'知识库 (ID={knowledge_base_id}) 中有 {len(documents)} 个文档：\n{titles}\n\n如需查看详情，请使用 get(document_id=xxx) 获取全文。'
-
+        if not docs:
             return ToolResult(
                 success=True,
-                data={
-                    'documents': documents,
-                    'message': answer,
-                    'answer': answer,
-                },
-                metadata={
-                    'mode': 'list',
-                    'knowledge_base_id': knowledge_base_id,
-                    'documents_found': len(documents),
-                },
+                data={'documents': [], 'message': f'知识库 (ID={knowledge_base_id}) 中没有文档'},
             )
 
-        except Exception as e:
-            logger.error(f'[QueryKnowledge] list 失败: {e}')
-            return ToolResult(
-                success=False,
-                data={},
-                error=f'查询文档列表失败: {e}',
-            )
+        documents = [
+            {
+                'id': d['id'],
+                'title': (d.get('metadata') or {}).get('title', d['file_path'].split('/')[-1] if d['file_path'] else f'文档_{d["id"]}'),
+                'doc_type': d['document_type'],
+                'description': ((d.get('metadata') or {}).get('description', ''))[:200],
+            }
+            for d in docs
+        ]
+
+        titles = '\n'.join(f'  {d["id"]}. [{d["doc_type"]}] {d["title"]}' for d in documents)
+        answer = f'知识库 (ID={knowledge_base_id}) 中有 {len(documents)} 个文档：\n{titles}\n\n如需查看详情，请使用 get(document_id=xxx) 获取全文。'
+
+        return ToolResult(success=True, data={'documents': documents, 'message': answer, 'answer': answer})
 
     async def _handle_search(
         self,
@@ -170,161 +136,87 @@ class QueryKnowledgeTool(BaseTool):
         project_id: Optional[int] = None,
     ) -> ToolResult:
         if not query:
-            return ToolResult(
-                success=False,
-                data={},
-                error='search 模式需要 query 参数',
+            return ToolResult(success=False, data={}, error='search 模式需要 query 参数')
+
+        from core.agents.rag.knowledge_retriever import KnowledgeRetriever
+
+        retriever = KnowledgeRetriever()
+        doc_types_list = [doc_type] if doc_type else None
+
+        results = await self.run_query(
+            lambda: retriever.search(
+                query, top_k=5, doc_types=doc_types_list,
+                knowledge_base_id=knowledge_base_id, project_id=project_id, hybrid_search=True,
+            ),
+            "搜索失败",
+        )
+
+        if not results:
+            return ToolResult(success=True, data={'documents': [], 'message': '未找到匹配的文档', 'answer': '未找到匹配的文档'})
+
+        documents = []
+        for r in results:
+            metadata = r.get('metadata', {})
+            content = r.get('content', '')
+            documents.append({
+                'id': metadata.get('knowledge_document_id'),
+                'title': metadata.get('title', '未命名文档'),
+                'doc_type': metadata.get('doc_type'),
+                'knowledge_base_name': metadata.get('knowledge_base_name'),
+                'score': r.get('combined_score', r.get('score', 0.0)),
+                'snippet': (content or '')[:500],
+            })
+
+        answer_parts = []
+        for i, doc in enumerate(documents, 1):
+            kb = doc.get('knowledge_base_name', '')
+            kb_str = f' [{kb}]' if kb else ''
+            answer_parts.append(
+                f'**[{i}] {doc["title"]}**{kb_str}\n'
+                f'- 相关度: {doc["score"]:.2f}\n'
+                f'- 文档ID: {doc["id"]}\n'
+                f'- 摘要:\n{doc["snippet"]}'
             )
+        answer = '\n\n---\n\n'.join(answer_parts)
 
-        try:
-            from core.agents.rag.knowledge_retriever import KnowledgeRetriever
-
-            retriever = KnowledgeRetriever()
-            doc_types_list = [doc_type] if doc_type else None
-
-            results = await sync_to_async(retriever.search)(
-                query,
-                top_k=5,
-                doc_types=doc_types_list,
-                knowledge_base_id=knowledge_base_id,
-                project_id=project_id,
-                hybrid_search=True,
-            )
-            logger.info(f'[QueryKnowledge] search 结果: {len(results)} 条')
-
-            if not results:
-                return ToolResult(
-                    success=True,
-                    data={
-                        'documents': [],
-                        'message': '未找到匹配的文档',
-                        'answer': '未找到匹配的文档',
-                    },
-                )
-
-            documents = []
-            for r in results:
-                metadata = r.get('metadata', {})
-                content = r.get('content', '')
-                content_snippet = (content or '')[:500]
-                documents.append({
-                    'id': metadata.get('knowledge_document_id'),
-                    'title': metadata.get('title', '未命名文档'),
-                    'doc_type': metadata.get('doc_type'),
-                    'knowledge_base_name': metadata.get('knowledge_base_name'),
-                    'score': r.get('combined_score', r.get('score', 0.0)),
-                    'snippet': content_snippet,
-                })
-
-            answer_parts = []
-            for i, doc in enumerate(documents, 1):
-                kb = doc.get('knowledge_base_name', '')
-                kb_str = f' [{kb}]' if kb else ''
-                answer_parts.append(
-                    f'**[{i}] {doc["title"]}**{kb_str}\n'
-                    f'- 相关度: {doc["score"]:.2f}\n'
-                    f'- 文档ID: {doc["id"]}\n'
-                    f'- 摘要:\n{doc["snippet"]}'
-                )
-            answer = '\n\n---\n\n'.join(answer_parts)
-
-            return ToolResult(
-                success=True,
-                data={
-                    'documents': documents,
-                    'message': answer,
-                    'answer': answer,
-                },
-                metadata={
-                    'mode': 'search',
-                    'query': query,
-                    'documents_found': len(documents),
-                },
-            )
-
-        except Exception as e:
-            logger.error(f'[QueryKnowledge] search 失败: {e}')
-            return ToolResult(
-                success=False,
-                data={},
-                error=f'搜索失败: {e}',
-            )
+        return ToolResult(success=True, data={'documents': documents, 'message': answer, 'answer': answer})
 
     async def _handle_get(self, document_id: Optional[int]) -> ToolResult:
         if not document_id:
-            return ToolResult(
-                success=False,
-                data={},
-                error='get 模式需要 document_id 参数',
-            )
+            return ToolResult(success=False, data={}, error='get 模式需要 document_id')
 
-        try:
-            from core.models.knowledge import KnowledgeDocument
+        from core.models.knowledge import KnowledgeDocument
 
-            def _get() -> Optional[Dict[str, Any]]:
-                try:
-                    doc: Any = KnowledgeDocument.objects.get(id=document_id)
-                    content = doc.content or ''
-                    if not content and doc.file_path:
-                        try:
-                            with open(doc.file_path, 'r', encoding='utf-8') as f:
-                                content = f.read()
-                        except Exception as e:
-                            logger.warning(f'[QueryKnowledge] 读取文件失败: {e}')
-                    metadata = doc.metadata or {}
-                    return {
-                        'id': doc.id,
-                        'title': metadata.get('title', doc.file_path.split('/')[-1] if doc.file_path else f'文档_{doc.id}'),
-                        'doc_type': doc.document_type,
-                        'content': content,
-                        'description': metadata.get('description', ''),
-                        'knowledge_base_id': doc.knowledge_base_id,
-                    }
-                except KnowledgeDocument.DoesNotExist:
-                    return None
+        def _get() -> Optional[Dict[str, Any]]:
+            try:
+                doc: Any = KnowledgeDocument.objects.get(id=document_id)
+                content = doc.content or ''
+                if not content and doc.file_path:
+                    try:
+                        with open(doc.file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                    except Exception as e:
+                        self.logger.warning(f'[QueryKnowledge] 读取文件失败: {e}')
+                metadata = doc.metadata or {}
+                return {
+                    'id': doc.id,
+                    'title': metadata.get('title', doc.file_path.split('/')[-1] if doc.file_path else f'文档_{doc.id}'),
+                    'doc_type': doc.document_type,
+                    'content': content,
+                    'description': metadata.get('description', ''),
+                    'knowledge_base_id': doc.knowledge_base_id,
+                }
+            except KnowledgeDocument.DoesNotExist:
+                return None
 
-            doc = await sync_to_async(_get)()
+        doc = await self.run_query(_get, "获取文档失败")
 
-            if not doc:
-                return ToolResult(
-                    success=True,
-                    data={
-                        'document': None,
-                        'message': f'文档 (ID={document_id}) 不存在',
-                    },
-                )
+        if not doc:
+            return ToolResult(success=True, data={'document': None, 'message': f'文档 (ID={document_id}) 不存在'})
 
-            logger.info(f'[QueryKnowledge] get mode: 文档 {doc["title"]}, 内容长度 {len(doc["content"])}')
+        answer = f'**{doc["title"]}**\n- 类型: {doc["doc_type"]}\n- 文档ID: {doc["id"]}\n\n{doc["content"]}'
 
-            answer = (
-                f'**{doc["title"]}**\n'
-                f'- 类型: {doc["doc_type"]}\n'
-                f'- 文档ID: {doc["id"]}\n\n'
-                f'{doc["content"]}'
-            )
-
-            return ToolResult(
-                success=True,
-                data={
-                    'document': doc,
-                    'message': answer,
-                    'answer': answer,
-                },
-                metadata={
-                    'mode': 'get',
-                    'document_id': document_id,
-                    'document_title': doc['title'],
-                    'content_length': len(doc['content']),
-                },
-            )
-
-        except Exception as e:
-            logger.error(f'[QueryKnowledge] get 失败: {e}')
-            return ToolResult(
-                success=False,
-                data={},
-                error=f'获取文档失败: {e}',
-            )
+        return ToolResult(success=True, data={'document': doc, 'message': answer, 'answer': answer})
 
     def _extract_knowledge_base_from_query(self, query: str) -> Optional[int]:
         """从 query 中识别知识库名称并返回 ID"""
@@ -349,9 +241,9 @@ class QueryKnowledgeTool(BaseTool):
         try:
             kb = KnowledgeBase.objects.filter(name__icontains=kb_name).first()
             if kb:
-                logger.info(f'[QueryKnowledge] 识别知识库: {kb_name!r} -> kb_id={kb.id}')  # pyright: ignore[reportAttributeAccessIssue]
-                return kb.id  # pyright: ignore[reportAttributeAccessIssue]
+                self.logger.info(f'[QueryKnowledge] 识别知识库: {kb_name!r} -> kb_id={kb.id}')
+                return kb.id  # type: ignore[no-any-return]
         except Exception as e:
-            logger.warning(f'[QueryKnowledge] 查询知识库失败: {e}')
+            self.logger.warning(f'[QueryKnowledge] 查询知识库失败: {e}')
 
         return None

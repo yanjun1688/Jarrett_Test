@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -27,7 +28,7 @@ class KnowledgeRAGAgent:
         rag_retriever: Optional[RAGRetriever] = None,
     ):
         if llm_service is None:
-            llm_service = create_llm_service(provider='openai')
+            llm_service = create_llm_service(provider=os.getenv("DEFAULT_LLM_PROVIDER", "openai"))
 
         self.llm_service = llm_service
         self.rag_retriever = rag_retriever
@@ -182,7 +183,7 @@ class KnowledgeRAGAgent:
 - 回答末尾标注引用来源"""
 
         try:
-            response = await self.llm_service.generate(
+            response: str = await self.llm_service.generate(
                 prompt=prompt,
                 system_message='你是一个测试领域知识助手，基于提供的文档回答。请准确、客观。',
             )
