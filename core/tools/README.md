@@ -24,13 +24,13 @@ core/tools/
 │   └── http_client.py       # HTTP 客户端工具
 ├── chatbot/                 # 聊天机器人工具
 │   ├── __init__.py
-│   ├── generate_api_test_tool.py      # API 测试生成工具
-│   ├── generate_ui_test_tool.py       # UI 测试生成工具
+│   ├── generate.py                    # 通用 Generate 工具
+│   ├── save.py                        # 通用 Save 工具
 │   ├── execute_test_tool.py           # 测试执行工具
 │   ├── execute_pending_tests_tool.py  # 待执行测试工具
 │   ├── query_knowledge_tool.py        # 知识库查询工具
 │   ├── install_skill_tool.py          # Skill 安装工具
-│   └── run_skill_tool.py              # Skill 运行工具
+│   └── load_skill_tool.py             # Skill 加载工具
 ├── execution/               # 执行相关工具
 │   ├── __init__.py
 │   └── api_test_orchestrator.py       # API 测试编排器

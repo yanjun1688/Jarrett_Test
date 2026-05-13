@@ -31,11 +31,11 @@ logger = logging.getLogger(__name__)
 
 # test_type 白名单：不同测试类型可用的工具集
 TOOL_WHITELIST: Dict[str, Set[str]] = {
-    "ui":  {"generate_ui_test", "bash", "execute_test",
-            "query_knowledge", "query_test_scripts", "save_test_case"},
-    "api": {"generate_api_test", "bash", "execute_test",
-            "query_knowledge", "query_test_scripts", "save_test_case", "save_test_script"},
-    "prd": {"generate_test", "bash", "query_knowledge"},
+    "ui":  {"generate", "save", "bash", "execute_test",
+            "query_knowledge", "query_test_scripts"},
+    "api": {"generate", "save", "bash", "execute_test",
+            "query_knowledge", "query_test_scripts"},
+    "prd": {"generate", "save", "bash", "query_knowledge"},
 }
 
 
@@ -95,8 +95,8 @@ class ChatbotAgent(BaseAgent):
     def _init_tools(self) -> None:
         """注册所有内置和 MCP 工具到 ToolRegistry"""
         from core.tools.chatbot import (
-            GenerateAPITestTool,
-            GenerateUITestTool,
+            GenerateTool,
+            SaveTool,
             ExecuteTestTool,
             ExecutePendingTestsTool,
             QueryKnowledgeTool,
@@ -104,15 +104,11 @@ class ChatbotAgent(BaseAgent):
             InstallSkillTool,
             LoadSkillTool,
             QueryProjectTool,
-            GenerateTestTool,
-            SaveTestCaseTool,
-            SaveTestScriptTool,
         )
 
         tools = [
-            GenerateAPITestTool(llm_service=self.llm_service),
-            GenerateUITestTool(llm_service=self.llm_service),
-            GenerateTestTool(llm_service=self.llm_service),
+            GenerateTool(llm_service=self.llm_service),
+            SaveTool(),
             ExecuteTestTool(),
             ExecutePendingTestsTool(),
             QueryKnowledgeTool(knowledge_rag_agent=self.knowledge_rag_agent),
@@ -120,8 +116,6 @@ class ChatbotAgent(BaseAgent):
             QueryProjectTool(),
             InstallSkillTool(),
             LoadSkillTool(skill_loader=self.skill_loader),
-            SaveTestCaseTool(),
-            SaveTestScriptTool(),
         ]
         for t in tools:
             self.registry.register(t)

@@ -115,7 +115,32 @@ class BaseTool(ABC):
             List of required parameter names
         """
         return []
-    
+
+    def get_param(self, kwargs: Dict[str, Any], name: str, default: Any = None) -> Any:
+        """从 kwargs 提取参数，带默认值"""
+        return kwargs.get(name, default)
+
+    def validate_required(self, kwargs: Dict[str, Any], *names: str) -> Optional[ToolResult]:
+        """校验必填参数。返回 None 表示通过，返回 ToolResult 表示失败（直接 return）"""
+        missing = [n for n in names if not kwargs.get(n)]
+        if missing:
+            return ToolResult(
+                success=False,
+                data={},
+                error=f"缺少必填参数: {', '.join(missing)}",
+            )
+        return None
+
+    async def run_query(self, query_fn: Any, error_msg: str) -> Any:
+        """包装同步 DB 查询为异步，统一错误处理和日志"""
+        from asgiref.sync import sync_to_async
+        try:
+            result = await sync_to_async(query_fn)()
+            return result
+        except Exception as e:
+            self.logger.error(f"{error_msg}: {e}")
+            raise
+
     async def execute_with_validation(
         self,
         **kwargs: Any

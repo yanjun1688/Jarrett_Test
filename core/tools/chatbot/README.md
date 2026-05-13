@@ -7,8 +7,8 @@
 
 聊天机器人工具模块提供与聊天机器人交互的工具集，支持：
 
-- **API 测试生成** - 根据用户描述生成 API 测试用例
-- **UI 测试生成** - 根据用户描述生成 UI 自动化测试脚本
+- **测试生成** - 根据 scenario 生成测试内容（PRD 测试用例、API 测试脚本等）
+- **测试保存** - 将生成的内容保存到数据库
 - **测试执行** - 执行已生成或已保存的测试用例
 - **知识库查询** - 查询测试最佳实践和示例代码
 - **Skill 管理** - 安装和运行 Skill
@@ -18,100 +18,60 @@
 ```
 chatbot/
 ├── __init__.py
-├── generate_api_test_tool.py      # API 测试生成工具
-├── generate_ui_test_tool.py       # UI 测试生成工具
-├── execute_test_tool.py           # 测试执行工具
-├── execute_pending_tests_tool.py  # 待执行测试工具
-├── query_knowledge_tool.py        # 知识库查询工具
-├── install_skill_tool.py          # Skill 安装工具
-└── run_skill_tool.py              # Skill 运行工具
+├── generate.py                  # 通用 Generate 工具
+├── save.py                      # 通用 Save 工具
+├── execute_test_tool.py         # 测试执行工具
+├── execute_pending_tests_tool.py# 待执行测试工具
+├── query_knowledge_tool.py      # 知识库查询工具
+├── install_skill_tool.py        # Skill 安装工具
+└── load_skill_tool.py           # Skill 运行工具
 ```
 
 ## 工具列表
 
-### 1. GenerateAPITestTool - API 测试生成工具
+### 1. GenerateTool - 通用生成工具
 
 | 属性 | 值 |
 |------|-----|
-| 名称 | `generate_api_test` |
-| 描述 | 生成 API/接口测试脚本。当用户需要测试 REST API、HTTP 接口时调用。 |
-| 版本 | 1.0.0 |
+| 名称 | `generate` |
+| 描述 | 根据 scenario 类型调用 LLM 生成 JSON 格式的内容（测试用例、API 测试配置等） |
+| 版本 | 2.0.0 |
 
 #### 参数
 
 | 参数 | 类型 | 必填 | 描述 |
 |------|------|------|------|
-| endpoint | string | 是 | API 端点路径，如 /api/login |
-| method | string | 是 | HTTP 方法 (GET, POST, PUT, DELETE, PATCH) |
-| description | string | 否 | 测试场景描述 |
+| scenario | string | 是 | 生成场景（如 prd_test_cases、api_test_scripts） |
+| content | string | 是 | 输入内容（PRD 文档内容或 API 定义等） |
 
 #### 返回数据
 
 ```python
 {
-    "test_cases": [
-        {
-            "name": "测试用例名称",
-            "description": "测试用例描述",
-            "endpoint": "/api/users",
-            "method": "GET",
-            "headers": {"Content-Type": "application/json"},
-            "body": {},
-            "expected_status": 200,
-            "test_type": "positive",
-            "validation_rules": [{"type": "status_code", "expected": 200}]
-        }
-    ],
-    "summary": {
-        "total_cases": 3,
-        "positive_cases": 1,
-        "negative_cases": 1,
-        "boundary_cases": 1
-    },
-    "user_options": {
-        "can_save": True,
-        "can_execute": True,
-        "save_options": [...],
-        "execute_options": [...]
-    }
+    "output": "{...JSON...}",   # JSON 字符串
+    "scenario": "prd_test_cases"
 }
 ```
 
 ---
 
-### 2. GenerateUITestTool - UI 测试生成工具
+### 2. SaveTool - 通用保存工具
 
 | 属性 | 值 |
 |------|-----|
-| 名称 | `generate_ui_test` |
-| 描述 | 生成 UI/Web 自动化测试脚本。当用户需要测试网页功能、表单、按钮点击等UI交互时调用。 |
-| 版本 | 1.0.0 |
+| 名称 | `save` |
+| 描述 | 将 generate 工具返回的 JSON 内容保存到数据库，根据 scenario 决定保存方式和目标表 |
+| 版本 | 2.0.0 |
 
 #### 参数
 
 | 参数 | 类型 | 必填 | 描述 |
 |------|------|------|------|
-| url | string | 否 | 要测试的网页 URL |
-| description | string | 是 | 测试场景描述，如'测试登录功能' |
-| actions | array | 否 | 要执行的操作列表 |
-
-#### 返回数据
-
-```python
-{
-    "script": {
-        "language": "python",
-        "framework": "playwright",
-        "code": "from playwright.sync_api import ...",
-        "actions": [
-            {"type": "navigate", "selector": None, "value": "https://..."},
-            {"type": "fill", "selector": "#username", "value": "admin"},
-            {"type": "click", "selector": "#login-btn", "value": None}
-        ]
-    },
-    "user_options": {...}
-}
-```
+| scenario | string | 是 | 保存场景（和 generate 的 scenario 对应） |
+| output | string | 是 | 要保存的内容（JSON 格式，由 generate 工具返回） |
+| project_id | integer | 是 | 目标项目 ID |
+| name | string | 否 | 名称（用于脚本名称等） |
+| source | string | 否 | 来源标识（chatbot/manual_upload/manual_create） |
 
 ---
 
@@ -259,8 +219,8 @@ mode: execute
 
 The Chatbot Tools module provides tools for chatbot interactions including:
 
-- **API Test Generation** - Generate API test cases from user descriptions
-- **UI Test Generation** - Generate UI automation scripts from user descriptions
+- **Test Generation** - Generate test content by scenario (PRD test cases, API scripts, etc.)
+- **Test Saving** - Save generated content to database
 - **Test Execution** - Execute generated or saved test cases
 - **Knowledge Query** - Query testing best practices and code examples
 - **Skill Management** - Install and run Skills
@@ -269,8 +229,8 @@ The Chatbot Tools module provides tools for chatbot interactions including:
 
 | Tool Name | Description |
 |-----------|-------------|
-| generate_api_test | Generate API test scripts from descriptions |
-| generate_ui_test | Generate UI/Web automation scripts (Playwright) |
+| generate | Generate test content by scenario (JSON output) |
+| save | Save generated JSON content to database by scenario |
 | execute_test | Execute existing test cases by ID or script name |
 | execute_pending_tests | Execute pending tests from session context |
 | query_knowledge | Query knowledge base for best practices |
