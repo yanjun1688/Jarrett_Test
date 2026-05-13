@@ -7,8 +7,8 @@ export const projectsAPI = {
   // 获取单个项目详情
   getById: (id) => apiClient.get(`/projects/${id}/`),
 
-  // 获取项目统计
-  getStatistics: (id) => apiClient.get(`/projects/${id}/statistics/`),
+  // 获取统计（全局 + 所有/指定项目）
+  getStatistics: (params) => apiClient.get('/projects/statistics/', { params }),
 
   // 创建项目
   create: (data) => apiClient.post('/projects/', data),
