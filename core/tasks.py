@@ -266,7 +266,7 @@ def index_conversation_memory(
     """
     from uuid import uuid4
     message_id = str(uuid4())
-    logger.info(f"[Task] index_conversation_memory started: msg_id={message_id}, session={session_id}, role={role}, content_len={len(content)}")
+    logger.debug(f"[Task] index_conversation_memory started: msg_id={message_id}, session={session_id}, role={role}, content_len={len(content)}")
     try:
         from core.agents.rag.conversation_memory import ConversationMemoryIndexer
         indexer = ConversationMemoryIndexer()
@@ -277,7 +277,7 @@ def index_conversation_memory(
             content=content,
             message_id=message_id,
         )
-        logger.info(f"[Task] index_conversation_memory completed: msg_id={message_id}")
+        logger.debug(f"[Task] index_conversation_memory completed: msg_id={message_id}")
         publish(
             self.request.id,
             'core.tasks.index_conversation_memory',

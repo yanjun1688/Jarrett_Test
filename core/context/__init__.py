@@ -7,9 +7,7 @@
 - MarkdownContextStore: 基础 Markdown 存储器
 - SessionContext: 会话上下文数据结构
 - TokenCalculator: Token 精确计算器
-- TokenEconomicsContextStore: Token 预算感知的上下文存储
-- BudgetStatus: 预算状态数据类
-- TokenBudgetManager: Token 预算管理器
+- TokenEconomicsContextStore: 分层压缩上下文存储
 
 高级模块：
 - ContextTierManager: 三层上下文管理器
@@ -19,7 +17,6 @@
 
 接口约定（对齐 PromptBuilder）：
 - get_messages_for_llm() -> optimized_history
-- check_budget() -> BudgetStatus
 - TokenCalculator.count_tokens() -> int
 
 Reference: docs/2026/04/01/DESIGN_CONTEXT_TOKEN_ECONOMICS.md
@@ -29,9 +26,6 @@ from .markdown_store import MarkdownContextStore, SessionContext
 from .token_economics import (
     TokenCalculator,
     TokenEconomicsContextStore,
-    BudgetStatus,
-    BudgetConfig,
-    TokenBudgetManager,
     ContextTierManager,
     SmartSummarizer,
     IncrementalStore,
@@ -44,9 +38,6 @@ __all__ = [
     "SessionContext",
     "TokenCalculator",
     "TokenEconomicsContextStore",
-    "BudgetStatus",
-    "BudgetConfig",
-    "TokenBudgetManager",
     "ContextTierManager",
     "SmartSummarizer",
     "IncrementalStore",

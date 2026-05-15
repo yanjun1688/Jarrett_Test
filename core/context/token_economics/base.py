@@ -2,7 +2,6 @@
 Token 经济学基础数据模型
 
 定义核心数据结构：
-- BudgetStatus: Token 预算状态
 - OptimizedContext: 优化后的上下文
 - StructuredSummary: 结构化摘要（温区）
 - CompressionResult: 压缩结果
@@ -12,14 +11,6 @@ Token 经济学基础数据模型
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 from enum import Enum
-
-
-class BudgetStatusType(Enum):
-    """Token 预算状态类型"""
-    OK = "ok"
-    WARNING = "warning"
-    CRITICAL = "critical"
-    EXCEEDED = "exceeded"
 
 
 class CalculationMethod(Enum):
@@ -48,72 +39,6 @@ class TierConfig:
             "hot_zone_size": self.hot_zone_size,
             "warm_zone_size": self.warm_zone_size,
             "cold_zone_size": self.cold_zone_size
-        }
-
-
-@dataclass
-class BudgetConfig:
-    """Token 预算配置"""
-    total_limit: int = 8192
-    output_reserve: int = 2048
-    safety_buffer: int = 512
-    soft_limit_ratio: float = 0.8
-    
-    @property
-    def effective_budget(self) -> int:
-        """有效预算（扣除预留和安全缓冲）"""
-        return self.total_limit - self.output_reserve - self.safety_buffer
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "total_limit": self.total_limit,
-            "output_reserve": self.output_reserve,
-            "safety_buffer": self.safety_buffer,
-            "soft_limit_ratio": self.soft_limit_ratio,
-            "effective_budget": self.effective_budget
-        }
-
-
-@dataclass
-class BudgetStatus:
-    """
-    Token 预算状态
-    
-    用于描述当前会话的 Token 使用情况和预算状态
-    """
-    total_budget: int
-    used_tokens: int
-    available_tokens: int
-    utilization: float
-    status: BudgetStatusType
-    recommendations: List[str] = field(default_factory=list)
-    tier_breakdown: Dict[str, int] = field(default_factory=dict)
-    
-    @property
-    def is_ok(self) -> bool:
-        return self.status == BudgetStatusType.OK
-    
-    @property
-    def is_warning(self) -> bool:
-        return self.status == BudgetStatusType.WARNING
-    
-    @property
-    def is_critical(self) -> bool:
-        return self.status == BudgetStatusType.CRITICAL
-    
-    @property
-    def is_exceeded(self) -> bool:
-        return self.status == BudgetStatusType.EXCEEDED
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "total_budget": self.total_budget,
-            "used_tokens": self.used_tokens,
-            "available_tokens": self.available_tokens,
-            "utilization": self.utilization,
-            "status": self.status.value,
-            "recommendations": self.recommendations,
-            "tier_breakdown": self.tier_breakdown
         }
 
 
@@ -324,42 +249,6 @@ class TokenStatistics:
             "created_at": self.created_at,
             "updated_at": self.updated_at
         }
-
-
-@dataclass
-class SessionTokenMetadata:
-    """会话 Token 元数据"""
-    session_id: str
-    user_id: str
-    model_name: str
-    
-    token_budget: Dict[str, Any] = field(default_factory=dict)
-    tier_config: Dict[str, Any] = field(default_factory=dict)
-    compression_stats: Dict[str, Any] = field(default_factory=dict)
-    cache_stats: Dict[str, Any] = field(default_factory=dict)
-    
-    created_at: str = ""
-    updated_at: str = ""
-    last_compression: str = ""
-    
-    def to_frontmatter(self) -> str:
-        """转换为 YAML frontmatter"""
-        import yaml
-        
-        data = {
-            "session_id": self.session_id,
-            "user_id": self.user_id,
-            "model_name": self.model_name,
-            "token_budget": self.token_budget,
-            "tier_config": self.tier_config,
-            "compression_stats": self.compression_stats,
-            "cache_stats": self.cache_stats,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-            "last_compression": self.last_compression
-        }
-        
-        return yaml.dump(data, allow_unicode=True, default_flow_style=False)
 
 
 MODEL_CONFIGS = {
