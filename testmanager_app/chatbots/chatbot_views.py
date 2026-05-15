@@ -702,7 +702,25 @@ class ClearConversationView(APIView):
         conversation.messages = []
         conversation.metadata = {}
         conversation.save()
-        
+
+        # Also clear Markdown storage if the conversation uses it
+        from core.services.conversation_service import get_markdown_store
+        if conversation.migrated_to_markdown:
+            md_store = get_markdown_store()
+            md_store.clear_session(
+                session_id=conversation_id,
+                user_id=str(request.user.id),  # pyright: ignore
+            )
+
+        # Clear ChromaDB conversation memory embeddings
+        try:
+            from core.agents.rag.conversation_memory import ConversationMemoryIndexer
+            indexer = ConversationMemoryIndexer()
+            deleted = indexer.delete_session(conversation_id)
+            logger.info(f"Cleared {deleted} memory embeddings for session {conversation_id}")
+        except Exception as e:
+            logger.warning(f"Failed to clear memory embeddings for session {conversation_id}: {e}")
+
         return Response({
             "success": True,
             "message": "对话历史已清空"

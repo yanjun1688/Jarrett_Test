@@ -159,3 +159,7 @@ data/
 cleanup_deprecated.py
 create_migration_template.py
 REMOVE_TESTFLOW_MODELS_migration_example.py
+
+# Environment check timestamps
+.pip_check_timestamp
+.playwright_check_timestamp

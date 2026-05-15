@@ -68,12 +68,16 @@ class ChromaVectorStore:
 
     Uses a global singleton PersistentClient with per-thread collection
     caching via threading.local().
+
+    Supports multiple collections — each instance can target a different
+    collection name.  The per-thread cache keys by collection_name so
+    different instances in the same thread don't collide.
     """
 
     _local = threading.local()
 
-    def __init__(self) -> None:
-        self.collection_name = settings.chromadb_collection_name
+    def __init__(self, collection_name: Optional[str] = None) -> None:
+        self.collection_name = collection_name or settings.chromadb_collection_name
 
     @classmethod
     def get_client(cls) -> Any:
@@ -82,28 +86,36 @@ class ChromaVectorStore:
 
     @property
     def collection(self):
-        """Get or create global collection (thread-safe, cached per thread)."""
-        if not hasattr(self._local, 'collection') or self._local.collection is None:
+        """
+        Get or create collection (thread-safe, cached per thread per name).
+
+        Uses a dict keyed by collection_name to avoid cross-instance
+        collisions when the same thread creates stores for different
+        collections (e.g. kb_knowledge vs conversation_memory).
+        """
+        if not hasattr(self._local, '_collections'):
+            self._local._collections = {}
+        if self.collection_name not in self._local._collections:
             client = self.get_client()
             logger.info(f'[ChromaDB] Getting/creating collection: {self.collection_name}')
             try:
-                self._local.collection = client.get_or_create_collection(
+                self._local._collections[self.collection_name] = client.get_or_create_collection(
                     name=self.collection_name,
                 )
-                logger.info(f'[ChromaDB] Collection count: {self._local.collection.count()}')
+                logger.info(f'[ChromaDB] Collection count: {self._local._collections[self.collection_name].count()}')
             except Exception as e:
                 logger.warning(
                     f'[ChromaDB] get_or_create_collection failed: {e}, trying create_collection',
                 )
                 try:
-                    self._local.collection = client.create_collection(
+                    self._local._collections[self.collection_name] = client.create_collection(
                         name=self.collection_name,
                     )
                     logger.info('[ChromaDB] Collection created successfully')
                 except Exception as e2:
                     logger.error(f'[ChromaDB] create_collection also failed: {e2}')
                     raise
-        return self._local.collection
+        return self._local._collections[self.collection_name]
 
     def add_documents(
         self,
@@ -167,11 +179,27 @@ class ChromaVectorStore:
             self.collection.delete(ids=ids_to_delete)
         return len(ids_to_delete)
 
+    def delete_by_metadata(self, where: Dict[str, Any]) -> int:
+        """
+        Delete documents by metadata filter.
+
+        Args:
+            where: Filter conditions, e.g. {"session_id": "abc-123", "user_id": "42"}
+
+        Returns:
+            Number of deleted documents
+        """
+        result = self.collection.get(where=where)
+        ids_to_delete = result["ids"]
+        if ids_to_delete:
+            self.collection.delete(ids=ids_to_delete)
+        return len(ids_to_delete)
+
     def delete_collection(self) -> None:
         """Delete the entire collection"""
         self.get_client().delete_collection(name=self.collection_name)
-        if hasattr(self._local, 'collection'):
-            self._local.collection = None
+        if hasattr(self._local, '_collections'):
+            self._local._collections.pop(self.collection_name, None)
 
     def count(self) -> int:
         """Get document count"""

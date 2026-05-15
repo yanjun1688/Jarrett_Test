@@ -230,6 +230,15 @@ class ConversationService:
             md_deleted = md_store.delete_session(conversation_id, str(user.id), hard_delete=True)  # pyright: ignore
             if not md_deleted:
                 logger.warning(f"MySQL deleted but Markdown cleanup failed for: {conversation_id}")
+
+        # Clear ChromaDB conversation memory embeddings
+        try:
+            from core.agents.rag.conversation_memory import ConversationMemoryIndexer
+            indexer = ConversationMemoryIndexer()
+            deleted = indexer.delete_session(conversation_id)
+            logger.info(f"Cleared {deleted} memory embeddings for deleted session {conversation_id}")
+        except Exception as e:
+            logger.warning(f"Failed to clear memory embeddings for deleted session {conversation_id}: {e}")
         
         logger.info(f"Deleted conversation: {conversation_id}")
         return True, None

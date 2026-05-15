@@ -11,6 +11,7 @@ Markdown 上下文存储（简化版）
 Reference: docs/context_markdown_storage_design_v2.md
 """
 
+import json
 import os
 import logging
 from pathlib import Path
@@ -254,6 +255,137 @@ class MarkdownContextStore:
             logger.error(f"[MarkdownStore] Failed to get context: {e}")
             return None
     
+    def append_message_and_get_history(
+        self,
+        session_id: str,
+        user_id: str,
+        role: str,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> tuple[bool, list[Dict[str, Any]]]:
+        """
+        原子操作：追加消息并返回当前全部消息（不含刚追加的消息）。
+
+        消除读-写竞态条件：在同一个文件锁范围内完成读取和写入。
+
+        Args:
+            session_id: 会话 ID
+            user_id: 用户 ID
+            role: 消息角色 (user/assistant/system)
+            content: 消息内容
+            metadata: 消息元数据 (可选)
+
+        Returns:
+            (是否成功, 当前消息列表)
+        """
+        if not content or not content.strip():
+            return False, []
+
+        try:
+            filepath = self._get_path(user_id, session_id)
+
+            if not filepath.exists():
+                logger.warning(f"[MarkdownStore] Session not found: {session_id}")
+                return False, []
+
+            lock = self._get_thread_lock(filepath)
+            with lock:
+                with _file_lock(filepath):
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        file_content = f.read()
+
+                    context = self._parse_markdown(file_content)
+
+                    current_messages = list(context.messages)
+
+                    now = datetime.now().isoformat()
+                    message = {
+                        "role": role,
+                        "content": content,
+                        "timestamp": now,
+                        "metadata": metadata or {},
+                    }
+                    context.messages.append(message)
+
+                    context.metadata["message_count"] = len(context.messages)
+                    context.metadata["updated_at"] = now
+                    context.updated_at = now
+
+                    new_content = self._render_markdown(context)
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(new_content)
+
+            logger.debug(f"[MarkdownStore] Appended message and got history: {session_id}")
+            return True, current_messages
+
+        except Exception as e:
+            logger.error(f"[MarkdownStore] Failed to append message and get history: {e}")
+            return False, []
+
+    def append_messages_batch(
+        self,
+        session_id: str,
+        user_id: str,
+        messages: List[Dict[str, Any]],
+    ) -> bool:
+        """
+        批量追加消息到会话（原子操作）
+
+        Args:
+            session_id: 会话 ID
+            user_id: 用户 ID
+            messages: 消息列表，每条消息需包含 role 和 content 字段
+
+        Returns:
+            是否全部写入成功
+        """
+        if not messages:
+            return True
+
+        try:
+            filepath = self._get_path(user_id, session_id)
+
+            if not filepath.exists():
+                logger.warning(f"[MarkdownStore] Session not found: {session_id}")
+                return False
+
+            lock = self._get_thread_lock(filepath)
+            with lock:
+                with _file_lock(filepath):
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        file_content = f.read()
+
+                    context = self._parse_markdown(file_content)
+                    now = datetime.now().isoformat()
+
+                    for msg in messages:
+                        message = {
+                            "role": msg.get("role", "user"),
+                            "content": msg.get("content", ""),
+                            "timestamp": now,
+                            "metadata": msg.get("metadata", {}),
+                        }
+                        if "tool_call_id" in msg:
+                            message["tool_call_id"] = msg["tool_call_id"]
+                        if "tool_calls" in msg:
+                            message["tool_calls"] = msg["tool_calls"]
+                        context.messages.append(message)
+
+                    context.metadata["message_count"] = len(context.messages)
+                    context.metadata["updated_at"] = now
+                    context.updated_at = now
+
+                    new_content = self._render_markdown(context)
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(new_content)
+
+            logger.debug(f"[MarkdownStore] Batch appended {len(messages)} messages: {session_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"[MarkdownStore] Failed to batch append messages: {e}")
+            return False
+
     def append_message(
         self,
         session_id: str,
@@ -264,14 +396,14 @@ class MarkdownContextStore:
     ) -> bool:
         """
         追加消息到会话
-        
+
         Args:
             session_id: 会话 ID
             user_id: 用户 ID
             role: 消息角色 (user/assistant/system)
             content: 消息内容
             metadata: 消息元数据 (可选)
-            
+
         Returns:
             是否写入成功
         """
@@ -468,6 +600,56 @@ class MarkdownContextStore:
         
         return sessions
     
+    def clear_session(
+        self,
+        session_id: str,
+        user_id: str,
+    ) -> bool:
+        """
+        清空会话消息和上下文状态，保留会话元数据。
+
+        用于"清空对话"功能：保留会话文件，仅清除消息内容和上下文状态。
+
+        Args:
+            session_id: 会话 ID
+            user_id: 用户 ID
+
+        Returns:
+            是否清空成功
+        """
+        try:
+            filepath = self._get_path(user_id, session_id)
+
+            if not filepath.exists():
+                logger.warning(f"[MarkdownStore] Session not found: {session_id}")
+                return False
+
+            lock = self._get_thread_lock(filepath)
+            with lock:
+                with _file_lock(filepath):
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        file_content = f.read()
+
+                    context = self._parse_markdown(file_content)
+
+                    context.messages = []
+                    context.context_state = {}
+                    context.metadata["message_count"] = 0
+                    now = datetime.now().isoformat()
+                    context.metadata["updated_at"] = now
+                    context.updated_at = now
+
+                    new_content = self._render_markdown(context)
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(new_content)
+
+            logger.debug(f"[MarkdownStore] Cleared session messages: {session_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"[MarkdownStore] Failed to clear session: {e}")
+            return False
+
     def delete_session(
         self,
         session_id: str,
@@ -551,10 +733,11 @@ class MarkdownContextStore:
             # 使用 HTML 注释包裹，防止 --- 破坏结构
             lines.append(f"<!-- msg:{role}:{timestamp} -->")
             lines.append(content)
-            # 在 endmsg 前添加 metadata（如果有）
             if msg_metadata:
-                import json
                 lines.append(f"<!-- metadata:{json.dumps(msg_metadata, ensure_ascii=False)} -->")
+            tool_calls = msg.get("tool_calls")
+            if tool_calls:
+                lines.append(f"<!-- tool_calls:{json.dumps(tool_calls, ensure_ascii=False)} -->")
             lines.append("<!-- endmsg -->")
             lines.append("")
         
@@ -574,7 +757,6 @@ class MarkdownContextStore:
         if isinstance(value, str):
             return f"\"{value}\""
         elif isinstance(value, (list, dict)):
-            import json
             return json.dumps(value, ensure_ascii=False)
         else:
             return str(value)
@@ -641,9 +823,17 @@ class MarkdownContextStore:
             # metadata 标记
             metadata_match = re.match(r"<!-- metadata:(.+) -->", line)
             if metadata_match and current_msg:
-                import json
                 try:
                     current_msg["metadata"] = json.loads(metadata_match.group(1))
+                except json.JSONDecodeError:
+                    pass
+                continue
+
+            # tool_calls 标记
+            tool_calls_match = re.match(r"<!-- tool_calls:(.+) -->", line)
+            if tool_calls_match and current_msg:
+                try:
+                    current_msg["tool_calls"] = json.loads(tool_calls_match.group(1))
                 except json.JSONDecodeError:
                     pass
                 continue
@@ -718,7 +908,6 @@ class MarkdownContextStore:
         # JSON 数组/对象
         if value.startswith("[") or value.startswith("{"):
             try:
-                import json
                 return json.loads(value)
             except json.JSONDecodeError:
                 pass

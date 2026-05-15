@@ -7,14 +7,34 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, List
+from typing import Any, List, cast
 
 from celery import shared_task
 from django.utils import timezone
 
 from core.models.knowledge import KnowledgeDocument
+from core.task_events import publish
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_user_id_from_knowledge_base(knowledge_base_id: int) -> int | None:
+    from core.models.knowledge import KnowledgeBase
+    try:
+        kb = KnowledgeBase.objects.select_related('project').only(
+            'project__created_by'
+        ).get(id=knowledge_base_id)
+        return cast(int | None, kb.project.created_by_id)
+    except KnowledgeBase.DoesNotExist:
+        return None
+
+
+def _resolve_user_id_from_project(project_id: int) -> int | None:
+    from core.models.project import Project
+    try:
+        return cast(int | None, Project.objects.only('created_by_id').get(id=project_id).created_by_id)
+    except Project.DoesNotExist:
+        return None
 
 
 def _extract_keywords(content: str, metadata: dict) -> List[str]:
@@ -56,10 +76,12 @@ def sync_document_to_chroma(self: Any, document_id: int) -> None:
     from core.agents.rag.knowledge_retriever import KnowledgeRetriever
     from core.agents.rag.chunker import Chunker
 
+    user_id: int | None = None
     try:
         root_doc = KnowledgeDocument.objects.select_related(
             'knowledge_base__project',
         ).get(id=document_id)
+        user_id = root_doc.knowledge_base.project.created_by_id
 
         if root_doc.sync_status == 'syncing':
             logger.info(f'Document {document_id} already being synced')
@@ -148,33 +170,67 @@ def sync_document_to_chroma(self: Any, document_id: int) -> None:
             f'Document {document_id} synced: {len(chunks)} chunks '
             f'(prefix={chroma_id_prefix})',
         )
+        publish(
+            self.request.id,
+            'core.tasks.sync_document_to_chroma',
+            'success',
+            user_id=str(user_id) if user_id else None,
+        )
 
     except KnowledgeDocument.DoesNotExist:
         logger.error(f'Document {document_id} not found')
+        publish(
+            self.request.id,
+            'core.tasks.sync_document_to_chroma',
+            'failed',
+            error=f'Document {document_id} not found',
+        )
     except Exception as e:
         logger.error(f'Failed to sync document {document_id}: {e}')
         KnowledgeDocument.objects.filter(id=document_id).update(
             sync_status='failed',
             sync_error=str(e)[:500],
         )
+        publish(
+            self.request.id,
+            'core.tasks.sync_document_to_chroma',
+            'failed',
+            user_id=str(user_id) if user_id else None,
+            error=str(e)[:500],
+        )
         raise self.retry(exc=e)
 
 
-@shared_task
-def delete_document_chunks_from_chroma(chroma_id_prefix: str, knowledge_base_id: int) -> None:
+@shared_task(bind=True)
+def delete_document_chunks_from_chroma(self: Any, chroma_id_prefix: str, knowledge_base_id: int) -> None:
     """Delete all chunks from ChromaDB by prefix."""
     from core.agents.rag.knowledge_retriever import KnowledgeRetriever
+    user_id = _resolve_user_id_from_knowledge_base(knowledge_base_id)
     try:
         retriever = KnowledgeRetriever()
         deleted_count = retriever.delete_document_chunks(chroma_id_prefix)
         logger.info(f'Deleted {deleted_count} chunks with prefix {chroma_id_prefix}')
+        publish(
+            self.request.id,
+            'core.tasks.delete_document_chunks_from_chroma',
+            'success',
+            user_id=str(user_id) if user_id else None,
+        )
     except Exception as e:
         logger.error(f'Failed to delete chunks {chroma_id_prefix}: {e}')
+        publish(
+            self.request.id,
+            'core.tasks.delete_document_chunks_from_chroma',
+            'failed',
+            user_id=str(user_id) if user_id else None,
+            error=str(e)[:500],
+        )
 
 
-@shared_task
-def batch_sync_project_documents(project_id: int) -> str:
+@shared_task(bind=True)
+def batch_sync_project_documents(self: Any, project_id: int) -> str:
     """Batch sync all pending root documents for a project."""
+    user_id = _resolve_user_id_from_project(project_id)
     pending_docs = list(
         KnowledgeDocument.objects.filter(
             knowledge_base__project_id=project_id,
@@ -186,4 +242,55 @@ def batch_sync_project_documents(project_id: int) -> str:
         sync_document_to_chroma(doc_id)
     count = len(pending_docs)
     logger.info(f'Synced {count} documents in project {project_id}')
+    publish(
+        self.request.id,
+        'core.tasks.batch_sync_project_documents',
+        'success',
+        user_id=str(user_id) if user_id else None,
+    )
     return f'Synced {count} documents'
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=5)
+def index_conversation_memory(
+    self: Any,
+    session_id: str,
+    user_id: str,
+    role: str,
+    content: str,
+) -> None:
+    """
+    Celery 任务：将消息 embedding 后存入对话记忆 ChromaDB。
+
+    异步执行，不阻塞用户响应。
+    """
+    from uuid import uuid4
+    message_id = str(uuid4())
+    logger.info(f"[Task] index_conversation_memory started: msg_id={message_id}, session={session_id}, role={role}, content_len={len(content)}")
+    try:
+        from core.agents.rag.conversation_memory import ConversationMemoryIndexer
+        indexer = ConversationMemoryIndexer()
+        indexer.index_message(
+            session_id=session_id,
+            user_id=user_id,
+            role=role,
+            content=content,
+            message_id=message_id,
+        )
+        logger.info(f"[Task] index_conversation_memory completed: msg_id={message_id}")
+        publish(
+            self.request.id,
+            'core.tasks.index_conversation_memory',
+            'success',
+            user_id=str(user_id) if user_id else None,
+        )
+    except Exception as e:
+        logger.error(f"[Task] index_conversation_memory failed: msg_id={message_id}, error={e}")
+        publish(
+            self.request.id,
+            'core.tasks.index_conversation_memory',
+            'failed',
+            user_id=str(user_id) if user_id else None,
+            error=str(e)[:500],
+        )
+        raise self.retry(exc=e)

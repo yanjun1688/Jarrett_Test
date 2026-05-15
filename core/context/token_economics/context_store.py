@@ -18,10 +18,13 @@ Reference: docs/2026/04/01/DESIGN_CONTEXT_TOKEN_ECONOMICS.md
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple, cast, TYPE_CHECKING
 
+
+from core.config import settings
 from core.context.markdown_store import MarkdownContextStore
 from .token_calculator import TokenCalculator
 from .budget_manager import TokenBudgetManager, BudgetStatus, BudgetConfig
@@ -93,13 +96,13 @@ class TokenEconomicsContextStore(MarkdownContextStore):
 
         logger.info(f'TokenEconomicsContextStore initialized for {model_name}')
 
-    def get_messages_for_llm(
+    def _process_messages_for_llm(
         self,
+        messages: List[Dict[str, Any]],
         session_id: str,
-        user_id: str
+        caller: str = "",
     ) -> List[Dict[str, Any]]:
-        """获取用于 LLM 的消息列表（同步，正则摘要）"""
-        messages = self._get_context_messages(session_id, user_id, 'get_messages_for_llm')
+        """对消息列表应用三层压缩逻辑（同步版本，不读文件）"""
         if not messages:
             return []
 
@@ -110,9 +113,19 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         if warm_msgs is not None:
             warm_summary = self._get_cached_warm_summary(warm_msgs, session_id)
         if cold_msgs is not None:
-            cold_summary = self._get_cached_cold_summary(cold_msgs, session_id)
+            warm_summary_text = self._format_warm_for_cold(warm_summary, warm_msgs)
+            cold_summary = self._get_cached_cold_summary(cold_msgs, session_id, warm_summary_text)
 
-        return self._build_zone_result(messages, warm_summary, cold_summary, warm_msgs, caller='get_messages_for_llm')
+        return self._build_zone_result(messages, warm_summary, cold_summary, warm_msgs, caller=caller)
+
+    def get_messages_for_llm(
+        self,
+        session_id: str,
+        user_id: str
+    ) -> List[Dict[str, Any]]:
+        """获取用于 LLM 的消息列表（同步，正则摘要）"""
+        messages = self._get_context_messages(session_id, user_id, 'get_messages_for_llm')
+        return self._process_messages_for_llm(messages, session_id, caller='get_messages_for_llm')
 
     async def get_messages_for_llm_async(
         self,
@@ -131,7 +144,8 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         if warm_msgs is not None:
             warm_summary = await self._get_cached_warm_summary_async(warm_msgs, session_id)
         if cold_msgs is not None:
-            cold_summary = await self._get_cached_cold_summary_async(cold_msgs, session_id)
+            warm_summary_text = self._format_warm_for_cold(warm_summary, warm_msgs)
+            cold_summary = await self._get_cached_cold_summary_async(cold_msgs, session_id, warm_summary_text)
 
         return self._build_zone_result(messages, warm_summary, cold_summary, warm_msgs, caller='get_messages_for_llm_async')
 
@@ -197,36 +211,56 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         if len(messages) <= hot_size:
             logger.info(f'[ContextStore] 消息数<={hot_size}，全部进入热区')
             for msg in messages:
-                result.append({
+                entry: Dict[str, Any] = {
                     'role': msg.get('role', 'user'),
                     'content': msg.get('content', ''),
                     'zone': 'hot',
-                })
+                }
+                if msg.get("tool_calls"):
+                    entry["tool_calls"] = msg["tool_calls"]
+                if msg.get("tool_call_id"):
+                    entry["tool_call_id"] = msg["tool_call_id"]
+                result.append(entry)
         else:
             logger.info(f'[ContextStore] 消息数>{hot_size}，启动三层管理')
             hot_messages = messages[-hot_size:]
             for msg in hot_messages:
-                result.append({
+                hot_entry: Dict[str, Any] = {
                     'role': msg.get('role', 'user'),
                     'content': msg.get('content', ''),
                     'zone': 'hot',
-                })
+                }
+                if msg.get("tool_calls"):
+                    hot_entry["tool_calls"] = msg["tool_calls"]
+                if msg.get("tool_call_id"):
+                    hot_entry["tool_call_id"] = msg["tool_call_id"]
+                result.append(hot_entry)
             logger.info(f'[ContextStore] 热区消息: {len(hot_messages)}条')
 
             if warm_summary is not None:
                 warm_content = self.summarizer.format_warm_summary_for_context(
                     warm_summary, warm_msgs or []
                 )
-                result.append({'zone': 'warm_summary', 'content': warm_content})
+                result.append({'role': 'system', 'zone': 'warm_summary', 'content': warm_content})
                 logger.info(f'[ContextStore] 温区摘要: {len(warm_msgs or [])}条 -> 1条摘要')
 
             if cold_summary:
-                result.append({'zone': 'cold_summary', 'content': cold_summary})
+                result.append({'role': 'system', 'zone': 'cold_summary', 'content': cold_summary})
                 logger.info(f'[ContextStore] 冷区摘要 -> 1条摘要')
 
         logger.info(f'[ContextStore] 返回优化消息: {len(result)}条')
         logger.info(f'[ContextStore] ========== {caller} 完成 ==========')
         return result
+
+    def _format_warm_for_cold(
+        self,
+        warm_summary: Optional[StructuredSummary],
+        warm_msgs: Optional[List[Dict[str, Any]]],
+    ) -> List[str]:
+        if warm_summary is None:
+            return []
+        text = self.summarizer.format_warm_summary_for_context(warm_summary, warm_msgs or [])
+        return [text] if text else []
 
     def check_budget(
         self,
@@ -343,6 +377,52 @@ class TokenEconomicsContextStore(MarkdownContextStore):
             'is_precise': self.token_calc.is_precise(),
         }
 
+    def append_messages_batch(
+        self,
+        session_id: str,
+        user_id: str,
+        messages: List[Dict[str, Any]],
+    ) -> bool:
+        """
+        批量追加消息（带 Token 计算）
+
+        Args:
+            session_id: 会话 ID
+            user_id: 用户 ID
+            messages: 消息列表
+
+        Returns:
+            是否全部写入成功
+        """
+        filepath = self._get_path(user_id, session_id)
+        if not filepath.exists():
+            self.create_session(session_id=session_id, user_id=user_id)
+
+        for msg in messages:
+            content = msg.get("content", "")
+            token_count = self.token_calc.count_tokens(content)
+            tool_calls = msg.get("tool_calls")
+            if tool_calls:
+                for tc in tool_calls:
+                    tc_text = json.dumps(tc.get("arguments", {}), ensure_ascii=False)
+                    token_count += self.token_calc.count_tokens(tc.get("name", ""))
+                    token_count += self.token_calc.count_tokens(tc_text)
+            msg_metadata = msg.get("metadata", {})
+            if isinstance(msg_metadata, dict):
+                msg_metadata["token_count"] = token_count
+
+        result = bool(super().append_messages_batch(
+            session_id=session_id,
+            user_id=user_id,
+            messages=messages,
+        ))
+        for msg in messages:
+            self._trigger_memory_index(
+                session_id, user_id,
+                msg.get("role", ""), msg.get("content", ""),
+            )
+        return result
+
     def append_message(
         self,
         session_id: str,
@@ -375,13 +455,148 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         msg_metadata = metadata or {}
         msg_metadata['token_count'] = token_count
 
-        return bool(super().append_message(
+        result = bool(super().append_message(
             session_id=session_id,
             user_id=user_id,
             role=role,
             content=content,
             metadata=msg_metadata
         ))
+        self._trigger_memory_index(session_id, user_id, role, content)
+        return result
+
+    def append_and_get_llm_ready(
+        self,
+        session_id: str,
+        user_id: str,
+        role: str,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> tuple[bool, list[Dict[str, Any]]]:
+        """
+        原子操作：追加消息并返回 LLM-ready 历史（不含刚追加的消息）。
+
+        消除读-写竞态条件：在同一个文件锁范围内完成读取和写入，
+        然后对读取到的历史应用三层压缩（热/温/冷区）。
+
+        Args:
+            session_id: 会话 ID
+            user_id: 用户 ID
+            role: 角色
+            content: 内容
+            metadata: 元数据
+
+        Returns:
+            (是否成功, LLM-ready 消息列表)
+        """
+        filepath = self._get_path(user_id, session_id)
+        if not filepath.exists():
+            self.create_session(session_id=session_id, user_id=user_id)
+
+        token_count = self.token_calc.count_tokens(content)
+
+        msg_metadata = metadata or {}
+        msg_metadata['token_count'] = token_count
+
+        success: bool
+        raw_messages_before: List[Dict[str, Any]]
+        success, raw_messages_before = super().append_message_and_get_history(
+            session_id=session_id,
+            user_id=user_id,
+            role=role,
+            content=content,
+            metadata=msg_metadata,
+        )
+
+        if not success:
+            return False, []
+
+        self._trigger_memory_index(session_id, user_id, role, content)
+
+        llm_ready = self._process_messages_for_llm(
+            raw_messages_before, session_id, caller='append_and_get_llm_ready'
+        )
+        return True, llm_ready
+
+    def append_message_and_get_history(
+        self,
+        session_id: str,
+        user_id: str,
+        role: str,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> tuple[bool, list[Dict[str, Any]]]:
+        """
+        原子操作：追加消息并返回历史（带 Token 计算）。
+
+        消除读-写竞态条件：在同一个文件锁范围内完成读取和写入。
+
+        Args:
+            session_id: 会话 ID
+            user_id: 用户 ID
+            role: 角色
+            content: 内容
+            metadata: 元数据
+
+        Returns:
+            (是否成功, 追加前的消息列表)
+        """
+        filepath = self._get_path(user_id, session_id)
+        if not filepath.exists():
+            self.create_session(session_id=session_id, user_id=user_id)
+
+        token_count = self.token_calc.count_tokens(content)
+
+        msg_metadata = metadata or {}
+        msg_metadata['token_count'] = token_count
+
+        result = super().append_message_and_get_history(
+            session_id=session_id,
+            user_id=user_id,
+            role=role,
+            content=content,
+            metadata=msg_metadata,
+        )
+        return cast(Tuple[bool, List[Dict[str, Any]]], result)
+
+    # ── 记忆索引触发器 ──
+
+    def _trigger_memory_index(
+        self,
+        session_id: str,
+        user_id: str,
+        role: str,
+        content: str,
+    ) -> None:
+        """触发异步记忆索引（Celery 任务）"""
+        if not content or len(content.strip()) < settings.memory_index_min_length:
+            logger.debug(f"[ContextStore] Skip memory index: role={role}, content_len={len(content.strip())}")
+            return
+        logger.info(f"[ContextStore] Trigger memory index: role={role}, session={session_id}, user={user_id}")
+        from core.tasks import index_conversation_memory
+        index_conversation_memory.delay(
+            session_id=str(session_id),
+            user_id=str(user_id),
+            role=role,
+            content=content,
+        )
+
+    def clear_session(
+        self,
+        session_id: str,
+        user_id: str,
+    ) -> bool:
+        """清空会话，同时清除 ChromaDB 中该会话的记忆索引"""
+        logger.info(f"[ContextStore] Clear session: {session_id}, user={user_id}")
+        result = super().clear_session(session_id=session_id, user_id=user_id)
+        try:
+            from core.agents.rag.conversation_memory import ConversationMemoryIndexer
+            indexer = ConversationMemoryIndexer()
+            deleted = indexer.delete_session(session_id)
+            logger.info(f"[ContextStore] Cleared {deleted} memory docs for session {session_id}")
+        except Exception as e:
+            logger.warning(f"[ContextStore] Failed to clear memory index for session {session_id}: {e}")
+        return cast(bool, result)
 
     # ── helpers: 消除 warm/cold 缓存 sync/async 重复 ──
 
@@ -489,7 +704,8 @@ class TokenEconomicsContextStore(MarkdownContextStore):
     def _get_cached_cold_summary(
         self,
         messages: List[Dict[str, Any]],
-        session_id: str
+        session_id: str,
+        summary_history: Optional[List[str]] = None,
     ) -> str:
         if not messages:
             return ''
@@ -500,7 +716,7 @@ class TokenEconomicsContextStore(MarkdownContextStore):
             logger.info(f'[ContextStore] [CACHE HIT] 冷区摘要完全命中 (count={len(messages)})')
             return cached
 
-        summary = str(self.summarizer.generate_cold_summary([], messages))
+        summary = str(self.summarizer.generate_cold_summary(summary_history or [], messages))
         self._cache_stats['cold_misses'] += 1
         logger.info(f'[ContextStore] [CACHE MISS] 冷区摘要重新生成 (count={len(messages)})')
         self._store_cold_cache(session_id, messages, summary, cold_hash)
@@ -509,7 +725,8 @@ class TokenEconomicsContextStore(MarkdownContextStore):
     async def _get_cached_cold_summary_async(
         self,
         messages: List[Dict[str, Any]],
-        session_id: str
+        session_id: str,
+        summary_history: Optional[List[str]] = None,
     ) -> str:
         if not messages:
             return ''
@@ -520,7 +737,7 @@ class TokenEconomicsContextStore(MarkdownContextStore):
             logger.info(f'[ContextStore] [CACHE HIT] 冷区摘要完全命中 (count={len(messages)})')
             return cached
 
-        summary = str(await self.summarizer.generate_cold_summary_async([], messages))
+        summary = str(await self.summarizer.generate_cold_summary_async(summary_history or [], messages))
         self._cache_stats['cold_misses'] += 1
         logger.info(f'[ContextStore] [CACHE MISS] 冷区摘要重新生成 (count={len(messages)})')
         self._store_cold_cache(session_id, messages, summary, cold_hash)

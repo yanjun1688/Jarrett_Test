@@ -166,8 +166,10 @@ class ChatbotAgent(BaseAgent):
         tool_defs = self._filter_tool_definitions(test_type)
 
         environment: Dict[str, Any] = {
-            "include_conversation_history": False,
             "platform": f"{sys.platform} ({ 'PowerShell' if sys.platform == 'win32' else 'bash' })",
+            "user_query": message,
+            "user_id": str(user_id) if user_id else "",
+            "conversation_id": str(conversation_id) if conversation_id else "",
         }
         if test_type:
             environment["test_type"] = test_type
@@ -180,40 +182,42 @@ class ChatbotAgent(BaseAgent):
             environment=environment,
         )
 
-        # Get history (before writing user message, to avoid duplication in prompt)
+        # Atomic: append user message and get LLM-ready history in a single lock scope
+        # This eliminates the read-write race condition between get_messages_for_llm and append_message
         history: List[Dict[str, Any]] = []
         if self.context_store and conversation_id and user_id:
             try:
-                history = await sync_to_async(self.context_store.get_messages_for_llm)(
-                    session_id=str(conversation_id), user_id=str(user_id)
-                )
-            except Exception as e:
-                logger.warning(f"Get history failed: {e}")
-
-        # Write user message to store (after getting history)
-        if self.context_store and conversation_id and user_id:
-            try:
-                await sync_to_async(self.context_store.append_message)(
+                _, history = await sync_to_async(self.context_store.append_and_get_llm_ready)(
                     session_id=str(conversation_id), user_id=str(user_id),
                     role="user", content=message,
                 )
             except Exception as e:
-                logger.warning(f"Write user msg failed: {e}")
+                logger.warning(f"Append user msg and get history failed: {e}")
 
         system_prompt = prompts["system_prompt"] if isinstance(prompts, dict) else str(prompts)
 
         # Run ReAct loop
         result = await self.react.run(message, system_prompt, history, tool_defs)
 
-        # Write assistant message
-        if self.context_store and conversation_id and user_id and result.response:
-            try:
-                await sync_to_async(self.context_store.append_message)(
-                    session_id=str(conversation_id), user_id=str(user_id),
-                    role="assistant", content=result.response,
-                )
-            except Exception as e:
-                logger.warning(f"Write assistant msg failed: {e}")
+        # Persist ReAct internal messages + final assistant response in causal order
+        # Order: tool_calls → tool_results → ... → final_response (not response → tool_calls)
+        if self.context_store and conversation_id and user_id:
+            all_messages: List[Dict[str, Any]] = []
+
+            if hasattr(result, 'internal_messages') and result.internal_messages:
+                all_messages.extend(result.internal_messages)
+
+            if result.response:
+                all_messages.append({"role": "assistant", "content": result.response})
+
+            if all_messages:
+                try:
+                    await sync_to_async(self.context_store.append_messages_batch)(
+                        session_id=str(conversation_id), user_id=str(user_id),
+                        messages=all_messages,
+                    )
+                except Exception as e:
+                    logger.warning(f"Write assistant+tool messages failed: {e}")
 
         logger.info('[ChatBot] ========== 处理完成 ==========')
         response: Dict[str, Any] = {

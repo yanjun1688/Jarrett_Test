@@ -2,6 +2,7 @@
 基础LLM服务
 支持多模型提供商：OpenAI、Claude、DeepSeek
 """
+import json
 import os
 import asyncio
 from enum import Enum
@@ -73,18 +74,23 @@ class BaseLLMService:
         if provider == LLMProvider.OPENAI:
             api_key = os.getenv("OPENAI_API_KEY")
             model_name = os.getenv("OPENAI_MODEL_NAME", "gpt-4")
+            base_url = os.getenv("OPENAI_BASE_URL")
         elif provider == LLMProvider.ANTHROPIC:
             api_key = os.getenv("ANTHROPIC_API_KEY")
             model_name = os.getenv("ANTHROPIC_MODEL_NAME", "claude-3-5-sonnet-20241022")
+            base_url = os.getenv("ANTHROPIC_BASE_URL")
         elif provider == LLMProvider.DEEPSEEK:
             api_key = os.getenv("DEEPSEEK_API_KEY")
             model_name = os.getenv("DEEPSEEK_MODEL_NAME", "deepseek-chat")
+            base_url = os.getenv("DEEPSEEK_BASE_URL")
         elif provider == LLMProvider.ZHIPU:
             api_key = os.getenv("ZHIPU_API_KEY")
             model_name = os.getenv("ZHIPU_MODEL_NAME", "glm-4.7-flash")
+            base_url = os.getenv("ZHIPU_BASE_URL")
         elif provider == LLMProvider.QWEN:
             api_key = os.getenv("DASHSCOPE_API_KEY")
             model_name = os.getenv("QWEN_MODEL_NAME", "qwen3-coder-plus")
+            base_url = os.getenv("QWEN_BASE_URL")
         else:
             raise ValueError(f"Unsupported provider: {provider}")
         
@@ -98,6 +104,7 @@ class BaseLLMService:
             provider=provider,
             model_name=model_name,
             api_key=api_key,
+            base_url=base_url,
             temperature=temperature,
             max_tokens=max_tokens
         )
@@ -120,9 +127,9 @@ class BaseLLMService:
         self,
         prompt: str,
         system_message: Optional[str] = None,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
         filter_system_from_history: bool = False
-    ) -> List[Dict[str, str]]:
+    ) -> List[Dict[str, Any]]:
         """
         构建标准 OpenAI 格式的消息列表
 
@@ -162,7 +169,21 @@ class BaseLLMService:
                 if role == 'tool':
                     new_msg: Dict[str, Any] = {'role': 'tool', 'tool_call_id': tool_call_id or '', 'content': content or ''}
                 elif role == 'assistant' and tool_calls:
-                    new_msg = {'role': 'assistant', 'content': content or '', 'tool_calls': tool_calls}
+                    converted_tool_calls = []
+                    for tc in tool_calls:
+                        if isinstance(tc, dict):
+                            args_str = json.dumps(tc.get("arguments", {}), ensure_ascii=False)
+                            converted_tool_calls.append({
+                                "id": tc.get("id", ""),
+                                "type": "function",
+                                "function": {
+                                    "name": tc.get("name", ""),
+                                    "arguments": args_str,
+                                },
+                            })
+                        else:
+                            converted_tool_calls.append(tc)
+                    new_msg = {'role': 'assistant', 'content': content or '', 'tool_calls': converted_tool_calls}
                 else:
                     new_msg = {'role': role, 'content': content or ''}
 
@@ -711,6 +732,18 @@ def create_llm_service(
                 model_name = os.getenv("ZHIPU_MODEL_NAME", "glm-4.7-flash")
             elif provider_enum == LLMProvider.QWEN:
                 model_name = os.getenv("QWEN_MODEL_NAME", "qwen3-coder-plus")
+
+        if 'base_url' not in kwargs or not kwargs['base_url']:
+            if provider_enum == LLMProvider.OPENAI:
+                kwargs['base_url'] = os.getenv("OPENAI_BASE_URL")
+            elif provider_enum == LLMProvider.ANTHROPIC:
+                kwargs['base_url'] = os.getenv("ANTHROPIC_BASE_URL")
+            elif provider_enum == LLMProvider.DEEPSEEK:
+                kwargs['base_url'] = os.getenv("DEEPSEEK_BASE_URL")
+            elif provider_enum == LLMProvider.ZHIPU:
+                kwargs['base_url'] = os.getenv("ZHIPU_BASE_URL")
+            elif provider_enum == LLMProvider.QWEN:
+                kwargs['base_url'] = os.getenv("QWEN_BASE_URL")
 
         config = LLMConfig(
             provider=provider_enum,

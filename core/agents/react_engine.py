@@ -27,6 +27,7 @@ class ReActResult:
     iterations: int = 0
     stopped_reason: str = "complete"  # complete | max_iters | failures | error
     options: Optional[List[Dict[str, Any]]] = None
+    internal_messages: Optional[List[Dict[str, Any]]] = None
 
 
 class ReActEngine:
@@ -58,6 +59,7 @@ class ReActEngine:
         consecutive_failures = 0
         total_tool_calls = 0
         last_options: Optional[List[Dict[str, Any]]] = None
+        internal_messages: List[Dict[str, Any]] = []
 
         tool_names = [t.get("function", {}).get("name", "?") for t in tools]
         logger.info(f"[ReAct] === 开始 === user_message={user_message[:100]!r}")
@@ -86,13 +88,17 @@ class ReActEngine:
                     tool_calls_made=total_tool_calls,
                     iterations=iteration,
                     options=last_options,
+                    internal_messages=internal_messages,
                 )
 
-            # Append assistant message with tool_calls
+            # Append assistant message with canonical tool_calls
             assistant_msg: Dict[str, Any] = {"role": "assistant", "content": llm_text}
-            if self._supports_native_tool_calls():
-                assistant_msg["tool_calls"] = tool_calls
+            if tool_calls:
+                assistant_msg["tool_calls"] = [
+                    self._extract_tool_call(tc) for tc in tool_calls
+                ]
             messages.append(assistant_msg)
+            internal_messages.append(assistant_msg)
 
             for tc in tool_calls:
                 info = self._extract_tool_call(tc)
@@ -103,7 +109,9 @@ class ReActEngine:
                 tool = self.registry.get(name)
                 if not tool:
                     logger.warning(f"[ReAct] ✗ 工具不存在: {name}")
-                    self._append_tool_msg(messages, tc_id, f"Error: unknown tool '{name}'")
+                    tool_msg = self._append_tool_msg(messages, tc_id, f"Error: unknown tool '{name}'")
+                    if tool_msg:
+                        internal_messages.append(tool_msg)
                     consecutive_failures += 1
                     continue
 
@@ -111,7 +119,9 @@ class ReActEngine:
                     tr = await tool.execute_with_validation(**args)
                 except Exception as e:
                     logger.error(f"[ReAct] ✗ 工具异常: {name} -> {e}", exc_info=True)
-                    self._append_tool_msg(messages, tc_id, f"Error: {e}")
+                    tool_msg = self._append_tool_msg(messages, tc_id, f"Error: {e}")
+                    if tool_msg:
+                        internal_messages.append(tool_msg)
                     consecutive_failures += 1
                     continue
 
@@ -120,7 +130,9 @@ class ReActEngine:
                 status_icon = "✓" if tr.success else "✗"
                 logger.info(f"[ReAct] {status_icon} 工具结果: {name} -> success={tr.success}")
                 logger.info(f"[ReAct]   结果内容: {text[:300]!r}")
-                self._append_tool_msg(messages, tc_id, text)
+                tool_msg = self._append_tool_msg(messages, tc_id, text)
+                if tool_msg:
+                    internal_messages.append(tool_msg)
                 total_tool_calls += 1
 
                 consecutive_failures = 0 if tr.success else consecutive_failures + 1
@@ -137,6 +149,7 @@ class ReActEngine:
                     iterations=iteration,
                     stopped_reason="failures",
                     options=last_options,
+                    internal_messages=internal_messages,
                 )
 
             messages = self._compact_messages(messages)
@@ -148,6 +161,7 @@ class ReActEngine:
             iterations=self.max_iterations,
             stopped_reason="max_iters",
             options=last_options,
+            internal_messages=internal_messages,
         )
 
     # ── helpers ──
@@ -165,7 +179,9 @@ class ReActEngine:
         for h in history:
             role = h.get("role", "")
             content = h.get("content")
-            if role in ("user", "assistant", "tool") and content:
+            if role == "system" and content:
+                msgs.append({"role": "system", "content": content})
+            elif role in ("user", "assistant", "tool") and content:
                 if role == "tool":
                     msgs.append({
                         "role": "tool",
@@ -173,7 +189,10 @@ class ReActEngine:
                         "content": content,
                     })
                 else:
-                    msgs.append({"role": role, "content": content})
+                    msg: Dict[str, Any] = {"role": role, "content": content}
+                    if role == "assistant" and h.get("tool_calls"):
+                        msg["tool_calls"] = h["tool_calls"]
+                    msgs.append(msg)
         msgs.append({"role": "user", "content": user_msg})
         logger.info(f"[ReAct] _build_messages: system={1 if system_prompt else 0}, history={len(history)} -> msgs={len(msgs)}")
         return msgs
@@ -183,7 +202,7 @@ class ReActEngine:
             return {
                 "id": str(tc.get("id", "")),
                 "name": str(tc.get("name", "unknown")),
-                "arguments": tc.get("input", {}),
+                "arguments": tc.get("arguments") if "arguments" in tc else tc.get("input", {}),
             }
         if hasattr(tc, "function"):
             func_args: Any = tc.function.arguments
@@ -238,22 +257,10 @@ class ReActEngine:
         messages: List[Dict[str, Any]],
         tc_id: str,
         content: str,
-    ) -> None:
-        provider = getattr(getattr(self.llm, 'config', None), 'provider', None)
-        if provider and getattr(provider, 'value', None) == 'anthropic':
-            messages.append({
-                "role": "user",
-                "content": [{"type": "tool_result", "tool_use_id": tc_id, "content": content}],
-            })
-        else:
-            messages.append({"role": "tool", "tool_call_id": tc_id, "content": content})
-
-    def _supports_native_tool_calls(self) -> bool:
-        """OpenAI/DeepSeek/Qwen/Zhipu 支持在 assistant message 中嵌入 tool_calls"""
-        provider = getattr(getattr(self.llm, 'config', None), 'provider', None)
-        if provider is None:
-            return True  # 默认走 OpenAI 兼容格式
-        return getattr(provider, 'value', None) in ('openai', 'deepseek', 'qwen', 'zhipu')
+    ) -> Dict[str, Any]:
+        msg = {"role": "tool", "tool_call_id": tc_id, "content": content}
+        messages.append(msg)
+        return msg
 
     def _compact_messages(
         self,
@@ -265,9 +272,21 @@ class ReActEngine:
         if len(messages) <= max_messages:
             return messages
 
-        system = messages[:1]
+        # Collect leading system prompts by role, not by position (BUG 7 fix)
+        system: List[Dict[str, Any]] = []
+        idx = 0
+        while idx < len(messages) and messages[idx].get("role") == "system":
+            system.append(messages[idx])
+            idx += 1
+
         recent = messages[-keep_recent:]
-        middle = messages[1:-keep_recent]
+        middle = messages[idx:-keep_recent]
+
+        # Remove previous compaction summaries to avoid accumulation (BUG 6 fix)
+        middle = [
+            m for m in middle
+            if not (m.get("role") == "system" and "[上下文裁剪]" in str(m.get("content", "")))
+        ]
 
         user_c = sum(1 for m in middle if m.get("role") == "user")
         asst_c = sum(1 for m in middle if m.get("role") == "assistant")
@@ -284,7 +303,7 @@ class ReActEngine:
         tool_info = f"已执行: {', '.join(tool_names)}" if tool_names else ""
 
         logger.info(
-            f"[ReAct] 消息裁剪: {len(messages)} -> {1 + 1 + keep_recent} "
+            f"[ReAct] 消息裁剪: {len(messages)} -> {len(system) + 1 + keep_recent} "
             f"(省略 {user_c} 用户/{asst_c} 助手/{tool_c} 工具) {tool_info}"
         )
 

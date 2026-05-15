@@ -29,7 +29,6 @@ from .sections import (
     OutputEfficiencySection,
     KnowledgeContextSection,
     SkillsRegistrySection,
-    ConversationHistorySection,
     EnvironmentInfoSection,
 )
 
@@ -48,7 +47,6 @@ __all__ = [
     "OutputEfficiencySection",
     "KnowledgeContextSection",
     "SkillsRegistrySection",
-    "ConversationHistorySection",
     "EnvironmentInfoSection",
     "PromptBuilder",
     "get_prompt_builder",

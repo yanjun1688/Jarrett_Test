@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   List, Button, Space, Modal, Form, Input, notification, Popconfirm,
-  Drawer, Descriptions, Tag, Empty, Divider,
+  Drawer, Descriptions, Tag, Empty, Progress,
 } from 'antd';
 import {
   PlusOutlined,
@@ -17,7 +17,7 @@ import {
   FileTextOutlined,
   CodeOutlined,
 } from '@ant-design/icons';
-import { ProCard } from '@ant-design/pro-components';
+import { ProCard, StatisticCard } from '@ant-design/pro-components';
 import { projectsAPI } from '../api/projects';
 import StatsPieChart from './StatsPieChart';
 import {
@@ -38,39 +38,65 @@ function ProjectList() {
   const [projectStats, setProjectStats] = useState({});
   const [reportDrawerOpen, setReportDrawerOpen] = useState(false);
   const [reportProjectId, setReportProjectId] = useState(null);
-  const [drawerWidth, setDrawerWidth] = useState(640);
-  const resizingRef = useRef(null);
 
   const fetchProjects = useCallback(async () => {
-    const response = await projectsAPI.getAll();
-    setProjects(response.data.results || []);
+    setLoading(true);
+    try {
+      const response = await projectsAPI.getAll();
+      setProjects(response.data.results || []);
+    } catch (error) {
+      console.error('获取项目列表失败:', error);
+      notification.error({ message: '获取失败', description: error.message });
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const fetchAllStats = useCallback(async () => {
-    const response = await projectsAPI.getStatistics();
-    setGlobalStats(response.data.global);
-    const statsMap = {};
-    response.data.projects.forEach(stats => {
-      statsMap[stats.project_id] = stats;
-    });
-    setProjectStats(statsMap);
+  const fetchGlobalStats = useCallback(async () => {
+    try {
+      const response = await projectsAPI.getGlobalStatistics();
+      setGlobalStats(response.data);
+    } catch (error) {
+      console.error('获取全局统计失败:', error);
+    }
   }, []);
+
+  // 并发限制：一次最多 5 个请求
+  const runConcurrent = async (items, fn, limit = 5) => {
+    const results = [];
+    for (let i = 0; i < items.length; i += limit) {
+      const batch = items.slice(i, i + limit);
+      const batchResults = await Promise.all(batch.map(fn));
+      results.push(...batchResults);
+    }
+    return results;
+  };
 
   useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      fetchProjects().catch((error) => {
-        console.error('获取项目列表失败:', error);
-        const msg = error.response?.data?.error || error.response?.data?.detail || (typeof error.message === 'string' ? error.message : '未知错误');
-        notification.error({ message: '获取失败', description: msg });
-      }),
-      fetchAllStats().catch((error) => {
-        console.error('获取统计失败:', error);
-        const msg = error.response?.data?.error || error.response?.data?.detail || (typeof error.message === 'string' ? error.message : '未知错误');
-        notification.error({ message: '获取统计失败', description: msg });
-      }),
-    ]).finally(() => setLoading(false));
-  }, [fetchProjects, fetchAllStats]);
+    if (projects.length === 0) return;
+
+    let cancelled = false;
+    const statsMap = {};
+    (async () => {
+      await runConcurrent(projects, async (project) => {
+        try {
+          const response = await projectsAPI.getProjectStatistics(project.id);
+          statsMap[project.id] = response.data;
+        } catch (error) {
+          // 静默失败
+        }
+      });
+      if (!cancelled) {
+        setProjectStats(statsMap);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [projects]);
+
+  useEffect(() => {
+    fetchProjects();
+    fetchGlobalStats();
+  }, [fetchProjects, fetchGlobalStats]);
 
   const openCreateModal = () => {
     setEditing(null);
@@ -114,28 +140,6 @@ function ProjectList() {
     }
   };
 
-  const handleResizeStart = useCallback((e) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = drawerWidth;
-    resizingRef.current = true;
-
-    const handleMouseMove = (e) => {
-      if (!resizingRef.current) return;
-      const newWidth = Math.max(400, Math.min(1200, startWidth + (startX - e.clientX)));
-      setDrawerWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      resizingRef.current = null;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [drawerWidth]);
-
   const renderGlobalStats = () => {
     if (!globalStats) return null;
 
@@ -152,27 +156,44 @@ function ProjectList() {
     const assetData = transformProjectComposition(globalStats);
 
     return (
-      <div className="stats-container">
-        <div className="stats-left">
-          <div className="stats-grid">
+      <ProCard gutter={16} style={{ marginBottom: 24 }}>
+        <ProCard colSpan="50%">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             {numberCards.map((item, index) => (
-              <div className="stat-card" key={index}>
-                <div className="stat-card-icon">{item.icon}</div>
-                <div className="stat-card-value">{item.value}</div>
-                <div className="stat-card-label">{item.title}</div>
-              </div>
+              <StatisticCard
+                key={index}
+                statistic={{
+                  value: item.value,
+                  icon: <span style={{ fontSize: 20, color: '#1677ff' }}>{item.icon}</span>,
+                  description: item.title,
+                  layout: 'vertical',
+                }}
+              />
             ))}
           </div>
-        </div>
-        <div className="stats-right">
-          <div className="chart-wrap">
-            <StatsPieChart data={passRateData} height={180} title="通过率" compact />
-          </div>
-          <div className="chart-wrap">
-            <StatsPieChart data={assetData} height={180} title="项目构成" compact />
-          </div>
-        </div>
-      </div>
+        </ProCard>
+        <ProCard colSpan="50%">
+          <ProCard split="vertical" gutter={12}>
+            <ProCard colSpan="50%">
+              <StatsPieChart
+                data={passRateData}
+                height={180}
+                title="总体通过率"
+                centerLabel={`${globalStats.pass_rate}%`}
+                compact
+              />
+            </ProCard>
+            <ProCard colSpan="50%">
+              <StatsPieChart
+                data={assetData}
+                height={180}
+                title="资产分布"
+                compact
+              />
+            </ProCard>
+          </ProCard>
+        </ProCard>
+      </ProCard>
     );
   };
 
@@ -222,49 +243,70 @@ function ProjectList() {
         style={{ marginBottom: 16 }}
       >
         {project.description && (
-          <p className="project-description">{project.description}</p>
+          <p style={{ color: '#666', marginTop: 0, marginBottom: 16, fontSize: 14 }}>
+            {project.description}
+          </p>
         )}
 
         {stats && (
-          <div className="project-stats-body">
-            <div className="project-stats-numbers">
-              <div className="project-stats-numbers-grid">
+          <ProCard split="vertical" gutter={16}>
+            <ProCard colSpan="35%">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px' }}>
                 <div>
-                  <div className="stat-label">测试用例</div>
-                  <div className="stat-value">{stats.total_testcases || 0}</div>
+                  <div style={{ color: '#888', fontSize: 12 }}>测试用例</div>
+                  <div style={{ fontSize: 20, fontWeight: 600 }}>{stats.total_testcases || 0}</div>
                 </div>
                 <div>
-                  <div className="stat-label">测试脚本</div>
-                  <div className="stat-value">{stats.total_scripts || 0}</div>
+                  <div style={{ color: '#888', fontSize: 12 }}>测试脚本</div>
+                  <div style={{ fontSize: 20, fontWeight: 600 }}>{stats.total_scripts || 0}</div>
                 </div>
                 <div>
-                  <div className="stat-label">知识库</div>
-                  <div className="stat-value">{stats.total_knowledge_bases || 0}</div>
+                  <div style={{ color: '#888', fontSize: 12 }}>知识库</div>
+                  <div style={{ fontSize: 20, fontWeight: 600 }}>{stats.total_knowledge_bases || 0}</div>
                 </div>
                 <div>
-                  <div className="stat-label">文档</div>
-                  <div className="stat-value">{stats.total_documents || 0}</div>
+                  <div style={{ color: '#888', fontSize: 12 }}>文档</div>
+                  <div style={{ fontSize: 20, fontWeight: 600 }}>{stats.total_documents || 0}</div>
                 </div>
               </div>
-            </div>
-            <div className="project-stats-charts">
-              <div className="chart-wrap">
-                <StatsPieChart data={transformPassRateData(stats)} height={130} title="通过率" compact />
-              </div>
-              <div className="chart-wrap">
-                <StatsPieChart data={transformProjectComposition(stats)} height={130} title="构成" compact />
-              </div>
-              <div className="chart-wrap">
-                <StatsPieChart data={transformTestDistribution(stats.detail)} height={130} title="测试分布" compact />
-              </div>
-            </div>
-          </div>
+            </ProCard>
+            <ProCard colSpan="65%">
+              <ProCard split="vertical" gutter={8}>
+                <ProCard colSpan="33%">
+                  <StatsPieChart
+                    data={transformPassRateData(stats)}
+                    height={130}
+                    title="通过率"
+                    centerLabel={`${stats.pass_rate}%`}
+                    compact
+                    showLegend={false}
+                  />
+                </ProCard>
+                <ProCard colSpan="33%">
+                  <StatsPieChart
+                    data={transformProjectComposition(stats)}
+                    height={130}
+                    title="资产"
+                    compact
+                    showLegend={false}
+                  />
+                </ProCard>
+                <ProCard colSpan="34%">
+                  <StatsPieChart
+                    data={transformTestDistribution(stats.detail)}
+                    height={130}
+                    title="类型"
+                    compact
+                    showLegend={false}
+                  />
+                </ProCard>
+              </ProCard>
+            </ProCard>
+          </ProCard>
         )}
       </ProCard>
     );
   };
-
-  const drawerStats = reportProjectId ? projectStats[reportProjectId] : null;
 
   return (
     <div className="project-workbench">
@@ -302,54 +344,66 @@ function ProjectList() {
           projects.find((p) => p.id === reportProjectId)?.name || ''
         }`}
         placement="right"
-        width={drawerWidth}
+        width={600}
         open={reportDrawerOpen}
         onClose={() => {
           setReportDrawerOpen(false);
           setReportProjectId(null);
         }}
       >
-        <div className="resize-handle" onMouseDown={handleResizeStart} />
-        {drawerStats ? (
-          <div>
-            <Descriptions column={2} bordered size="small">
-              <Descriptions.Item label="测试用例">{drawerStats.total_testcases}</Descriptions.Item>
-              <Descriptions.Item label="测试脚本">{drawerStats.total_scripts ?? 0}</Descriptions.Item>
-              <Descriptions.Item label="知识库">{drawerStats.total_knowledge_bases ?? 0}</Descriptions.Item>
-              <Descriptions.Item label="文档">{drawerStats.total_documents ?? 0}</Descriptions.Item>
-              <Descriptions.Item label="总执行次数">{drawerStats.total_executions}</Descriptions.Item>
-              <Descriptions.Item label="通过率">
-                <Tag color={
-                  drawerStats.pass_rate >= 80 ? 'green'
-                    : drawerStats.pass_rate >= 60 ? 'orange' : 'red'
-                }>{drawerStats.pass_rate}%</Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="通过">{drawerStats.passed_executions}</Descriptions.Item>
-              <Descriptions.Item label="失败">{drawerStats.failed_executions}</Descriptions.Item>
-              <Descriptions.Item label="阻塞">{drawerStats.blocked_executions}</Descriptions.Item>
-              <Descriptions.Item label="跳过">{drawerStats.skipped_executions}</Descriptions.Item>
-            </Descriptions>
+        {(() => {
+          const stats = reportProjectId ? projectStats[reportProjectId] : null;
+          if (!stats) {
+            return <Empty description="暂无统计数据" />;
+          }
 
-            {drawerStats.detail && (
-              <>
-                <Divider>数据概览</Divider>
-                <div className="drawer-charts">
-                  <div className="chart-wrap">
-                    <StatsPieChart data={transformPassRateData(drawerStats)} height={200} title="通过率" />
-                  </div>
-                  <div className="chart-wrap">
-                    <StatsPieChart data={transformProjectComposition(drawerStats)} height={200} title="项目构成" />
-                  </div>
-                  <div className="chart-wrap">
-                    <StatsPieChart data={transformTestDistribution(drawerStats.detail)} height={200} title="测试分布" />
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        ) : (
-          <Empty description="暂无统计数据" />
-        )}
+          const passRateColor = stats.pass_rate >= 80 ? 'green'
+            : stats.pass_rate >= 60 ? 'orange' : 'red';
+
+          return (
+            <div>
+              <Descriptions column={2} bordered size="small">
+                <Descriptions.Item label="测试用例">{stats.total_testcases}</Descriptions.Item>
+                <Descriptions.Item label="测试脚本">{stats.total_scripts ?? 0}</Descriptions.Item>
+                <Descriptions.Item label="知识库">{stats.total_knowledge_bases ?? 0}</Descriptions.Item>
+                <Descriptions.Item label="文档">{stats.total_documents ?? 0}</Descriptions.Item>
+                <Descriptions.Item label="总执行次数">{stats.total_executions}</Descriptions.Item>
+                <Descriptions.Item label="通过率">
+                  <Tag color={passRateColor}>{stats.pass_rate}%</Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label="通过">{stats.passed_executions}</Descriptions.Item>
+                <Descriptions.Item label="失败">{stats.failed_executions}</Descriptions.Item>
+                <Descriptions.Item label="阻塞">{stats.blocked_executions}</Descriptions.Item>
+                <Descriptions.Item label="跳过">{stats.skipped_executions}</Descriptions.Item>
+              </Descriptions>
+
+              {stats.detail && (
+                <>
+                  <div style={{ marginTop: 24, marginBottom: 12, fontWeight: 500 }}>按测试类型</div>
+                  {Object.entries(stats.detail).map(([type, data]) => {
+                    const total = data.total || 0;
+                    const passed = data.passed || 0;
+                    const percent = total > 0 ? Math.round((passed / total) * 100) : 0;
+                    const typeLabels = {
+                      feature: '功能测试',
+                      api: 'API 测试',
+                      script: '脚本测试',
+                    };
+                    return (
+                      <div key={type} style={{ marginBottom: 12 }}>
+                        <div style={{ marginBottom: 4 }}>{typeLabels[type] || type}</div>
+                        <Progress
+                          percent={percent}
+                          format={() => `${passed}/${total}`}
+                        />
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          );
+        })()}
       </Drawer>
 
       <Modal
