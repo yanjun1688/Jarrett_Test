@@ -364,19 +364,10 @@ class ConversationService:
                 user_id=str(user.id)  # pyright: ignore
             )
             
-            budget = store.check_budget(
+            token_info: Dict[str, Any] = store.get_token_statistics(
                 session_id=conversation_id,
                 user_id=str(user.id)  # pyright: ignore
             )
-            
-            token_info: Dict[str, Any] = {
-                'total': budget.used_tokens,
-                'hot': budget.tier_breakdown.get('hot', 0),
-                'warm': budget.tier_breakdown.get('warm', 0),
-                'cold': budget.tier_breakdown.get('cold', 0),
-                'status': budget.status.value,
-                'available': budget.available_tokens,
-            }
             
             return messages, token_info
         
@@ -581,4 +572,4 @@ class ConversationService:
         Returns:
             会话数量
         """
-        return AgentConversation.objects.filter(user=user).count()
+        return int(AgentConversation.objects.filter(user=user).count())

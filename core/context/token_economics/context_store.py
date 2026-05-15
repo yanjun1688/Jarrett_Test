@@ -1,11 +1,11 @@
 """
 Token 经济学上下文存储
 
-继承自 MarkdownContextStore，增加 Token 预算管理和分层压缩功能。
+继承自 MarkdownContextStore，增加分层压缩功能。
 
 核心接口：
 - get_messages_for_llm(): 获取优化后的消息列表
-- check_budget(): 检查 Token 预算状态
+- get_token_statistics(): 获取 Token 使用统计
 
 设计原则：
 - 使用 SmartSummarizer 统一生成摘要
@@ -27,7 +27,6 @@ from typing import Dict, Any, Optional, List, Tuple, cast, TYPE_CHECKING
 from core.config import settings
 from core.context.markdown_store import MarkdownContextStore
 from .token_calculator import TokenCalculator
-from .budget_manager import TokenBudgetManager, BudgetStatus, BudgetConfig
 from .smart_summarizer import SmartSummarizer, SummaryConfig, StructuredSummary
 
 if TYPE_CHECKING:
@@ -42,25 +41,23 @@ class TokenEconomicsContextStore(MarkdownContextStore):
 
     继承 MarkdownContextStore，增加：
     1. Token 精确计算
-    2. 预算管理
-    3. 分层上下文（热/温/冷区）
-    4. 智能压缩（使用 SmartSummarizer）
+    2. 分层上下文（热/温/冷区）
+    3. 智能压缩（使用 SmartSummarizer）
 
     接口约定（对齐 PromptBuilder）：
     - get_messages_for_llm() -> optimized_history
-    - check_budget() -> BudgetStatus
 
     Reference: docs/2026/04/01/DESIGN_CONTEXT_TOKEN_ECONOMICS.md
     """
 
     DEFAULT_HOT_ZONE_SIZE = 10
     DEFAULT_WARM_ZONE_SIZE = 40
+    MAX_CACHE_SIZE: int = 2000
 
     def __init__(
         self,
         root_dir: Path,
         model_name: str = 'gpt-4',
-        budget_config: Optional[BudgetConfig] = None,
         llm_service: Optional[BaseLLMService] = None,
         summary_config: Optional[SummaryConfig] = None
     ):
@@ -70,7 +67,6 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         Args:
             root_dir: 存储根目录
             model_name: 模型名称
-            budget_config: 预算配置
             llm_service: LLM 服务（用于智能摘要）
             summary_config: 摘要配置
         """
@@ -78,7 +74,6 @@ class TokenEconomicsContextStore(MarkdownContextStore):
 
         self.model_name = model_name
         self.token_calc = TokenCalculator(model_name)
-        self.budget_manager = TokenBudgetManager(model_name, budget_config)
 
         self.llm_service = llm_service
         self.summarizer = SmartSummarizer(
@@ -261,84 +256,6 @@ class TokenEconomicsContextStore(MarkdownContextStore):
             return []
         text = self.summarizer.format_warm_summary_for_context(warm_summary, warm_msgs or [])
         return [text] if text else []
-
-    def check_budget(
-        self,
-        session_id: str,
-        user_id: str
-    ) -> BudgetStatus:
-        """
-        检查 Token 预算状态
-
-        Args:
-            session_id: 会话 ID
-            user_id: 用户 ID
-
-        Returns:
-            BudgetStatus 包含：
-            - total_budget: 总预算
-            - used_tokens: 已使用
-            - available_tokens: 可用
-            - utilization: 利用率
-            - status: 状态
-            - recommendations: 建议
-            - tier_breakdown: 各层占用
-        """
-        logger.info(f'[ContextStore] ========== check_budget ==========')
-        context = self.get_context(session_id, user_id)
-
-        if not context:
-            logger.info(f'[ContextStore] 上下文不存在，返回初始预算状态')
-            return self.budget_manager.check_budget(0)
-
-        messages = context.get('messages', [])
-        total_tokens = self.token_calc.count_messages_tokens(messages)
-        logger.info(f'[ContextStore] 总Token数: {total_tokens}')
-
-        budget_status = self.budget_manager.check_budget(total_tokens)
-
-        hot_tokens = 0
-        warm_tokens = 0
-        cold_tokens = 0
-
-        hot_zone_size = self.DEFAULT_HOT_ZONE_SIZE
-        warm_zone_size = self.DEFAULT_WARM_ZONE_SIZE
-        total_messages = len(messages)
-
-        if total_messages <= hot_zone_size:
-            hot_tokens = total_tokens
-        else:
-            hot_messages = messages[-hot_zone_size:]
-            hot_tokens = self.token_calc.count_messages_tokens(hot_messages)
-
-            remaining = total_messages - hot_zone_size
-
-            if remaining > warm_zone_size:
-                warm_start = total_messages - hot_zone_size - warm_zone_size
-                warm_messages = messages[warm_start:-hot_zone_size]
-                cold_messages = messages[:warm_start]
-
-                warm_tokens = self.token_calc.count_messages_tokens(warm_messages)
-                cold_tokens = self.token_calc.count_messages_tokens(cold_messages)
-            else:
-                warm_messages = messages[:-hot_zone_size]
-                warm_tokens = self.token_calc.count_messages_tokens(warm_messages)
-
-        budget_status.tier_breakdown = {
-            'hot': hot_tokens,
-            'warm': warm_tokens,
-            'cold': cold_tokens,
-            'hot_count': min(total_messages, hot_zone_size),
-            'warm_count': max(0, min(total_messages - hot_zone_size, warm_zone_size)),
-            'cold_count': max(0, total_messages - hot_zone_size - warm_zone_size),
-        }
-
-        logger.info(f'[ContextStore] 分层Token: hot={hot_tokens}, warm={warm_tokens}, cold={cold_tokens}')
-        logger.info(f'[ContextStore] 分层消息数: hot={budget_status.tier_breakdown["hot_count"]}, warm={budget_status.tier_breakdown["warm_count"]}, cold={budget_status.tier_breakdown["cold_count"]}')
-        logger.info(f'[ContextStore] 预算状态: {budget_status.status.value}, 利用率={budget_status.utilization:.2%}')
-        logger.info(f'[ContextStore] ========== check_budget 完成 ==========')
-
-        return budget_status
 
     def get_token_statistics(
         self,
@@ -572,7 +489,7 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         if not content or len(content.strip()) < settings.memory_index_min_length:
             logger.debug(f"[ContextStore] Skip memory index: role={role}, content_len={len(content.strip())}")
             return
-        logger.info(f"[ContextStore] Trigger memory index: role={role}, session={session_id}, user={user_id}")
+        logger.debug(f"[ContextStore] Trigger memory index: role={role}, session={session_id}, user={user_id}")
         from core.tasks import index_conversation_memory
         index_conversation_memory.delay(
             session_id=str(session_id),
@@ -596,6 +513,7 @@ class TokenEconomicsContextStore(MarkdownContextStore):
             logger.info(f"[ContextStore] Cleared {deleted} memory docs for session {session_id}")
         except Exception as e:
             logger.warning(f"[ContextStore] Failed to clear memory index for session {session_id}: {e}")
+        self._summary_cache.pop(session_id, None)  # 防御性清理缓存
         return cast(bool, result)
 
     # ── helpers: 消除 warm/cold 缓存 sync/async 重复 ──
@@ -626,6 +544,9 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         last_hash: str,
     ) -> None:
         if session_id:
+            # 缓存满时淘汰最旧条目（FIFO）
+            if len(self._summary_cache) >= self.MAX_CACHE_SIZE:
+                self._summary_cache.pop(next(iter(self._summary_cache)), None)
             self._summary_cache.setdefault(session_id, {})['warm'] = {
                 'count': len(messages),
                 'first_hash': first_hash,

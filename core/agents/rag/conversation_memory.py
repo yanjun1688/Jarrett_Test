@@ -129,7 +129,7 @@ class ConversationMemoryIndexer:
         from datetime import datetime, timezone
         timestamp = datetime.now(timezone.utc).isoformat()
 
-        logger.info(f"[MemoryIndexer] Indexing: role={role}, msg_id={message_id}, session={session_id}, user={user_id}, content_len={len(content)}")
+        logger.debug(f"[MemoryIndexer] Indexing: role={role}, msg_id={message_id}, session={session_id}, user={user_id}, content_len={len(content)}")
 
         embedding = self.embedding_service.embed_query(content)
 
@@ -145,10 +145,10 @@ class ConversationMemoryIndexer:
             ids=[message_id],
         )
 
-        logger.info(f"[MemoryIndexer] Indexed {message_id} successfully")
+        logger.debug(f"[MemoryIndexer] Indexed {message_id} successfully")
 
     def delete_session(self, session_id: str) -> int:
         """删除该会话的所有记忆索引"""
         deleted = cast(int, self.vector_store.delete_by_metadata({"session_id": session_id}))
-        logger.info(f"[MemoryIndexer] Deleted {deleted} memory docs for session={session_id}")
+        logger.debug(f"[MemoryIndexer] Deleted {deleted} memory docs for session={session_id}")
         return deleted
