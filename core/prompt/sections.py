@@ -14,7 +14,7 @@ Prompt Section 模块定义
 动态政策模块（会话特定）：
 - KnowledgeContextSection: 知识库上下文
 - SkillsRegistrySection: Skills 注册表摘要
-- ConversationHistorySection: 对话历史
+
 - EnvironmentInfoSection: 环境信息
 
 Reference: docs/2026/04/01/prompt_dynamic_assembly_design.md
@@ -475,68 +475,38 @@ class SkillsRegistrySection(PromptSection):
         return "\n".join(lines)
 
 
-class ConversationHistorySection(PromptSection):
-    """对话历史模块"""
-    
+
+
+
+class MemoryContextSection(PromptSection):
+    """对话记忆上下文模块 — 与 KnowledgeContextSection 职责分离"""
+
     @property
     def name(self) -> str:
-        return "conversation_history"
-    
+        return "memory_context"
+
     @property
     def is_static(self) -> bool:
         return False
-    
+
     def should_include(self, context: Dict[str, Any]) -> bool:
-        return bool(context.get("include_conversation_history", True))
-    
+        return bool(context.get("memory"))
+
     def render(self, context: Dict[str, Any]) -> str:
-        optimized_history = context.get("optimized_history", [])
-        
-        if not optimized_history:
-            history = context.get("conversation_history", [])
-            if not history:
-                return ""
-            
-            max_history = context.get("max_history_items", 10)
-            history = history[-max_history:]
-            
-            lines = ["### 对话历史", "以下是之前的对话记录：", ""]
-            
-            for msg in history:
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-                
-                if len(content) > 300:
-                    content = content[:300] + "..."
-                
-                role_label = "用户" if role == "user" else "助手"
-                lines.append(f"**{role_label}**: {content}")
-            
-            return "\n".join(lines)
-        
-        lines = ["### 对话历史（Token优化）", ""]
-        
-        for msg in optimized_history:
-            zone = msg.get("zone", "hot")
-            content = msg.get("content", "")
-            role = msg.get("role", "")
-            
-            if zone == "hot":
-                role_label = "用户" if role == "user" else "助手"
-                lines.append(f"**{role_label}**: {content}")
-            elif zone == "warm_summary":
-                lines.append(f"**[温区摘要]** {content}")
-            elif zone == "cold_summary":
-                lines.append(f"**[冷区摘要]** {content}")
-        
-        token_info = context.get("history_token_info", {})
-        if token_info:
+        memory = context.get("memory", [])
+        if not memory:
+            return ""
+
+        lines = ["### 相关历史对话", "以下是用户之前讨论过的内容，可能与当前问题相关：", ""]
+        for i, entry in enumerate(memory[:5], 1):
+            role_label = "用户" if entry.get("role") == "user" else "助手"
+            content = entry.get("content", "")
+            if len(content) > 500:
+                content = content[:500] + "..."
+            lines.append(f"**[{i}] ({role_label})**")
+            lines.append(content)
             lines.append("")
-            lines.append(f"*Token统计: 总{token_info.get('total', 0)} | "
-                        f"热区{token_info.get('hot', 0)} | "
-                        f"温区{token_info.get('warm', 0)} | "
-                        f"冷区{token_info.get('cold', 0)}*")
-        
+
         return "\n".join(lines)
 
 

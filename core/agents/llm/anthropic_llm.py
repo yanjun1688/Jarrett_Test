@@ -40,28 +40,21 @@ class AnthropicLLMService(BaseLLMService):
             生成的文本
         """
         try:
-            # 转换对话历史格式
-            messages: List[Dict[str, str]] = []
-            
+            raw_messages: List[Dict[str, Any]] = []
             if conversation_history:
-                # Anthropic 不在 history 中包含 system message
-                messages = list(conversation_history)
-            
-            # 添加当前用户消息
-            messages.append({
-                "role": "user",
-                "content": prompt
-            })
+                raw_messages = list(conversation_history)
+            raw_messages.append({"role": "user", "content": prompt})
+            messages = self._convert_to_anthropic(raw_messages)
             
             # 调用 Anthropic API
             response = await self.client.messages.create(
                 model=self.config.model_name,
                 max_tokens=kwargs.get('max_tokens', self.config.max_tokens),
                 temperature=kwargs.get('temperature', self.config.temperature),
-                system=system_message,  # type: ignore[arg-type]
-                messages=messages  # type: ignore[arg-type]
+                system=system_message,
+                messages=messages,
             )
-            
+
             # 提取生成的文本 - 只处理 TextBlock 类型
             generated_text = ""
             for block in response.content:
@@ -76,6 +69,54 @@ class AnthropicLLMService(BaseLLMService):
             logger.error(f"Anthropic API error: {e}", exc_info=True)
             raise
     
+    @staticmethod
+    def _convert_to_anthropic(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """将 canonical 格式消息列表转换为 Anthropic API 格式。
+
+        Canonical 格式（内部通用）：
+          {"role": "tool", "tool_call_id": "x", "content": "结果"}
+          {"role": "assistant", "tool_calls": [{"id": "x", "name": "n", "arguments": {}}]}
+
+        Anthropic API 格式：
+          {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "x", "content": "结果"}]}
+          {"role": "assistant", "content": [{"type": "text", "text": "..."}, {"type": "tool_use", "id": "x", "name": "n", "input": {}}]}
+        """
+        anthropic_messages: List[Dict[str, Any]] = []
+
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            tool_calls = msg.get("tool_calls")
+            tool_call_id = msg.get("tool_call_id")
+
+            if role == "tool":
+                anthropic_messages.append({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": tool_call_id or "",
+                        "content": content or "",
+                    }],
+                })
+
+            elif role == "assistant" and tool_calls:
+                blocks: List[Dict[str, Any]] = []
+                if content:
+                    blocks.append({"type": "text", "text": content})
+                for tc in tool_calls:
+                    blocks.append({
+                        "type": "tool_use",
+                        "id": tc.get("id", ""),
+                        "name": tc.get("name", ""),
+                        "input": tc.get("arguments", {}),
+                    })
+                anthropic_messages.append({"role": "assistant", "content": blocks})
+
+            else:
+                anthropic_messages.append(msg)
+
+        return anthropic_messages
+
     async def generate_with_tools(
         self,
         prompt: str,
@@ -98,26 +139,22 @@ class AnthropicLLMService(BaseLLMService):
             包含response、tool_calls等信息的字典
         """
         try:
-            # 转换对话历史格式
-            messages = []
-            
+            # Canonical → Anthropic block 格式
+            raw_messages: List[Dict[str, Any]] = []
             if conversation_history:
-                messages = conversation_history
-
+                raw_messages = list(conversation_history)
             if prompt:
-                messages.append({
-                    "role": "user",
-                    "content": prompt
-                })
+                raw_messages.append({"role": "user", "content": prompt})
+            messages = self._convert_to_anthropic(raw_messages)
             
             # 调用 Anthropic API with tools
             response = await self.client.messages.create(
                 model=self.config.model_name,
                 max_tokens=kwargs.get('max_tokens', self.config.max_tokens),
                 temperature=kwargs.get('temperature', self.config.temperature),
-                system=system_message,  # type: ignore[arg-type]
-                messages=messages,  # type: ignore[arg-type]
-                tools=tools  # type: ignore[arg-type]
+                system=system_message,
+                messages=messages,
+                tools=tools,
             )
             
             # 提取响应信息

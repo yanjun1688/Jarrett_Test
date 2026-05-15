@@ -35,6 +35,7 @@ from channels.routing import ChannelNameRouter
 from test_ui_app.middleware import TokenAuthMiddlewareStack
 import test_ui_app.routing as test_ui_routing
 import testmanager_app.routing as testmanager_routing
+import core.routing as core_routing
 
 
 class MCPLifespanMiddleware:
@@ -94,7 +95,7 @@ application = MCPLifespanMiddleware(
         "http": django_asgi_app,
         "websocket": TokenAuthMiddlewareStack(
             URLRouter(
-                test_ui_routing.websocket_urlpatterns + testmanager_routing.websocket_urlpatterns
+                test_ui_routing.websocket_urlpatterns + testmanager_routing.websocket_urlpatterns + core_routing.websocket_urlpatterns
             )
         ),
     })

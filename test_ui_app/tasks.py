@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 import asyncio
 import sys
-from typing import Any
+from typing import Any, cast
 from celery import shared_task
 
+from core.task_events import publish
 from .execution.execution_manager import ExecutionManager
 
 logger = logging.getLogger(__name__)
@@ -42,9 +43,23 @@ def execute_ui_test_task(
     
     try:
         manager = ExecutionManager()
-        return asyncio.run(manager.execute(script_id=script_id, user_id=user_id))
+        result = cast(dict[str, Any], asyncio.run(manager.execute(script_id=script_id, user_id=user_id)))
+        publish(
+            self.request.id,
+            'test_ui_app.execute_ui_test_task',
+            'success',
+            user_id=str(user_id) if user_id else None,
+        )
+        return result
     except Exception as e:
         logger.error(f"Celery任务执行失败: script_id={script_id}, 错误: {str(e)}")
+        publish(
+            self.request.id,
+            'test_ui_app.execute_ui_test_task',
+            'failed',
+            user_id=str(user_id) if user_id else None,
+            error=str(e)[:500],
+        )
         raise
 
 
@@ -74,15 +89,29 @@ def execute_ui_test_with_execution_task(
     
     try:
         manager = ExecutionManager()
-        return asyncio.run(
+        result = cast(dict[str, Any], asyncio.run(
             manager.execute_with_execution(
                 script_id=script_id,
                 execution_id=execution_id,
                 user_id=user_id
             )
+        ))
+        publish(
+            self.request.id,
+            'test_ui_app.execute_ui_test_with_execution_task',
+            'success',
+            user_id=str(user_id) if user_id else None,
         )
+        return result
     except Exception as e:
         logger.error(f"Celery任务执行失败: script_id={script_id}, execution_id={execution_id}, 错误: {str(e)}")
+        publish(
+            self.request.id,
+            'test_ui_app.execute_ui_test_with_execution_task',
+            'failed',
+            user_id=str(user_id) if user_id else None,
+            error=str(e)[:500],
+        )
         try:
             from .models import UITestExecution
             from django.utils import timezone

@@ -91,9 +91,9 @@ const ChatBotDrawer = ({
   // 自动选择/创建会话
   useEffect(() => {
     if (visible && conversations.length > 0 && !conversationId) {
-      const lastConversation = conversations[conversations.length - 1];
-      if (lastConversation?.id) {
-        switchConversation(lastConversation.id, setMessages);
+      const firstConversation = conversations[0];
+      if (firstConversation?.conversation_id) {
+        switchConversation(firstConversation.conversation_id, setMessages);
       }
     } else if (visible && !conversationId && conversations.length === 0 && !loadingConversations) {
       createNewConversation();
@@ -197,6 +197,14 @@ const ChatBotDrawer = ({
       message.error('复制失败');
     }
   }, []);
+
+  // 新建会话：清空消息列表
+  const handleCreateNew = useCallback(async () => {
+    const newConvId = await createNewConversation();
+    if (newConvId) {
+      setMessages([]);
+    }
+  }, [createNewConversation]);
 
   // 删除会话后的处理
   const handleAfterDelete = useCallback(async () => {
@@ -309,7 +317,7 @@ const ChatBotDrawer = ({
           conversationId={conversationId}
           loadingConversations={loadingConversations}
           maxAllowed={maxAllowed}
-          onCreateNew={createNewConversation}
+           onCreateNew={handleCreateNew}
           onSwitch={(id) => switchConversation(id, setMessages)}
           onDelete={(id) => deleteConversation(id, handleAfterDelete)}
         />

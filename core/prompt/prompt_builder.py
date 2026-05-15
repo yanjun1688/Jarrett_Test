@@ -19,6 +19,8 @@ from typing import Dict, Any, List, Optional, Tuple
 import logging
 import threading
 
+from core.config import settings
+
 from .sections import (
     PromptSection,
     IdentitySection,
@@ -28,8 +30,8 @@ from .sections import (
     ToneAndStyleSection,
     OutputEfficiencySection,
     KnowledgeContextSection,
+    MemoryContextSection,
     SkillsRegistrySection,
-    ConversationHistorySection,
     EnvironmentInfoSection,
 )
 
@@ -99,8 +101,8 @@ class PromptBuilder:
         
         self._dynamic_sections: List[PromptSection] = [
             KnowledgeContextSection(),
+            MemoryContextSection(),
             SkillsRegistrySection(),
-            ConversationHistorySection(),
             EnvironmentInfoSection(),
         ]
         
@@ -233,11 +235,33 @@ class PromptBuilder:
 
         context = {
             "knowledge": [],
+            "memory": [],
             "available_tools": tools,
             "installed_skills": skills,
             "include_skills": True,
             **(environment or {})
         }
+
+        logger.info(f"[PromptBuilder] environment keys: {list(environment.keys()) if environment else 'None'}, user_query={'yes' if environment and environment.get('user_query') else 'no'}, user_id={'yes' if environment and environment.get('user_id') else 'no'}, user_id_value={environment.get('user_id') if environment else 'N/A'}")
+
+        if environment and environment.get("user_query") and environment.get("user_id"):
+            try:
+                logger.info(f"[PromptBuilder] Retrieving conversation memory: user={environment['user_id']}, session={environment.get('conversation_id')}")
+                from core.agents.rag.conversation_memory import ConversationMemoryRetriever
+                retriever = ConversationMemoryRetriever()
+                memory_results = retriever.search(
+                    query=environment["user_query"],
+                    user_id=environment["user_id"],
+                    session_id=environment.get("conversation_id"),
+                    top_k=settings.memory_retrieval_top_k,
+                )
+                if memory_results:
+                    context["memory"] = memory_results
+                    logger.info(f"[PromptBuilder] Injected {len(memory_results)} memory items into context")
+                else:
+                    logger.info(f"[PromptBuilder] No relevant memory found")
+            except Exception as e:
+                logger.warning(f"[PromptBuilder] Memory retrieval failed: {e}")
 
         logger.debug(f"[PromptBuilder] 构建上下文完成，调用 build_system_prompt...")
         system_prompt, system_tokens = self.build_system_prompt(context)

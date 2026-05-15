@@ -39,6 +39,10 @@ class JTestSettings(BaseSettings):
         default="kb_knowledge",
         description="ChromaDB全局知识库集合名称"
     )
+
+    # 对话记忆 RAG 配置
+    memory_retrieval_top_k: int = Field(default=5, ge=1, le=20, description="对话记忆检索返回条数")
+    memory_index_min_length: int = Field(default=10, ge=0, description="消息最小索引长度（字符）")
     
     # BM25配置
     bm25_index_path: str = Field(

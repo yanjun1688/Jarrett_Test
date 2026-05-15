@@ -163,7 +163,10 @@ class ChatBotConsumer(AsyncWebsocketConsumer):
         
         # Cache agent instance and conversation_id across messages within same WebSocket session
         if self._chatbot_agent is None:
-            llm_service = get_llm_service('qwen')
+            from core.config import get_settings
+            default_provider = get_settings().llm_provider
+            provider = data.get('provider', default_provider)
+            llm_service = get_llm_service(provider)
             self._chatbot_agent = ChatbotAgent(llm_service=llm_service)
             await self._chatbot_agent.initialize()
 
@@ -196,6 +199,8 @@ class ChatBotConsumer(AsyncWebsocketConsumer):
             "message": message,
             "conversation_id": conversation_id,
             "user_id": user_id,
+            "project_id": data.get('project_id'),
+            "test_type": data.get('test_type'),
             "context": {}
         }
         
