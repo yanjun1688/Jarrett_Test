@@ -10,6 +10,12 @@ export const projectsAPI = {
   // 获取统计（全局 + 所有/指定项目）
   getStatistics: (params) => apiClient.get('/projects/statistics/', { params }),
 
+  // 获取全局统计（无参）
+  getGlobalStatistics: () => apiClient.get('/projects/statistics/'),
+
+  // 获取指定项目统计
+  getProjectStatistics: (id) => apiClient.get('/projects/statistics/', { params: { project: id } }),
+
   // 创建项目
   create: (data) => apiClient.post('/projects/', data),
 

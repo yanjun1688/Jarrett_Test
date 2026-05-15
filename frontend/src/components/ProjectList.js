@@ -55,7 +55,7 @@ function ProjectList() {
   const fetchGlobalStats = useCallback(async () => {
     try {
       const response = await projectsAPI.getGlobalStatistics();
-      setGlobalStats(response.data);
+      setGlobalStats(response.data.global);
     } catch (error) {
       console.error('获取全局统计失败:', error);
     }
@@ -81,7 +81,7 @@ function ProjectList() {
       await runConcurrent(projects, async (project) => {
         try {
           const response = await projectsAPI.getProjectStatistics(project.id);
-          statsMap[project.id] = response.data;
+          statsMap[project.id] = response.data.projects?.[0];
         } catch (error) {
           // 静默失败
         }
