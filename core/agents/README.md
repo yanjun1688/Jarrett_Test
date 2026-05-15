@@ -56,12 +56,14 @@ class MyAgent(BaseAgent):
 
 ### ChatbotAgent
 
-主要的聊天机器人 Agent，采用 ReAct 模式：
+主要的聊天机器人 Agent，采用 ReAct 多轮工具调用架构：
 
-- **意图分类**: 使用规则 + LLM 双重分类
-- **知识检索**: 集成 RAG 知识库
-- **工具执行**: 支持多工具并发/顺序执行
-- **技能系统**: 支持动态安装和运行技能
+- **ReAct 循环**: `ReActEngine` 多轮循环，LLM 自主决策工具选择和调用顺序
+- **知识检索**: 集成 RAG 知识库（`query_knowledge` 工具）
+- **对话记忆 RAG**: 自动检索相关历史记忆注入 system prompt
+- **工具执行**: 通过 `ToolRegistry` 注册，支持 33+ 内置/MCP 工具
+- **技能系统**: 支持动态安装和运行技能（`SkillLoader`）
+- **Token 经济学**: 集成 `TokenEconomicsContextStore` 三层压缩
 
 ```python
 from core.agents import ChatbotAgent
@@ -69,11 +71,12 @@ from core.agents import ChatbotAgent
 agent = ChatbotAgent(
     llm_service=llm_service,
     knowledge_rag_agent=rag_agent,
-    tool_orchestrator=orchestrator
 )
 
-result = await agent.run({
+result = await agent.execute({
     "message": "生成登录功能的测试用例",
+    "conversation_id": "uuid",
+    "user_id": 1,
     "project_id": 1
 })
 ```

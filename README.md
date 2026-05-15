@@ -31,18 +31,21 @@ JTest 是一个基于 Django + React 的智能化测试管理平台，深度融�
 - **压测报告** - 自动生成详细的性能测试报告
 
 ### AI 智能助手
+- **ReAct 架构** - 多轮工具调用循环，LLM 自主决策工具选择和调用顺序
 - **Native Function Calling** - 无需意图分类，LLM 直接决策调用工具或回复
-- **多 LLM 支持** - 支持 OpenAI、Claude、DeepSeek、智谱 GLM、通义千问 Qwen
+- **多 LLM 支持** - 支持 OpenAI、Claude、DeepSeek、智谱 GLM、通义千问 Qwen（含 Anthropic 工具调用格式兼容）
 - **测试生成** - AI 辅助生成 API/UI 测试用例和脚本
 - **测试规划** - 智能测试计划生成和细化
 - **智能对话** - 支持技能调用、测试执行、知识查询
+- **对话记忆 RAG** - 消息写入时异步索引到 ChromaDB，用户提问时语义检索相关历史记忆注入 system prompt，突破 Token 经济学的冷区限制
 
 ### Token Economics（上下文管理）
 - **Token 预算管理** - 监控和控制 Token 消耗
 - **上下文缓存优化** - 智能缓存减少重复 Token 消耗
 - **增量存储** - 增量更新上下文，避免重复传输
 - **智能摘要** - 长对话自动摘要，保持上下文精简
-- **分层管理** - 根据重要性分层存储上下文信息
+- **三层压缩** - 热区（最近 10 条原始消息）→ 温区（中间 40 条 → 1 条结构化摘要）→ 冷区（最早 N 条 → 1 条短摘要）
+- **对话记忆 RAG** - 异步索引消息到独立 ChromaDB collection，语义检索突破冷区限制
 
 ### 知识库管理（RAG）
 - **文档上传** - 支持 PDF、Word、Markdown、TXT 格式
@@ -108,11 +111,17 @@ JTest/
 ├── core/                          # 核心 AI Agent 系统
 │   ├── agents/                    # Agent 实现
 │   │   ├── generation/           # 测试生成 Agent
-│   │   ├── chatbot_agent.py      # Chatbot Agent (Native Function Calling)
-│   │   ├── rag/                  # RAG 知识库 Agent
-│   │   └── llm/                  # LLM 服务层
+│   │   ├── chatbot_agent.py      # Chatbot Agent (ReAct 架构)
+│   │   ├── react_engine.py       # ReAct 循环引擎（多轮工具调用）
+│   │   ├── rag/                  # RAG 知识库 Agent + 对话记忆 RAG
+│   │   │   ├── knowledge_retriever.py   # 知识库双路检索（BM25 + Vector）
+│   │   │   ├── conversation_memory.py   # 对话记忆检索与索引（ARCH-02）
+│   │   │   └── vector_store.py          # ChromaDB 向量存储（多 collection 支持）
+│   │   └── llm/                  # LLM 服务层（Anthropic/OpenAI 等格式兼容）
 │   ├── context/                   # 上下文管理
-│   │   └── token_economics/      # Token Economics 系统
+│   │   ├── markdown_store.py     # Markdown 文件存储
+│   │   └── token_economics/      # Token Economics 系统（三层压缩）
+│   ├── task_events.py            # Celery 任务事件发布（WebSocket 通知）
 │   └── tools/                     # 测试工具库
 │       ├── api/                   # HTTP 客户端
 │       ├── chatbot/              # Chatbot 工具
@@ -510,11 +519,18 @@ CONTEXT_CACHE_ENABLED=true
 | `/api/logout/` | 用户登出 |
 | `/api/me/` | 当前用户信息 |
 
+### 任务实时通知
+- **Celery Task Awareness** - 任务完成/失败时通过 Channel Layer 广播 WebSocket 通知
+- **按用户隔离** - 每个用户只收到自己的任务事件（`celery_tasks_{user_id}` 群组）
+- **覆盖任务** - 文档同步、ChromaDB 操作、UI 测试执行、对话记忆索引等
+- **前端 Hook** - `useTaskWebSocket` React Hook，按 `task_name` 注册回调
+
 ### WebSocket 端点
 
 | 端点 | 说明 |
 |------|------|
 | `/ws/chatbot/` | Chatbot 实时对话 |
+| `/ws/celery/tasks/` | Celery 任务状态实时通知 |
 | `/ws/pressure-test/<id>/` | 压测实时进度 |
 | `/ws/advanced-pressure-test/<id>/` | 高级压测实时进度 |
 
