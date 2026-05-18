@@ -22,6 +22,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 import logging
 import json
+import threading
 from asgiref.sync import async_to_sync, sync_to_async
 import time
 
@@ -230,8 +231,11 @@ PRD 描述: {description}
 
 # 缓存 LLM 服务实例，避免重复初始化
 _llm_service_cache: Dict[str, BaseLLMService] = {}
+_llm_service_cache_lock = threading.Lock()
 
-_chatbot_agent_cache: Dict[int, ChatbotAgent] = {}
+# 按 user_id 缓存 Agent，避免多用户共享同一 Agent 的可变状态
+_chatbot_agent_cache: Dict[str, ChatbotAgent] = {}
+_chatbot_agent_cache_lock = threading.Lock()
 
 
 def get_llm_service(provider: str | None = None) -> BaseLLMService:
@@ -253,56 +257,62 @@ def get_llm_service(provider: str | None = None) -> BaseLLMService:
         logger.debug(f"Using cached LLM service for provider: {provider}")
         return _llm_service_cache[provider]
     
-    logger.info(f"Creating new LLM service for provider: {provider}")
-    llm_service = create_llm_service(provider=provider)
-    
-    _llm_service_cache[provider] = llm_service
+    with _llm_service_cache_lock:
+        if provider in _llm_service_cache:
+            return _llm_service_cache[provider]
+        logger.info(f"Creating new LLM service for provider: {provider}")
+        llm_service = create_llm_service(provider=provider)
+        _llm_service_cache[provider] = llm_service
     
     logger.info(f"LLM service created in {time.time() - start_time:.2f}s")
     return llm_service
 
 
-def get_chatbot_agent(llm_service: Any) -> ChatbotAgent:
+def get_chatbot_agent(llm_service: Any, user_id: Optional[int] = None) -> ChatbotAgent:
     """
     获取或创建 ChatbotAgent 实例
-    使用缓存避免每次请求都重新创建
+    按 (user_id, llm_service_ids) 缓存，每个用户独立实例避免共享可变状态
     """
     import time
     start_time = time.time()
-    
-    cache_key = id(llm_service)
+
+    provider = getattr(llm_service, 'provider', None) or str(id(llm_service))
+    cache_key = f"{user_id}:{provider}" if user_id else provider
     
     if cache_key in _chatbot_agent_cache:
         logger.debug("Using cached ChatbotAgent instance")
         return _chatbot_agent_cache[cache_key]
     
-    logger.info("Creating new ChatbotAgent instance")
-    
-    # 创建知识库 RAG agent
-    knowledge_rag_agent = None
-    try:
-        from core.agents.rag.knowledge_rag_agent import KnowledgeRAGAgent
-        from core.agents.rag.rag_retriever_service import DjangoORMRAGRetriever
+    with _chatbot_agent_cache_lock:
+        if cache_key in _chatbot_agent_cache:
+            return _chatbot_agent_cache[cache_key]
+        logger.info("Creating new ChatbotAgent instance")
         
-        rag_retriever = DjangoORMRAGRetriever()
+        # 创建知识库 RAG agent
+        knowledge_rag_agent = None
+        try:
+            from core.agents.rag.knowledge_rag_agent import KnowledgeRAGAgent
+            from core.agents.rag.rag_retriever_service import DjangoORMRAGRetriever
+            
+            rag_retriever = DjangoORMRAGRetriever()
+            
+            knowledge_rag_agent = KnowledgeRAGAgent(
+                llm_service=llm_service,
+                rag_retriever=rag_retriever
+            )
+            logger.info("KnowledgeRAGAgent created with DjangoORMRAGRetriever")
+        except Exception as e:
+            logger.warning(f"Failed to create KnowledgeRAGAgent: {e}")
         
-        knowledge_rag_agent = KnowledgeRAGAgent(
+        agent = ChatbotAgent(
             llm_service=llm_service,
-            rag_retriever=rag_retriever
+            knowledge_rag_agent=knowledge_rag_agent,
         )
-        logger.info("KnowledgeRAGAgent created with DjangoORMRAGRetriever")
-    except Exception as e:
-        logger.warning(f"Failed to create KnowledgeRAGAgent: {e}")
-    
-    agent = ChatbotAgent(
-        llm_service=llm_service,
-        knowledge_rag_agent=knowledge_rag_agent,
-    )
-    
-    # 不在同步环境中初始化，延迟到请求异步上下文中
-    # MCP连接必须在创建它的Task中使用，避免跨事件循环错误
-    
-    _chatbot_agent_cache[cache_key] = agent
+        
+        # 不在同步环境中初始化，延迟到请求异步上下文中
+        # MCP连接必须在创建它的Task中使用，避免跨事件循环错误
+        
+        _chatbot_agent_cache[cache_key] = agent
     
     logger.info(f"ChatbotAgent created in {time.time() - start_time:.2f}s")
     return agent
@@ -451,7 +461,7 @@ class EnhancedChatBotView(APIView):
             import time
             start_time = time.time()
 
-            chatbot_agent = get_chatbot_agent(llm_service)
+            chatbot_agent = get_chatbot_agent(llm_service, user_id=request.user.id)
             await chatbot_agent.initialize()
             logger.info(f"Agent initialized in {time.time() - start_time:.2f}s")
 
@@ -770,7 +780,9 @@ class CacheStatsView(APIView):
         """返回温区/冷区摘要缓存的命中统计"""
         # 从缓存的 ChatbotAgent 实例获取 context_store
         stats = None
-        for agent in _chatbot_agent_cache.values():
+        with _chatbot_agent_cache_lock:
+            agents = list(_chatbot_agent_cache.values())
+        for agent in agents:
             if hasattr(agent, 'context_store') and hasattr(agent.context_store, 'get_cache_stats'):
                 stats = agent.context_store.get_cache_stats()
                 break

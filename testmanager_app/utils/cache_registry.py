@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 
 
 from django.core.cache import cache
@@ -173,6 +174,7 @@ class CacheKeyRegistry:
 
 
 _global_registries: dict[str, CacheKeyRegistry] = {}
+_global_registries_lock = threading.Lock()
 
 
 def get_cache_registry(name: str = "default") -> CacheKeyRegistry:
@@ -186,5 +188,7 @@ def get_cache_registry(name: str = "default") -> CacheKeyRegistry:
         CacheKeyRegistry 实例
     """
     if name not in _global_registries:
-        _global_registries[name] = CacheKeyRegistry(name)
+        with _global_registries_lock:
+            if name not in _global_registries:
+                _global_registries[name] = CacheKeyRegistry(name)
     return _global_registries[name]

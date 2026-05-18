@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple, cast, TYPE_CHECKING
 
@@ -81,6 +82,7 @@ class TokenEconomicsContextStore(MarkdownContextStore):
             config=summary_config
         )
 
+        self._cache_lock = threading.Lock()
         self._summary_cache: Dict[str, Dict[str, Any]] = {}
         self._cache_stats = {
             'warm_hits': 0,
@@ -562,16 +564,18 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         if not messages:
             return StructuredSummary()
 
-        cached, first_hash, last_hash = self._check_warm_cache(messages, session_id)
-        if cached is not None:
-            self._cache_stats['warm_hits'] += 1
-            logger.info(f'[ContextStore] [CACHE HIT] 温区摘要完全命中 (count={len(messages)})')
-            return cached
+        with self._cache_lock:
+            cached, first_hash, last_hash = self._check_warm_cache(messages, session_id)
+            if cached is not None:
+                self._cache_stats['warm_hits'] += 1
+                logger.info(f'[ContextStore] [CACHE HIT] 温区摘要完全命中 (count={len(messages)})')
+                return cached
 
         summary = self.summarizer.generate_warm_summary(messages, self.token_calc)
-        self._cache_stats['warm_misses'] += 1
-        logger.info(f'[ContextStore] [CACHE MISS] 温区摘要重新生成 (count={len(messages)})')
-        self._store_warm_cache(session_id, messages, summary, first_hash, last_hash)
+        with self._cache_lock:
+            self._cache_stats['warm_misses'] += 1
+            logger.info(f'[ContextStore] [CACHE MISS] 温区摘要重新生成 (count={len(messages)})')
+            self._store_warm_cache(session_id, messages, summary, first_hash, last_hash)
         return summary
 
     async def _get_cached_warm_summary_async(
@@ -582,16 +586,18 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         if not messages:
             return StructuredSummary()
 
-        cached, first_hash, last_hash = self._check_warm_cache(messages, session_id)
-        if cached is not None:
-            self._cache_stats['warm_hits'] += 1
-            logger.info(f'[ContextStore] [CACHE HIT] 温区摘要完全命中 (count={len(messages)})')
-            return cached
+        with self._cache_lock:
+            cached, first_hash, last_hash = self._check_warm_cache(messages, session_id)
+            if cached is not None:
+                self._cache_stats['warm_hits'] += 1
+                logger.info(f'[ContextStore] [CACHE HIT] 温区摘要完全命中 (count={len(messages)})')
+                return cached
 
         summary = await self.summarizer.generate_warm_summary_async(messages, self.token_calc)
-        self._cache_stats['warm_misses'] += 1
-        logger.info(f'[ContextStore] [CACHE MISS] 温区摘要重新生成 (count={len(messages)})')
-        self._store_warm_cache(session_id, messages, summary, first_hash, last_hash)
+        with self._cache_lock:
+            self._cache_stats['warm_misses'] += 1
+            logger.info(f'[ContextStore] [CACHE MISS] 温区摘要重新生成 (count={len(messages)})')
+            self._store_warm_cache(session_id, messages, summary, first_hash, last_hash)
         return summary
 
     def _check_cold_cache(
@@ -631,16 +637,18 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         if not messages:
             return ''
 
-        cached, cold_hash = self._check_cold_cache(messages, session_id)
-        if cached is not None:
-            self._cache_stats['cold_hits'] += 1
-            logger.info(f'[ContextStore] [CACHE HIT] 冷区摘要完全命中 (count={len(messages)})')
-            return cached
+        with self._cache_lock:
+            cached, cold_hash = self._check_cold_cache(messages, session_id)
+            if cached is not None:
+                self._cache_stats['cold_hits'] += 1
+                logger.info(f'[ContextStore] [CACHE HIT] 冷区摘要完全命中 (count={len(messages)})')
+                return cached
 
         summary = str(self.summarizer.generate_cold_summary(summary_history or [], messages))
-        self._cache_stats['cold_misses'] += 1
-        logger.info(f'[ContextStore] [CACHE MISS] 冷区摘要重新生成 (count={len(messages)})')
-        self._store_cold_cache(session_id, messages, summary, cold_hash)
+        with self._cache_lock:
+            self._cache_stats['cold_misses'] += 1
+            logger.info(f'[ContextStore] [CACHE MISS] 冷区摘要重新生成 (count={len(messages)})')
+            self._store_cold_cache(session_id, messages, summary, cold_hash)
         return summary
 
     async def _get_cached_cold_summary_async(
@@ -652,16 +660,18 @@ class TokenEconomicsContextStore(MarkdownContextStore):
         if not messages:
             return ''
 
-        cached, cold_hash = self._check_cold_cache(messages, session_id)
-        if cached is not None:
-            self._cache_stats['cold_hits'] += 1
-            logger.info(f'[ContextStore] [CACHE HIT] 冷区摘要完全命中 (count={len(messages)})')
-            return cached
+        with self._cache_lock:
+            cached, cold_hash = self._check_cold_cache(messages, session_id)
+            if cached is not None:
+                self._cache_stats['cold_hits'] += 1
+                logger.info(f'[ContextStore] [CACHE HIT] 冷区摘要完全命中 (count={len(messages)})')
+                return cached
 
         summary = str(await self.summarizer.generate_cold_summary_async(summary_history or [], messages))
-        self._cache_stats['cold_misses'] += 1
-        logger.info(f'[ContextStore] [CACHE MISS] 冷区摘要重新生成 (count={len(messages)})')
-        self._store_cold_cache(session_id, messages, summary, cold_hash)
+        with self._cache_lock:
+            self._cache_stats['cold_misses'] += 1
+            logger.info(f'[ContextStore] [CACHE MISS] 冷区摘要重新生成 (count={len(messages)})')
+            self._store_cold_cache(session_id, messages, summary, cold_hash)
         return summary
 
     def _compute_first_message_hash(

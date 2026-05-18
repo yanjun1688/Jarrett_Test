@@ -12,6 +12,7 @@ Skill Loader — 技能扫描和元数据解析
 from __future__ import annotations
 
 import re
+import threading
 from typing import Any, Dict, List
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -37,6 +38,7 @@ class SkillLoader:
     """技能加载器 — 只扫描+解析，不执行、不注册"""
 
     _shared_cache: Dict[str, List[SkillInfo]] = {}  # 类级缓存，所有实例共享
+    _shared_cache_lock = threading.Lock()
 
     def __init__(self, skill_dirs: List[str]):
         self.skill_dirs = [Path(d) for d in skill_dirs]
@@ -47,6 +49,11 @@ class SkillLoader:
         if self._cache_key in self._shared_cache:
             return self._shared_cache[self._cache_key]
 
+        with self._shared_cache_lock:
+            if self._cache_key in self._shared_cache:
+                return self._shared_cache[self._cache_key]
+
+        # 锁外 I/O：扫描目录、读文件
         seen: dict[str, SkillInfo] = {}
         for sd in self.skill_dirs:
             if not sd.exists():
@@ -69,8 +76,11 @@ class SkillLoader:
                     version=fm.get("version", "1.0.0"),
                     author=fm.get("author", ""),
                 )
+
+        # 锁内写缓存
         results = list(seen.values())
-        self._shared_cache[self._cache_key] = results
+        with self._shared_cache_lock:
+            self._shared_cache[self._cache_key] = results
         return results
 
     @classmethod

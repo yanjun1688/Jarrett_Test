@@ -5,7 +5,7 @@ WebSocket Handler - WebSocket通信处理器
 """
 import json
 import uuid
-from typing import Dict, Any, Optional, Callable, Awaitable
+from typing import Dict, Any, Optional, Callable, Awaitable, List
 from dataclasses import dataclass, field
 from datetime import datetime
 from threading import Lock
@@ -34,15 +34,17 @@ class WebSocketHandler:
         """初始化WebSocket处理器"""
         self._sessions: Dict[str, WebSocketSession] = {}
         self._session_by_ws: Dict[Any, str] = {}
+        self._user_sessions: Dict[str, List[str]] = {}  # user_id -> [session_id, ...]
         self._lock = Lock()
         self._message_handlers: Dict[str, Callable] = {}
         
-    async def handle_connect(self, websocket) -> str:
+    async def handle_connect(self, websocket, user_id: Optional[str] = None) -> str:
         """
         处理新的WebSocket连接
         
         Args:
             websocket: WebSocket连接对象
+            user_id: 用户ID（用于按用户广播）
             
         Returns:
             会话ID
@@ -54,8 +56,12 @@ class WebSocketHandler:
                 session_id=session_id,
                 websocket=websocket
             )
+            if user_id:
+                session.metadata["user_id"] = user_id
             self._sessions[session_id] = session
             self._session_by_ws[websocket] = session_id
+            if user_id:
+                self._user_sessions.setdefault(user_id, []).append(session_id)
         
         logger.info(f"WebSocket connected: {session_id}")
         
@@ -80,7 +86,15 @@ class WebSocketHandler:
         with self._lock:
             session_id = self._session_by_ws.pop(websocket, None)
             if session_id and session_id in self._sessions:
-                del self._sessions[session_id]
+                session = self._sessions.pop(session_id)
+                user_id = session.metadata.get("user_id")
+                if user_id and user_id in self._user_sessions:
+                    try:
+                        self._user_sessions[user_id].remove(session_id)
+                        if not self._user_sessions[user_id]:
+                            del self._user_sessions[user_id]
+                    except ValueError:
+                        pass
         
         if session_id:
             logger.info(f"WebSocket disconnected: {session_id}")
@@ -98,15 +112,17 @@ class WebSocketHandler:
             msg_type = data.get("type", "message")
             
             # 获取会话ID
-            session_id = self._session_by_ws.get(websocket)
-            
+            with self._lock:
+                session_id = self._session_by_ws.get(websocket)
+
             # 根据消息类型处理
             if msg_type == "ping":
                 await self.send_message(websocket, {"type": "pong"})
             elif msg_type == "message":
-                # 用户消息，由调用方处理
-                if session_id and session_id in self._sessions:
-                    self._sessions[session_id].metadata["last_message"] = datetime.now()
+                with self._lock:
+                    session = self._sessions.get(session_id) if session_id else None
+                    if session:
+                        session.metadata["last_message"] = datetime.now()
             else:
                 # 自定义处理器
                 handler = self._message_handlers.get(msg_type)
@@ -133,7 +149,7 @@ class WebSocketHandler:
     
     async def broadcast_to_session(self, session_id: str, data: Dict[str, Any]) -> bool:
         """
-        向特定会话广播消息
+        向指定会话发送消息
         
         Args:
             session_id: 会话ID
@@ -146,13 +162,14 @@ class WebSocketHandler:
             session = self._sessions.get(session_id)
             if not session:
                 return False
-            
-            try:
-                await session.websocket.send_json(data)
-                return True
-            except Exception as e:
-                logger.error(f"Broadcast error: {e}")
-                return False
+            ws = session.websocket
+
+        try:
+            await ws.send_json(data)
+            return True
+        except Exception as e:
+            logger.error(f"Broadcast error: {e}")
+            return False
     
     async def broadcast_to_all(self, data: Dict[str, Any]) -> int:
         """
@@ -176,6 +193,32 @@ class WebSocketHandler:
             except Exception as e:
                 logger.error(f"Broadcast to {session.session_id} failed: {e}")
         
+        return success_count
+
+    async def broadcast_to_user(self, user_id: str, data: Dict[str, Any]) -> int:
+        """
+        向指定用户的所有会话广播消息
+        
+        Args:
+            user_id: 用户ID
+            data: 要发送的数据
+            
+        Returns:
+            成功发送的数量
+        """
+        success_count = 0
+
+        with self._lock:
+            session_ids = list(self._user_sessions.get(user_id, []))
+            sessions = [self._sessions[sid] for sid in session_ids if sid in self._sessions]
+
+        for session in sessions:
+            try:
+                await session.websocket.send_json(data)
+                success_count += 1
+            except Exception as e:
+                logger.error(f"Broadcast to user {user_id} session {session.session_id} failed: {e}")
+
         return success_count
     
     def get_session_count(self) -> int:
@@ -212,27 +255,41 @@ class WebSocketHandler:
             session = self._sessions.get(session_id)
             if not session:
                 return False
-            
-            try:
-                await session.websocket.close()
-            except Exception:
-                pass
-            
-            # 清理
-            self._session_by_ws.pop(session.websocket, None)
-            del self._sessions[session_id]
+            ws = session.websocket
+            user_id = session.metadata.get("user_id")
+
+        try:
+            await ws.close()
+        except Exception:
+            pass
+        finally:
+            with self._lock:
+                self._session_by_ws.pop(ws, None)
+                self._sessions.pop(session_id, None)
+                if user_id and user_id in self._user_sessions:
+                    try:
+                        self._user_sessions[user_id].remove(session_id)
+                        if not self._user_sessions[user_id]:
+                            del self._user_sessions[user_id]
+                    except ValueError:
+                        pass
             
         return True
 
 
 # 全局WebSocket处理器
 _global_handler: Optional[WebSocketHandler] = None
+_global_handler_lock = Lock()
 
 
 def get_websocket_handler() -> WebSocketHandler:
     """获取全局WebSocket处理器"""
     global _global_handler
-    if _global_handler is None:
+    if _global_handler is not None:
+        return _global_handler
+    with _global_handler_lock:
+        if _global_handler is not None:
+            return _global_handler
         _global_handler = WebSocketHandler()
     return _global_handler
 
@@ -240,4 +297,5 @@ def get_websocket_handler() -> WebSocketHandler:
 def reset_websocket_handler() -> None:
     """重置全局WebSocket处理器（用于测试）"""
     global _global_handler
-    _global_handler = None
+    with _global_handler_lock:
+        _global_handler = None
