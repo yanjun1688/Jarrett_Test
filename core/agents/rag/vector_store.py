@@ -6,15 +6,17 @@ Single global collection: kb_knowledge (configured in settings)
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import threading
 import traceback
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Generator
 
 import chromadb
 from chromadb.config import Settings
+from chromadb.errors import InternalError
 
 from core.config import settings
 
@@ -25,6 +27,34 @@ logger = logging.getLogger(__name__)
 
 _client_lock = threading.Lock()
 _client_instance: Any = None
+
+# Redis distributed lock for cross-process ChromaDB access
+_LOCK_KEY = "chromadb:lock"
+_LOCK_TTL = 30            # 锁自动释放时间 — 覆盖最长操作耗时
+_LOCK_BLOCKING_TIMEOUT = 5  # 等待锁的超时，不无限阻塞
+
+
+@contextlib.contextmanager
+def _chromadb_lock() -> Generator[None, None, None]:
+    """Cross-process Redis lock to serialize ChromaDB reads/writes.
+
+    Prevents ``InternalError: Error finding id`` caused by concurrent
+    access from Django and Celery processes.
+
+    Falls back to no-op if Redis is unavailable (logs a warning).
+    """
+    try:
+        from django.core.cache import cache
+
+        lock = cache.lock(_LOCK_KEY, timeout=_LOCK_TTL, blocking_timeout=_LOCK_BLOCKING_TIMEOUT)
+        with lock:
+            yield
+    except (ConnectionError, OSError, AttributeError):
+        logger.warning("[ChromaDB] Redis lock unavailable, proceeding without lock")
+        yield
+    except TimeoutError:
+        logger.error("[ChromaDB] Lock timeout — another process holds the lock too long")
+        raise
 
 
 def _get_absolute_chromadb_path() -> str:
@@ -125,12 +155,13 @@ class ChromaVectorStore:
         ids: List[str],
     ) -> None:
         """Add documents to collection"""
-        self.collection.add(
-            documents=documents,
-            embeddings=embeddings,
-            metadatas=metadatas,
-            ids=ids,
-        )
+        with _chromadb_lock():
+            self.collection.add(
+                documents=documents,
+                embeddings=embeddings,
+                metadatas=metadatas,
+                ids=ids,
+            )
 
     def query(
         self,
@@ -139,29 +170,31 @@ class ChromaVectorStore:
         where: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Query similar documents"""
+        logger.info(f'[ChromaDB] Query: n_results={n_results}, where={where}')
+        logger.info(f'[ChromaDB] Embedding len: {len(query_embedding)}')
+
+        col = self.collection
+        logger.info(f'[ChromaDB] Collection obtained')
+
         try:
-            logger.info(f'[ChromaDB] Query: n_results={n_results}, where={where}')
-            logger.info(f'[ChromaDB] Embedding len: {len(query_embedding)}')
-
-            col = self.collection
-            logger.info(f'[ChromaDB] Collection obtained, count={col.count()}')
-
-            result = col.query(
-                query_embeddings=[query_embedding],
-                n_results=n_results,
-                where=where,
-                include=['documents', 'metadatas', 'distances'],
-            )
+            with _chromadb_lock():
+                logger.info(f'[ChromaDB] Collection count before query: {col.count()}')
+                result = col.query(
+                    query_embeddings=[query_embedding],
+                    n_results=n_results,
+                    where=where,
+                    include=['documents', 'metadatas', 'distances'],
+                )
             logger.info(f"[ChromaDB] Query success, results: {len(result['ids'][0])}")
             return result  # type: ignore[no-any-return]
-        except Exception as e:
-            logger.error(f'[ChromaDB] Query failed: {e}')
-            logger.error(f'[ChromaDB] Traceback: {traceback.format_exc()}')
-            raise
+        except InternalError:
+            logger.warning(f'[ChromaDB] InternalError during query, returning empty: {traceback.format_exc()}')
+            return {'ids': [[]], 'documents': [[]], 'metadatas': [[]], 'distances': [[]]}
 
     def delete(self, ids: List[str]) -> None:
         """Delete documents by IDs"""
-        self.collection.delete(ids=ids)
+        with _chromadb_lock():
+            self.collection.delete(ids=ids)
 
     def delete_by_prefix(self, id_prefix: str) -> int:
         """
@@ -173,11 +206,12 @@ class ChromaVectorStore:
         Returns:
             Number of deleted documents
         """
-        result = self.collection.get(where={'chroma_id_prefix': id_prefix})
-        ids_to_delete = result['ids']
-        if ids_to_delete:
-            self.collection.delete(ids=ids_to_delete)
-        return len(ids_to_delete)
+        with _chromadb_lock():
+            result = self.collection.get(where={'chroma_id_prefix': id_prefix})
+            ids_to_delete = result['ids']
+            if ids_to_delete:
+                self.collection.delete(ids=ids_to_delete)
+            return len(ids_to_delete)
 
     def delete_by_metadata(self, where: Dict[str, Any]) -> int:
         """
@@ -189,17 +223,19 @@ class ChromaVectorStore:
         Returns:
             Number of deleted documents
         """
-        result = self.collection.get(where=where)
-        ids_to_delete = result["ids"]
-        if ids_to_delete:
-            self.collection.delete(ids=ids_to_delete)
-        return len(ids_to_delete)
+        with _chromadb_lock():
+            result = self.collection.get(where=where)
+            ids_to_delete = result["ids"]
+            if ids_to_delete:
+                self.collection.delete(ids=ids_to_delete)
+            return len(ids_to_delete)
 
     def delete_collection(self) -> None:
         """Delete the entire collection"""
-        self.get_client().delete_collection(name=self.collection_name)
-        if hasattr(self._local, '_collections'):
-            self._local._collections.pop(self.collection_name, None)
+        with _chromadb_lock():
+            self.get_client().delete_collection(name=self.collection_name)
+            if hasattr(self._local, '_collections'):
+                self._local._collections.pop(self.collection_name, None)
 
     def count(self) -> int:
         """Get document count"""

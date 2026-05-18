@@ -4,6 +4,7 @@ Conversation Service - 会话管理服务（支持 Markdown 存储）
 管理会话的创建、查询、更新、删除，以及消息历史和业务上下文
 支持双存储：MySQL（旧数据）+ Markdown 文件（新数据）
 """
+import threading
 import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple, TYPE_CHECKING
@@ -30,13 +31,19 @@ PENDING_TESTS_EXPIRE_HOURS = 1
 TITLE_MAX_LENGTH = 30
 
 _md_store: Optional[MarkdownContextStore] = None
+_md_store_lock = threading.Lock()
 _token_economics_store: Optional[TokenEconomicsContextStore] = None
+_token_economics_store_lock = threading.Lock()
 
 
 def get_markdown_store() -> MarkdownContextStore:
     """获取 Markdown 存储单例"""
     global _md_store
-    if _md_store is None:
+    if _md_store is not None:
+        return _md_store
+    with _md_store_lock:
+        if _md_store is not None:
+            return _md_store
         root_dir = getattr(settings, 'CONTEXT_ROOT_DIR', Path(settings.BASE_DIR / "context_data"))
         _md_store = MarkdownContextStore(root_dir)
     return _md_store
@@ -59,7 +66,17 @@ def get_token_economics_store(
         TokenEconomicsContextStore 单例实例
     """
     global _token_economics_store
-    if _token_economics_store is None:
+    if _token_economics_store is not None:
+        if llm_service is not None and _token_economics_store.llm_service is None:
+            with _token_economics_store_lock:
+                if _token_economics_store.llm_service is None:
+                    _token_economics_store.llm_service = llm_service
+                    _token_economics_store.summarizer.llm_service = llm_service
+                    logger.info('TokenEconomicsContextStore: llm_service 延迟注入完成')
+        return _token_economics_store
+    with _token_economics_store_lock:
+        if _token_economics_store is not None:
+            return _token_economics_store
         root_dir = getattr(
             settings, 'CONTEXT_ROOT_DIR',
             Path(settings.BASE_DIR / 'context_data')
@@ -73,11 +90,6 @@ def get_token_economics_store(
             f'TokenEconomicsContextStore 单例已创建: '
             f'root_dir={root_dir}, model={model_name}'
         )
-    elif llm_service is not None and _token_economics_store.llm_service is None:
-        # 延迟注入 llm_service：首次创建时可能没有，后续传入时更新
-        _token_economics_store.llm_service = llm_service
-        _token_economics_store.summarizer.llm_service = llm_service
-        logger.info('TokenEconomicsContextStore: llm_service 延迟注入完成')
     return _token_economics_store
 
 

@@ -44,12 +44,29 @@ class ChatBotConsumer(AsyncWebsocketConsumer):
     
     async def disconnect(self, close_code):
         logger.info(f"[ChatBotWS] WebSocket disconnected: {close_code}")
+        if self.user:
+            key = f"ws_{self.user.id}"
+            if key in _rate_limit_store:
+                now = time.time()
+                _rate_limit_store[key] = [
+                    t for t in _rate_limit_store[key] if now - t < RATE_LIMIT_WINDOW
+                ]
+                if not _rate_limit_store[key]:
+                    del _rate_limit_store[key]
     
     def _check_rate_limit(self, user_id: int) -> bool:
         """Check if user has exceeded rate limit"""
         now = time.time()
         key = f"ws_{user_id}"
         
+        # 定期清理过期 key（每 100 次检查清理一次）
+        if getattr(self, '_cleanup_counter', 0) % 100 == 0:
+            expired = [k for k, v in _rate_limit_store.items()
+                       if not any(now - t < RATE_LIMIT_WINDOW for t in v)]
+            for k in expired:
+                del _rate_limit_store[k]
+        self._cleanup_counter = getattr(self, '_cleanup_counter', 0) + 1
+
         messages = _rate_limit_store[key]
         messages = [t for t in messages if now - t < RATE_LIMIT_WINDOW]
         _rate_limit_store[key] = messages

@@ -1,10 +1,13 @@
 import functools
+import logging
 import threading
 from typing import List, Optional
 
 from sentence_transformers import SentenceTransformer
 
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
@@ -34,7 +37,12 @@ class EmbeddingService:
             if getattr(self, "_initialized", False):
                 return
             
-            self._model = SentenceTransformer(settings.embedding_model)
+            model_name = settings.embedding_model
+            try:
+                self._model = SentenceTransformer(model_name)
+            except Exception as e:
+                logger.warning("Failed to load model '%s' online, trying local: %s", model_name, e)
+                self._model = SentenceTransformer(model_name, local_files_only=True)
             self._dimension = self._model.get_sentence_embedding_dimension()
             self._batch_size = getattr(settings, "embedding_batch_size", 32)
             self._initialized = True
